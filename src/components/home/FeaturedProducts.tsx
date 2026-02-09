@@ -5,7 +5,7 @@ import { useProducts } from '@/hooks/useProducts';
 import { ProductGrid } from '@/components/products/ProductGrid';
 
 export function FeaturedProducts() {
-  const { data: products = [], isLoading } = useProducts(4);
+  const { data: products = [], isLoading } = useProducts(4, 'product_type:Meal');
 
   return (
     <section className="py-24 md:py-32">
