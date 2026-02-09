@@ -1,32 +1,32 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, BookOpen, ShoppingBag, Truck, Flame, LucideIcon } from 'lucide-react';
 
 export function HowItWorks() {
-  const steps = [
+  const steps: { number: string; title: string; description: string; icon: LucideIcon }[] = [
     {
       number: "01",
       title: "Browse the Menu",
       description: "Check out this week's rotating menu or our juice collection.",
-      emoji: "🍽️",
+      icon: BookOpen,
     },
     {
       number: "02",
       title: "Place Your Order",
       description: "Add favorites to cart and checkout before the weekly cutoff.",
-      emoji: "🛒",
+      icon: ShoppingBag,
     },
     {
       number: "03",
       title: "We Prepare & Deliver",
       description: "Our chefs prepare your meals fresh and deliver to your door.",
-      emoji: "🚚",
+      icon: Truck,
     },
     {
       number: "04",
       title: "Heat & Enjoy",
       description: "Simply reheat and savor restaurant-quality meals at home.",
-      emoji: "✨",
+      icon: Flame,
     },
   ];
 
@@ -57,7 +57,7 @@ export function HowItWorks() {
               )}
               
               <div className="relative bg-card rounded-2xl p-6 shadow-lg border border-border/50 hover:shadow-xl hover:border-primary/20 transition-all duration-300 hover:-translate-y-1">
-                <div className="text-4xl mb-4">{step.emoji}</div>
+                <div className="mb-4"><step.icon className="h-8 w-8 text-primary" strokeWidth={1.5} /></div>
                 <div className="inline-flex items-center justify-center h-8 px-3 rounded-full bg-primary/10 text-primary font-bold text-sm mb-3">
                   Step {step.number}
                 </div>
