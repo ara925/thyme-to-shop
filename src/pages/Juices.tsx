@@ -5,10 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Leaf } from 'lucide-react';
 
 const Juices = () => {
-  const { data: products = [], isLoading } = useProducts(50);
-
-  // Filter for juice products (in a real scenario, you'd filter by collection or tag)
-  const juiceProducts = products;
+  const { data: juiceProducts = [], isLoading } = useProducts(50, 'product_type:Juice OR product_type:"Juice Bundle"');
 
   return (
     <Layout>
