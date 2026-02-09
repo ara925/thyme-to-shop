@@ -7,42 +7,41 @@ import { Clock, CalendarDays } from 'lucide-react';
 const WeeklyMeals = () => {
   const { data: products = [], isLoading } = useProducts(50);
 
-  // Filter for meal products (in a real scenario, you'd filter by collection or tag)
   const mealProducts = products;
 
   return (
     <Layout>
-      <div className="bg-gradient-to-b from-herb-light to-background">
-        <div className="container py-12 md:py-16">
+      <div className="relative overflow-hidden bg-gradient-to-b from-espresso to-primary/90">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,hsl(var(--herb-glow)/0.3),transparent_60%)]" />
+        <div className="container relative py-16 md:py-24">
           <div className="max-w-2xl">
-            <Badge variant="secondary" className="mb-4">
+            <Badge className="mb-4 bg-white/10 text-white border-white/20 backdrop-blur-sm">
               <CalendarDays className="mr-1 h-3 w-3" />
               This Week's Menu
             </Badge>
-            <h1 className="font-serif text-4xl font-bold text-foreground md:text-5xl">
+            <h1 className="font-serif text-4xl font-bold text-white md:text-6xl tracking-tight">
               Weekly Meal Program
             </h1>
-            <p className="mt-4 text-lg text-muted-foreground">
+            <p className="mt-4 text-lg text-white/70 max-w-lg">
               Chef-prepared meals delivered fresh to your door. Our menu rotates weekly 
               to bring you exciting new dishes while keeping your favorites available.
             </p>
           </div>
 
-          {/* Ordering Info Banner */}
-          <div className="mt-8 flex flex-wrap gap-4">
-            <div className="inline-flex items-center gap-2 rounded-lg bg-card px-4 py-2 text-sm border border-border">
-              <Clock className="h-4 w-4 text-accent" />
+          <div className="mt-8 flex flex-wrap gap-3">
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
+              <Clock className="h-4 w-4 text-gold" />
               <span><strong>Order by:</strong> Thursday 6PM</span>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-lg bg-card px-4 py-2 text-sm border border-border">
-              <CalendarDays className="h-4 w-4 text-primary" />
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
+              <CalendarDays className="h-4 w-4 text-gold" />
               <span><strong>Delivery:</strong> Sunday</span>
             </div>
           </div>
         </div>
       </div>
 
-      <section className="py-12 md:py-16">
+      <section className="py-16 md:py-24">
         <div className="container">
           <ProductGrid 
             products={mealProducts} 

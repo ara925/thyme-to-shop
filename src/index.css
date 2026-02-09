@@ -2,116 +2,122 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=Lato:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,700&family=Lato:wght@300;400;500;600;700;900&display=swap');
 
-/* Place in Thyme Design System - Warm, Rustic Aesthetic */
+/* Place in Thyme — Bold Rustic Elegance */
 
 @layer base {
   :root {
-    /* Primary - Sage Green (earthy, natural) */
-    --primary: 145 30% 35%;
-    --primary-foreground: 45 30% 96%;
+    /* Primary - Deep Sage Green */
+    --primary: 152 38% 28%;
+    --primary-foreground: 48 40% 97%;
     
-    /* Secondary - Warm Cream */
-    --secondary: 40 35% 92%;
-    --secondary-foreground: 25 25% 20%;
+    /* Secondary - Warm Sand */
+    --secondary: 36 30% 88%;
+    --secondary-foreground: 25 40% 16%;
     
-    /* Background - Soft Cream White */
-    --background: 45 40% 97%;
-    --foreground: 25 25% 15%;
+    /* Background - Warm Off-White */
+    --background: 42 33% 96%;
+    --foreground: 20 30% 12%;
     
-    /* Card - Warm White */
-    --card: 45 50% 99%;
-    --card-foreground: 25 25% 15%;
+    /* Card */
+    --card: 40 40% 99%;
+    --card-foreground: 20 30% 12%;
     
     /* Popover */
-    --popover: 45 50% 99%;
-    --popover-foreground: 25 25% 15%;
+    --popover: 40 40% 99%;
+    --popover-foreground: 20 30% 12%;
     
-    /* Muted - Soft Sage */
-    --muted: 145 15% 90%;
-    --muted-foreground: 145 10% 40%;
+    /* Muted */
+    --muted: 40 18% 91%;
+    --muted-foreground: 20 12% 45%;
     
-    /* Accent - Terracotta/Burnt Orange */
-    --accent: 18 55% 55%;
-    --accent-foreground: 45 30% 96%;
+    /* Accent - Warm Terracotta */
+    --accent: 16 65% 48%;
+    --accent-foreground: 48 40% 97%;
     
     /* Destructive */
     --destructive: 0 65% 50%;
-    --destructive-foreground: 45 30% 96%;
+    --destructive-foreground: 48 40% 97%;
     
     /* Borders */
-    --border: 40 25% 85%;
-    --input: 40 25% 85%;
-    --ring: 145 30% 35%;
+    --border: 36 22% 86%;
+    --input: 36 22% 86%;
+    --ring: 152 38% 28%;
     
-    --radius: 0.5rem;
+    --radius: 0.75rem;
     
-    /* Custom Place in Thyme Colors */
-    --herb: 145 35% 32%;
-    --herb-light: 145 25% 85%;
-    --terracotta: 18 55% 55%;
-    --terracotta-light: 18 40% 90%;
-    --wheat: 40 45% 85%;
-    --cream: 45 40% 97%;
-    --espresso: 25 30% 18%;
+    /* Custom Colors */
+    --herb: 152 38% 28%;
+    --herb-light: 148 28% 90%;
+    --herb-glow: 152 45% 40%;
+    --terracotta: 16 65% 48%;
+    --terracotta-light: 18 45% 92%;
+    --terracotta-dark: 14 60% 38%;
+    --wheat: 38 50% 82%;
+    --cream: 42 33% 96%;
+    --espresso: 20 35% 14%;
+    --gold: 40 70% 55%;
     
     /* Sidebar */
-    --sidebar-background: 145 25% 95%;
-    --sidebar-foreground: 25 25% 20%;
-    --sidebar-primary: 145 30% 35%;
-    --sidebar-primary-foreground: 45 30% 96%;
-    --sidebar-accent: 145 20% 90%;
-    --sidebar-accent-foreground: 145 30% 25%;
-    --sidebar-border: 145 15% 85%;
-    --sidebar-ring: 145 30% 35%;
+    --sidebar-background: 152 20% 96%;
+    --sidebar-foreground: 20 30% 16%;
+    --sidebar-primary: 152 38% 28%;
+    --sidebar-primary-foreground: 48 40% 97%;
+    --sidebar-accent: 152 18% 92%;
+    --sidebar-accent-foreground: 152 35% 22%;
+    --sidebar-border: 152 15% 88%;
+    --sidebar-ring: 152 38% 28%;
   }
 
   .dark {
-    --primary: 145 25% 50%;
-    --primary-foreground: 25 25% 10%;
+    --primary: 152 30% 48%;
+    --primary-foreground: 20 30% 8%;
     
-    --secondary: 25 20% 18%;
-    --secondary-foreground: 45 30% 90%;
+    --secondary: 20 18% 16%;
+    --secondary-foreground: 42 30% 92%;
     
-    --background: 25 25% 8%;
-    --foreground: 45 30% 92%;
+    --background: 20 28% 7%;
+    --foreground: 42 30% 93%;
     
-    --card: 25 22% 12%;
-    --card-foreground: 45 30% 92%;
+    --card: 20 25% 10%;
+    --card-foreground: 42 30% 93%;
     
-    --popover: 25 22% 12%;
-    --popover-foreground: 45 30% 92%;
+    --popover: 20 25% 10%;
+    --popover-foreground: 42 30% 93%;
     
-    --muted: 25 18% 18%;
-    --muted-foreground: 45 20% 65%;
+    --muted: 20 16% 16%;
+    --muted-foreground: 42 18% 60%;
     
-    --accent: 18 50% 50%;
-    --accent-foreground: 45 30% 96%;
+    --accent: 16 55% 50%;
+    --accent-foreground: 48 40% 97%;
     
     --destructive: 0 55% 45%;
-    --destructive-foreground: 45 30% 96%;
+    --destructive-foreground: 48 40% 97%;
     
-    --border: 25 18% 22%;
-    --input: 25 18% 22%;
-    --ring: 145 25% 50%;
+    --border: 20 16% 20%;
+    --input: 20 16% 20%;
+    --ring: 152 30% 48%;
     
-    --herb: 145 30% 45%;
-    --herb-light: 145 20% 20%;
-    --terracotta: 18 50% 50%;
-    --terracotta-light: 18 30% 18%;
-    --wheat: 40 30% 25%;
-    --cream: 45 20% 12%;
-    --espresso: 25 20% 80%;
+    --herb: 152 30% 42%;
+    --herb-light: 152 18% 16%;
+    --herb-glow: 152 35% 50%;
+    --terracotta: 16 50% 50%;
+    --terracotta-light: 16 28% 16%;
+    --terracotta-dark: 14 45% 40%;
+    --wheat: 38 28% 22%;
+    --cream: 42 18% 10%;
+    --espresso: 20 18% 82%;
+    --gold: 40 55% 50%;
     
-    --sidebar-background: 25 22% 10%;
-    --sidebar-foreground: 45 30% 90%;
-    --sidebar-primary: 145 25% 50%;
-    --sidebar-primary-foreground: 25 25% 10%;
-    --sidebar-accent: 25 18% 18%;
-    --sidebar-accent-foreground: 45 30% 90%;
-    --sidebar-border: 25 18% 22%;
-    --sidebar-ring: 145 25% 50%;
+    --sidebar-background: 20 25% 8%;
+    --sidebar-foreground: 42 30% 92%;
+    --sidebar-primary: 152 30% 48%;
+    --sidebar-primary-foreground: 20 30% 8%;
+    --sidebar-accent: 20 16% 16%;
+    --sidebar-accent-foreground: 42 30% 92%;
+    --sidebar-border: 20 16% 20%;
+    --sidebar-ring: 152 30% 48%;
   }
 }
 
@@ -136,5 +142,24 @@
   
   .font-sans {
     font-family: 'Lato', sans-serif;
+  }
+}
+
+@layer components {
+  .section-pattern {
+    background-image: radial-gradient(circle at 1px 1px, hsl(var(--border)) 1px, transparent 0);
+    background-size: 40px 40px;
+  }
+  
+  .glass {
+    @apply bg-card/70 backdrop-blur-md border border-border/50;
+  }
+  
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-primary to-herb-glow;
+  }
+  
+  .text-gradient-accent {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-accent to-terracotta-dark;
   }
 }

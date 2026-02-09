@@ -1,67 +1,76 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Leaf, Clock, Truck } from 'lucide-react';
+import { ArrowRight, Leaf, Clock, Truck, Sparkles } from 'lucide-react';
+import heroBg from '@/assets/hero-bg.jpg';
 
 export function Hero() {
   return (
-    <section className="relative overflow-hidden bg-gradient-to-br from-herb-light via-background to-terracotta-light">
-      <div className="container py-16 md:py-24 lg:py-32">
-        <div className="mx-auto max-w-3xl text-center">
-          <h1 className="font-serif text-4xl font-bold tracking-tight text-foreground sm:text-5xl md:text-6xl animate-fade-in">
-            Fresh, Chef-Prepared Meals
-            <span className="block text-primary">Delivered to Your Door</span>
-          </h1>
-          <p className="mt-6 text-lg text-muted-foreground md:text-xl animate-fade-in" style={{ animationDelay: '0.1s' }}>
-            Weekly rotating menus crafted with love by Place in Thyme. 
-            Nutritious, delicious, and ready to enjoy.
-          </p>
-          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row animate-fade-in" style={{ animationDelay: '0.2s' }}>
-            <Button asChild size="lg" className="bg-primary hover:bg-primary/90">
-              <Link to="/weekly-meals">
-                View This Week's Menu
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="lg">
-              <Link to="/juices">
-                Browse Juices
-              </Link>
-            </Button>
+    <section className="relative overflow-hidden">
+      {/* Hero Image with Overlay */}
+      <div className="relative min-h-[85vh] flex items-center">
+        <img
+          src={heroBg}
+          alt="Fresh meal prep containers"
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-r from-espresso/90 via-espresso/70 to-espresso/40" />
+        <div className="absolute inset-0 bg-gradient-to-t from-espresso/60 via-transparent to-transparent" />
+        
+        <div className="container relative z-10 py-20 md:py-32">
+          <div className="max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full bg-primary/20 border border-primary/30 px-4 py-1.5 text-sm font-medium text-primary-foreground backdrop-blur-sm mb-6 opacity-0 animate-fade-in">
+              <Sparkles className="h-4 w-4" />
+              Fresh Weekly Menus Available Now
+            </div>
+            
+            <h1 className="font-serif text-5xl font-bold tracking-tight text-white sm:text-6xl md:text-7xl leading-[1.1] opacity-0 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+              Chef-Prepared Meals,
+              <span className="block italic text-gold">Made with Love</span>
+            </h1>
+            
+            <p className="mt-6 text-lg text-white/80 md:text-xl max-w-lg leading-relaxed opacity-0 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
+              Weekly rotating menus crafted from scratch by Place in Thyme. 
+              Nutritious, delicious, and delivered fresh to your door.
+            </p>
+            
+            <div className="mt-10 flex flex-col gap-4 sm:flex-row opacity-0 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
+              <Button asChild size="lg" className="bg-accent hover:bg-terracotta-dark text-white shadow-lg shadow-accent/30 text-base px-8 h-14 rounded-full">
+                <Link to="/weekly-meals">
+                  View This Week's Menu
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="lg" className="border-white/30 text-white hover:bg-white/10 backdrop-blur-sm text-base px-8 h-14 rounded-full">
+                <Link to="/juices">
+                  Browse Juices
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Feature highlights */}
-      <div className="border-t border-border bg-card/50">
-        <div className="container py-12">
-          <div className="grid gap-8 sm:grid-cols-3">
-            <div className="flex flex-col items-center text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-herb-light">
-                <Leaf className="h-6 w-6 text-primary" />
+      <div className="relative -mt-16 z-20">
+        <div className="container">
+          <div className="grid gap-4 sm:grid-cols-3 mx-auto max-w-4xl">
+            {[
+              { icon: Leaf, title: "Farm Fresh", desc: "Locally sourced premium ingredients", color: "bg-primary" },
+              { icon: Clock, title: "Weekly Menus", desc: "New rotating dishes every week", color: "bg-accent" },
+              { icon: Truck, title: "Local Delivery", desc: "Straight to your door, SoCal", color: "bg-primary" },
+            ].map((item, i) => (
+              <div
+                key={item.title}
+                className="glass rounded-2xl p-6 text-center shadow-xl opacity-0 animate-slide-up"
+                style={{ animationDelay: `${0.4 + i * 0.1}s` }}
+              >
+                <div className={`inline-flex h-12 w-12 items-center justify-center rounded-xl ${item.color} text-white shadow-lg`}>
+                  <item.icon className="h-6 w-6" />
+                </div>
+                <h3 className="mt-3 font-serif text-lg font-bold text-foreground">{item.title}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{item.desc}</p>
               </div>
-              <h3 className="mt-4 font-serif text-lg font-semibold">Fresh Ingredients</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Locally sourced, premium quality ingredients in every dish
-              </p>
-            </div>
-            <div className="flex flex-col items-center text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-terracotta-light">
-                <Clock className="h-6 w-6 text-accent" />
-              </div>
-              <h3 className="mt-4 font-serif text-lg font-semibold">Weekly Menus</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                New rotating menus every week to keep things exciting
-              </p>
-            </div>
-            <div className="flex flex-col items-center text-center">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-herb-light">
-                <Truck className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="mt-4 font-serif text-lg font-semibold">Local Delivery</h3>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Convenient delivery throughout Southern California
-              </p>
-            </div>
+            ))}
           </div>
         </div>
       </div>
