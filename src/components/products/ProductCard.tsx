@@ -42,45 +42,43 @@ export function ProductCard({ product }: ProductCardProps) {
 
   return (
     <Link to={`/product/${node.handle}`}>
-      <Card className="group overflow-hidden border-border bg-card transition-all duration-300 hover:shadow-lg hover:border-primary/20">
-        <div className="aspect-square overflow-hidden bg-muted">
+      <Card className="group overflow-hidden border-0 bg-card shadow-md hover:shadow-2xl transition-all duration-500 hover:-translate-y-1 rounded-2xl">
+        <div className="aspect-square overflow-hidden bg-muted relative">
           {image ? (
             <img
               src={image.url}
               alt={image.altText || node.title}
-              className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
             />
           ) : (
-            <div className="flex h-full w-full items-center justify-center bg-herb-light">
+            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-herb-light to-muted">
               <span className="font-serif text-lg text-muted-foreground">No Image</span>
             </div>
           )}
+          {node.productType && (
+            <Badge className="absolute top-3 left-3 bg-card/90 text-foreground backdrop-blur-sm border-0 shadow-sm text-xs font-semibold">
+              {node.productType}
+            </Badge>
+          )}
         </div>
-        <CardContent className="p-4">
+        <CardContent className="p-5">
           <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 min-w-0">
-              <h3 className="font-serif text-lg font-semibold text-foreground line-clamp-2">
-                {node.title}
-              </h3>
-              {node.productType && (
-                <Badge variant="secondary" className="mt-2 text-xs">
-                  {node.productType}
-                </Badge>
-              )}
-            </div>
-            <p className="text-lg font-bold text-primary whitespace-nowrap">
+            <h3 className="font-serif text-lg font-bold text-foreground line-clamp-2 leading-tight">
+              {node.title}
+            </h3>
+            <p className="text-lg font-black text-accent whitespace-nowrap">
               {formatPrice(price.amount, price.currencyCode)}
             </p>
           </div>
           
           {node.description && (
-            <p className="mt-2 text-sm text-muted-foreground line-clamp-2">
+            <p className="mt-2 text-sm text-muted-foreground line-clamp-2 leading-relaxed">
               {node.description}
             </p>
           )}
           
           <Button 
-            className="mt-4 w-full bg-primary hover:bg-primary/90"
+            className="mt-4 w-full rounded-full bg-primary hover:bg-primary/90 shadow-md shadow-primary/15 transition-all"
             onClick={handleAddToCart}
             disabled={isLoading || !firstVariant?.availableForSale}
           >

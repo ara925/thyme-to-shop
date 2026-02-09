@@ -9,25 +9,26 @@ const Juices = () => {
 
   return (
     <Layout>
-      <div className="bg-gradient-to-b from-terracotta-light to-background">
-        <div className="container py-12 md:py-16">
+      <div className="relative overflow-hidden bg-gradient-to-b from-espresso to-accent/80">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,hsl(var(--terracotta)/0.3),transparent_60%)]" />
+        <div className="container relative py-16 md:py-24">
           <div className="max-w-2xl">
-            <Badge variant="secondary" className="mb-4 bg-terracotta-light text-accent">
+            <Badge className="mb-4 bg-white/10 text-white border-white/20 backdrop-blur-sm">
               <Leaf className="mr-1 h-3 w-3" />
               Fresh & Cold-Pressed
             </Badge>
-            <h1 className="font-serif text-4xl font-bold text-foreground md:text-5xl">
-              Fresh Juices
+            <h1 className="font-serif text-4xl font-bold text-white md:text-6xl tracking-tight">
+              Fresh Juices & Shots
             </h1>
-            <p className="mt-4 text-lg text-muted-foreground">
-              Nutrient-packed, cold-pressed juices made from premium fruits and vegetables. 
-              Available for purchase anytime — no subscription required.
+            <p className="mt-4 text-lg text-white/70 max-w-lg">
+              Nutrient-packed, cold-pressed juices and wellness shots made from premium fruits and vegetables. 
+              Available individually or in value bundles.
             </p>
           </div>
         </div>
       </div>
 
-      <section className="py-12 md:py-16">
+      <section className="py-16 md:py-24">
         <div className="container">
           <ProductGrid 
             products={juiceProducts} 
