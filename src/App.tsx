@@ -7,6 +7,8 @@ import { useCartSync } from "@/hooks/useCartSync";
 import Index from "./pages/Index";
 import WeeklyMeals from "./pages/WeeklyMeals";
 import Juices from "./pages/Juices";
+import MealSubscription from "./pages/MealSubscription";
+import JuiceSubscription from "./pages/JuiceSubscription";
 import ProductDetail from "./pages/ProductDetail";
 import About from "./pages/About";
 import HowItWorks from "./pages/HowItWorks";
@@ -23,6 +25,8 @@ function AppContent() {
         <Route path="/" element={<Index />} />
         <Route path="/weekly-meals" element={<WeeklyMeals />} />
         <Route path="/juices" element={<Juices />} />
+        <Route path="/subscribe/meals" element={<MealSubscription />} />
+        <Route path="/subscribe/juices" element={<JuiceSubscription />} />
         <Route path="/product/:handle" element={<ProductDetail />} />
         <Route path="/about" element={<About />} />
         <Route path="/how-it-works" element={<HowItWorks />} />
