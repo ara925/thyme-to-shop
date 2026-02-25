@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { Badge } from '@/components/ui/badge';
 import { JuiceBundleCards } from '@/components/juices/JuiceBundleCards';
+import { DeliveryScheduler } from '@/components/delivery/DeliveryScheduler';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Leaf, Minus, Plus, ShoppingCart, Loader2, Check, AlertCircle, Percent } from 'lucide-react';
@@ -318,6 +319,9 @@ const JuiceSubscription = () => {
           </div>
         </div>
       </section>
+
+      {/* Delivery Scheduling */}
+      <DeliveryScheduler />
     </Layout>
   );
 };
