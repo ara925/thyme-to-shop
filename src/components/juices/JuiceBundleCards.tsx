@@ -3,8 +3,8 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ShoppingCart, Loader2, Sparkles, Zap, Crown, Star, FlameKindling } from 'lucide-react';
-import { useProducts } from '@/hooks/useProducts';
-import { ShopifyProduct, formatPrice, SellingPlan } from '@/lib/shopify';
+import { useProducts, useSellingPlans } from '@/hooks/useProducts';
+import { ShopifyProduct, formatPrice } from '@/lib/shopify';
 import { useCartStore } from '@/stores/cartStore';
 import { toast } from 'sonner';
 import { useState } from 'react';
@@ -65,6 +65,7 @@ const BUNDLE_ORDER = ['Intro Pack Bundle', 'Shot Bundle', 'Juice Bundle #1', 'Ju
 
 export const JuiceBundleCards = () => {
   const { data: bundleProducts = [], isLoading: productsLoading } = useProducts(50, 'product_type:Juice Bundle');
+  const { data: sellingPlan = null } = useSellingPlans('product_type:Juice Bundle');
   const addItem = useCartStore(state => state.addItem);
   const isLoading = useCartStore(state => state.isLoading);
   const [addingId, setAddingId] = useState<string | null>(null);
@@ -73,18 +74,6 @@ export const JuiceBundleCards = () => {
     return BUNDLE_ORDER
       .map(name => bundleProducts.find(p => p.node.title === name))
       .filter(Boolean) as ShopifyProduct[];
-  }, [bundleProducts]);
-
-  // Extract selling plan from any bundle product that has one
-  const sellingPlan: SellingPlan | null = useMemo(() => {
-    for (const product of bundleProducts) {
-      const groups = product.node.sellingPlanGroups?.edges || [];
-      for (const group of groups) {
-        const plans = group.node.sellingPlans.edges;
-        if (plans.length > 0) return plans[0].node;
-      }
-    }
-    return null;
   }, [bundleProducts]);
 
   const handleSubscribe = async (product: ShopifyProduct) => {

@@ -6,8 +6,8 @@ import { DeliveryScheduler } from '@/components/delivery/DeliveryScheduler';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Leaf, Minus, Plus, ShoppingCart, Loader2, Check, AlertCircle, Percent } from 'lucide-react';
-import { useProducts } from '@/hooks/useProducts';
-import { ShopifyProduct, formatPrice, SellingPlan } from '@/lib/shopify';
+import { useProducts, useSellingPlans } from '@/hooks/useProducts';
+import { ShopifyProduct, formatPrice } from '@/lib/shopify';
 import { useCartStore } from '@/stores/cartStore';
 import { toast } from 'sonner';
 
@@ -16,6 +16,7 @@ const DISCOUNT_PERCENT = 10;
 
 const JuiceSubscription = () => {
   const { data: juiceProducts = [], isLoading: productsLoading } = useProducts(50, 'product_type:Juice');
+  const { data: sellingPlan = null } = useSellingPlans('product_type:Juice');
   const addItem = useCartStore(state => state.addItem);
   const isLoading = useCartStore(state => state.isLoading);
   const [selections, setSelections] = useState<Record<string, number>>({});
@@ -26,18 +27,6 @@ const JuiceSubscription = () => {
   const individualJuices = useMemo(() => {
     return juiceProducts.filter(p => p.node.productType === 'Juice');
   }, [juiceProducts]);
-
-  // Extract selling plan from any juice product that has one
-  const sellingPlan: SellingPlan | null = useMemo(() => {
-    for (const product of individualJuices) {
-      const groups = product.node.sellingPlanGroups?.edges || [];
-      for (const group of groups) {
-        const plans = group.node.sellingPlans.edges;
-        if (plans.length > 0) return plans[0].node;
-      }
-    }
-    return null;
-  }, [individualJuices]);
 
   const subtotal = useMemo(() => {
     let total = 0;
