@@ -20,6 +20,7 @@ export interface CartItem {
   price: { amount: string; currencyCode: string };
   quantity: number;
   selectedOptions: Array<{ name: string; value: string }>;
+  sellingPlanId?: string;
 }
 
 interface CartStore {
@@ -39,8 +40,11 @@ interface CartStore {
 }
 
 async function createShopifyCart(item: CartItem): Promise<{ cartId: string; checkoutUrl: string; lineId: string } | null> {
+  const line: Record<string, unknown> = { quantity: item.quantity, merchandiseId: item.variantId };
+  if (item.sellingPlanId) line.sellingPlanId = item.sellingPlanId;
+  
   const data = await storefrontApiRequest(CART_CREATE_MUTATION, {
-    input: { lines: [{ quantity: item.quantity, merchandiseId: item.variantId }] },
+    input: { lines: [line] },
   });
 
   if (data?.data?.cartCreate?.userErrors?.length > 0) {
@@ -58,9 +62,12 @@ async function createShopifyCart(item: CartItem): Promise<{ cartId: string; chec
 }
 
 async function addLineToShopifyCart(cartId: string, item: CartItem): Promise<{ success: boolean; lineId?: string; cartNotFound?: boolean }> {
+  const line: Record<string, unknown> = { quantity: item.quantity, merchandiseId: item.variantId };
+  if (item.sellingPlanId) line.sellingPlanId = item.sellingPlanId;
+
   const data = await storefrontApiRequest(CART_LINES_ADD_MUTATION, {
     cartId,
-    lines: [{ quantity: item.quantity, merchandiseId: item.variantId }],
+    lines: [line],
   });
 
   const userErrors = data?.data?.cartLinesAdd?.userErrors || [];
