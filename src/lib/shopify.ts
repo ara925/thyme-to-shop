@@ -126,45 +126,6 @@ export const PRODUCTS_QUERY = `
             name
             values
           }
-          sellingPlanGroups(first: 5) {
-            edges {
-              node {
-                name
-                options {
-                  name
-                  values
-                }
-                sellingPlans(first: 10) {
-                  edges {
-                    node {
-                      id
-                      name
-                      description
-                      options {
-                        name
-                        value
-                      }
-                      priceAdjustments {
-                        adjustmentValue {
-                          __typename
-                          ... on SellingPlanPercentagePriceAdjustment {
-                            percentage: adjustmentPercentage
-                          }
-                          ... on SellingPlanFixedAmountPriceAdjustment {
-                            adjustmentAmount {
-                              amount
-                              currencyCode
-                            }
-                          }
-                        }
-                      }
-                      recurringDeliveries
-                    }
-                  }
-                }
-              }
-            }
-          }
         }
       }
     }
@@ -214,45 +175,6 @@ export const PRODUCT_BY_HANDLE_QUERY = `
       options {
         name
         values
-      }
-      sellingPlanGroups(first: 5) {
-        edges {
-          node {
-            name
-            options {
-              name
-              values
-            }
-            sellingPlans(first: 10) {
-              edges {
-                node {
-                  id
-                  name
-                  description
-                  options {
-                    name
-                    value
-                  }
-                  priceAdjustments {
-                    adjustmentValue {
-                      __typename
-                      ... on SellingPlanPercentagePriceAdjustment {
-                        percentage: adjustmentPercentage
-                      }
-                      ... on SellingPlanFixedAmountPriceAdjustment {
-                        adjustmentAmount {
-                          amount
-                          currencyCode
-                        }
-                      }
-                    }
-                  }
-                  recurringDeliveries
-                }
-              }
-            }
-          }
-        }
       }
     }
   }
