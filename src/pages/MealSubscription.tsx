@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CalendarDays, Minus, Plus, ShoppingCart, Loader2, Check, AlertCircle } from 'lucide-react';
 import { useProducts } from '@/hooks/useProducts';
-import { ShopifyProduct, formatPrice } from '@/lib/shopify';
+import { ShopifyProduct, formatPrice, SellingPlan } from '@/lib/shopify';
 import { useCartStore } from '@/stores/cartStore';
 import { toast } from 'sonner';
 
@@ -30,6 +30,18 @@ const MealSubscription = () => {
     'week-c': {},
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Extract selling plan from any meal product that has one
+  const sellingPlan: SellingPlan | null = useMemo(() => {
+    for (const product of allProducts) {
+      const groups = product.node.sellingPlanGroups?.edges || [];
+      for (const group of groups) {
+        const plans = group.node.sellingPlans.edges;
+        if (plans.length > 0) return plans[0].node;
+      }
+    }
+    return null;
+  }, [allProducts]);
 
   const productsByWeek = useMemo(() => {
     const grouped: Record<string, ShopifyProduct[]> = { 'week-a': [], 'week-b': [], 'week-c': [] };
@@ -98,6 +110,7 @@ const MealSubscription = () => {
             price: variant.price,
             quantity: qty,
             selectedOptions: variant.selectedOptions || [],
+            sellingPlanId: sellingPlan?.id,
           });
         }
       }
