@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CalendarDays, Minus, Plus, ShoppingCart, Loader2, Check, AlertCircle } from 'lucide-react';
-import { useProducts } from '@/hooks/useProducts';
-import { ShopifyProduct, formatPrice, SellingPlan } from '@/lib/shopify';
+import { useProducts, useSellingPlans } from '@/hooks/useProducts';
+import { ShopifyProduct, formatPrice } from '@/lib/shopify';
 import { useCartStore } from '@/stores/cartStore';
 import { toast } from 'sonner';
 
@@ -21,7 +21,7 @@ type WeekSelections = Record<string, Record<string, number>>;
 
 const MealSubscription = () => {
   const { data: allProducts = [], isLoading: productsLoading } = useProducts(50, 'product_type:Meal');
-  const addItem = useCartStore(state => state.addItem);
+  const { data: sellingPlan } = useSellingPlans('product_type:Meal');
   const isLoading = useCartStore(state => state.isLoading);
   const [activeTab, setActiveTab] = useState('week-a');
   const [selections, setSelections] = useState<WeekSelections>({
