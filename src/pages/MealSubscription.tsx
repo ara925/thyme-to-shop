@@ -24,6 +24,13 @@ const MealSubscription = () => {
   const { data: sellingPlan = null } = useSellingPlans('product_type:Meal');
   const addItem = useCartStore(state => state.addItem);
   const isLoading = useCartStore(state => state.isLoading);
+  const [activeTab, setActiveTab] = useState('week-a');
+  const [selections, setSelections] = useState<WeekSelections>({
+    'week-a': {},
+    'week-b': {},
+    'week-c': {},
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const productsByWeek = useMemo(() => {
     const grouped: Record<string, ShopifyProduct[]> = { 'week-a': [], 'week-b': [], 'week-c': [] };
