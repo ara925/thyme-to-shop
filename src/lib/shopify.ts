@@ -4,7 +4,7 @@ import { toast } from "sonner";
 export const SHOPIFY_API_VERSION = '2025-07';
 export const SHOPIFY_STORE_PERMANENT_DOMAIN = 'thyme-time-store-brreo.myshopify.com';
 export const SHOPIFY_STOREFRONT_URL = `https://${SHOPIFY_STORE_PERMANENT_DOMAIN}/api/${SHOPIFY_API_VERSION}/graphql.json`;
-export const SHOPIFY_STOREFRONT_TOKEN = 'cdd7b3d724a8216c708f875c04426def';
+export const SHOPIFY_STOREFRONT_TOKEN = '5f7c48d7ed775a943e87a6308e72948f';
 
 // TypeScript Types
 export interface SellingPlan {
