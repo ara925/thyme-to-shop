@@ -7,6 +7,29 @@ export const SHOPIFY_STOREFRONT_URL = `https://${SHOPIFY_STORE_PERMANENT_DOMAIN}
 export const SHOPIFY_STOREFRONT_TOKEN = 'cdd7b3d724a8216c708f875c04426def';
 
 // TypeScript Types
+export interface SellingPlan {
+  id: string;
+  name: string;
+  description: string | null;
+  options: Array<{ name: string; value: string }>;
+  priceAdjustments: Array<{
+    adjustmentValue: {
+      __typename: string;
+      percentage?: number;
+      adjustmentAmount?: { amount: string; currencyCode: string };
+    };
+  }>;
+  recurringDeliveries: boolean;
+}
+
+export interface SellingPlanGroup {
+  name: string;
+  options: Array<{ name: string; values: string[] }>;
+  sellingPlans: {
+    edges: Array<{ node: SellingPlan }>;
+  };
+}
+
 export interface ShopifyProduct {
   node: {
     id: string;
@@ -48,6 +71,9 @@ export interface ShopifyProduct {
       name: string;
       values: string[];
     }>;
+    sellingPlanGroups?: {
+      edges: Array<{ node: SellingPlanGroup }>;
+    };
     tags: string[];
     productType: string;
   };
@@ -100,6 +126,45 @@ export const PRODUCTS_QUERY = `
             name
             values
           }
+          sellingPlanGroups(first: 5) {
+            edges {
+              node {
+                name
+                options {
+                  name
+                  values
+                }
+                sellingPlans(first: 10) {
+                  edges {
+                    node {
+                      id
+                      name
+                      description
+                      options {
+                        name
+                        value
+                      }
+                      priceAdjustments {
+                        adjustmentValue {
+                          __typename
+                          ... on SellingPlanPercentagePriceAdjustment {
+                            percentage: adjustmentPercentage
+                          }
+                          ... on SellingPlanFixedAmountPriceAdjustment {
+                            adjustmentAmount {
+                              amount
+                              currencyCode
+                            }
+                          }
+                        }
+                      }
+                      recurringDeliveries
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -149,6 +214,45 @@ export const PRODUCT_BY_HANDLE_QUERY = `
       options {
         name
         values
+      }
+      sellingPlanGroups(first: 5) {
+        edges {
+          node {
+            name
+            options {
+              name
+              values
+            }
+            sellingPlans(first: 10) {
+              edges {
+                node {
+                  id
+                  name
+                  description
+                  options {
+                    name
+                    value
+                  }
+                  priceAdjustments {
+                    adjustmentValue {
+                      __typename
+                      ... on SellingPlanPercentagePriceAdjustment {
+                        percentage: adjustmentPercentage
+                      }
+                      ... on SellingPlanFixedAmountPriceAdjustment {
+                        adjustmentAmount {
+                          amount
+                          currencyCode
+                        }
+                      }
+                    }
+                  }
+                  recurringDeliveries
+                }
+              }
+            }
+          }
+        }
       }
     }
   }
