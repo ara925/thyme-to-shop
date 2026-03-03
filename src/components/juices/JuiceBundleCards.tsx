@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { ShoppingCart, Loader2, Sparkles, Zap, Crown, Star, FlameKindling } from 'lucide-react';
 import { useProducts } from '@/hooks/useProducts';
-import { ShopifyProduct, formatPrice } from '@/lib/shopify';
+import { ShopifyProduct, formatPrice, SellingPlan } from '@/lib/shopify';
 import { useCartStore } from '@/stores/cartStore';
 import { toast } from 'sonner';
 import { useState } from 'react';
@@ -75,6 +75,18 @@ export const JuiceBundleCards = () => {
       .filter(Boolean) as ShopifyProduct[];
   }, [bundleProducts]);
 
+  // Extract selling plan from any bundle product that has one
+  const sellingPlan: SellingPlan | null = useMemo(() => {
+    for (const product of bundleProducts) {
+      const groups = product.node.sellingPlanGroups?.edges || [];
+      for (const group of groups) {
+        const plans = group.node.sellingPlans.edges;
+        if (plans.length > 0) return plans[0].node;
+      }
+    }
+    return null;
+  }, [bundleProducts]);
+
   const handleSubscribe = async (product: ShopifyProduct) => {
     const variant = product.node.variants.edges[0]?.node;
     if (!variant) return;
@@ -88,6 +100,7 @@ export const JuiceBundleCards = () => {
         price: variant.price,
         quantity: 1,
         selectedOptions: variant.selectedOptions || [],
+        sellingPlanId: sellingPlan?.id,
       });
       toast.success(`${product.node.title} added to cart!`, { position: 'top-center' });
     } catch {

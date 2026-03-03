@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Leaf, Minus, Plus, ShoppingCart, Loader2, Check, AlertCircle, Percent } from 'lucide-react';
 import { useProducts } from '@/hooks/useProducts';
-import { ShopifyProduct, formatPrice } from '@/lib/shopify';
+import { ShopifyProduct, formatPrice, SellingPlan } from '@/lib/shopify';
 import { useCartStore } from '@/stores/cartStore';
 import { toast } from 'sonner';
 
@@ -26,6 +26,18 @@ const JuiceSubscription = () => {
   const individualJuices = useMemo(() => {
     return juiceProducts.filter(p => p.node.productType === 'Juice');
   }, [juiceProducts]);
+
+  // Extract selling plan from any juice product that has one
+  const sellingPlan: SellingPlan | null = useMemo(() => {
+    for (const product of individualJuices) {
+      const groups = product.node.sellingPlanGroups?.edges || [];
+      for (const group of groups) {
+        const plans = group.node.sellingPlans.edges;
+        if (plans.length > 0) return plans[0].node;
+      }
+    }
+    return null;
+  }, [individualJuices]);
 
   const subtotal = useMemo(() => {
     let total = 0;
@@ -76,6 +88,7 @@ const JuiceSubscription = () => {
           price: variant.price,
           quantity: qty,
           selectedOptions: variant.selectedOptions || [],
+          sellingPlanId: sellingPlan?.id,
         });
       }
       toast.success('Juices added to cart! Proceed to checkout.', { position: 'top-center' });
