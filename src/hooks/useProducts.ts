@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { storefrontApiRequest, PRODUCTS_QUERY, PRODUCT_BY_HANDLE_QUERY, ShopifyProduct } from '@/lib/shopify';
+import { storefrontApiRequest, PRODUCTS_QUERY, PRODUCT_BY_HANDLE_QUERY, SELLING_PLANS_QUERY, ShopifyProduct, SellingPlan } from '@/lib/shopify';
 
 export function useProducts(first: number = 50, query?: string) {
   return useQuery({
