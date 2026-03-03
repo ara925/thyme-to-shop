@@ -126,45 +126,6 @@ export const PRODUCTS_QUERY = `
             name
             values
           }
-          sellingPlanGroups(first: 5) {
-            edges {
-              node {
-                name
-                options {
-                  name
-                  values
-                }
-                sellingPlans(first: 10) {
-                  edges {
-                    node {
-                      id
-                      name
-                      description
-                      options {
-                        name
-                        value
-                      }
-                      priceAdjustments {
-                        adjustmentValue {
-                          __typename
-                          ... on SellingPlanPercentagePriceAdjustment {
-                            percentage: adjustmentPercentage
-                          }
-                          ... on SellingPlanFixedAmountPriceAdjustment {
-                            adjustmentAmount {
-                              amount
-                              currencyCode
-                            }
-                          }
-                        }
-                      }
-                      recurringDeliveries
-                    }
-                  }
-                }
-              }
-            }
-          }
         }
       }
     }
@@ -215,45 +176,6 @@ export const PRODUCT_BY_HANDLE_QUERY = `
         name
         values
       }
-      sellingPlanGroups(first: 5) {
-        edges {
-          node {
-            name
-            options {
-              name
-              values
-            }
-            sellingPlans(first: 10) {
-              edges {
-                node {
-                  id
-                  name
-                  description
-                  options {
-                    name
-                    value
-                  }
-                  priceAdjustments {
-                    adjustmentValue {
-                      __typename
-                      ... on SellingPlanPercentagePriceAdjustment {
-                        percentage: adjustmentPercentage
-                      }
-                      ... on SellingPlanFixedAmountPriceAdjustment {
-                        adjustmentAmount {
-                          amount
-                          currencyCode
-                        }
-                      }
-                    }
-                  }
-                  recurringDeliveries
-                }
-              }
-            }
-          }
-        }
-      }
     }
   }
 `;
@@ -289,6 +211,58 @@ export const CART_LINES_UPDATE_MUTATION = `
     cartLinesUpdate(cartId: $cartId, lines: $lines) {
       cart { id }
       userErrors { field message }
+    }
+  }
+`;
+
+// Separate selling plans query — requires unauthenticated_read_selling_plans scope
+export const SELLING_PLANS_QUERY = `
+  query GetSellingPlans($first: Int!, $query: String) {
+    products(first: $first, query: $query) {
+      edges {
+        node {
+          id
+          sellingPlanGroups(first: 5) {
+            edges {
+              node {
+                name
+                options {
+                  name
+                  values
+                }
+                sellingPlans(first: 10) {
+                  edges {
+                    node {
+                      id
+                      name
+                      description
+                      options {
+                        name
+                        value
+                      }
+                      priceAdjustments {
+                        adjustmentValue {
+                          __typename
+                          ... on SellingPlanPercentagePriceAdjustment {
+                            percentage: adjustmentPercentage
+                          }
+                          ... on SellingPlanFixedAmountPriceAdjustment {
+                            adjustmentAmount {
+                              amount
+                              currencyCode
+                            }
+                          }
+                        }
+                      }
+                      recurringDeliveries
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 `;
