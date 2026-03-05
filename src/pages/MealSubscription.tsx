@@ -128,7 +128,7 @@ const MealSubscription = () => {
               Weekly Meal Plan
             </h1>
             <p className="mt-4 text-lg text-white/70 max-w-lg">
-              Pre-select your meals for all 3 rotating weeks. Minimum $120 per week. 
+              Pre-select your meals for up to 3 rotating weeks. Minimum $120 per week. 
               Cancel anytime — your plan, your way.
             </p>
           </div>
@@ -155,7 +155,7 @@ const MealSubscription = () => {
               Build Your 3-Week Meal Plan
             </h2>
             <p className="text-muted-foreground mb-8">
-              Select your meals for each week. You can modify your selections before each week's cutoff (Thursday 6PM).
+              Select your meals for each week. You only need to fill at least one week to proceed.
             </p>
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
