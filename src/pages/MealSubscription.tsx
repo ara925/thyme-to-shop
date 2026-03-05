@@ -61,8 +61,9 @@ const MealSubscription = () => {
     return totals;
   }, [selections, productsByWeek]);
 
-  const allWeeksMeetMinimum = WEEKS.every(w => weekTotals[w.id] >= MINIMUM_PER_WEEK);
-  const anySelections = WEEKS.some(w => weekTotals[w.id] > 0);
+  const weeksWithSelections = WEEKS.filter(w => weekTotals[w.id] > 0);
+  const allSelectedWeeksMeetMinimum = weeksWithSelections.length > 0 && weeksWithSelections.every(w => weekTotals[w.id] >= MINIMUM_PER_WEEK);
+  const anySelections = weeksWithSelections.length > 0;
 
   const updateQuantity = (weekId: string, productId: string, delta: number) => {
     setSelections(prev => {
@@ -76,8 +77,8 @@ const MealSubscription = () => {
   };
 
   const handleAddAllToCart = async () => {
-    if (!allWeeksMeetMinimum) {
-      toast.error('Each week must meet the $120 minimum', { position: 'top-center' });
+    if (!allSelectedWeeksMeetMinimum) {
+      toast.error('Each selected week must meet the $120 minimum', { position: 'top-center' });
       return;
     }
 
@@ -127,7 +128,7 @@ const MealSubscription = () => {
               Weekly Meal Plan
             </h1>
             <p className="mt-4 text-lg text-white/70 max-w-lg">
-              Pre-select your meals for all 3 rotating weeks. Minimum $120 per week. 
+              Pre-select your meals for up to 3 rotating weeks. Minimum $120 per week. 
               Cancel anytime — your plan, your way.
             </p>
           </div>
@@ -154,7 +155,7 @@ const MealSubscription = () => {
               Build Your 3-Week Meal Plan
             </h2>
             <p className="text-muted-foreground mb-8">
-              Select your meals for each week. You can modify your selections before each week's cutoff (Thursday 6PM).
+              Select your meals for each week. You only need to fill at least one week to proceed.
             </p>
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -320,24 +321,24 @@ const MealSubscription = () => {
                 </div>
 
                 <div className="flex items-center justify-between pt-4 border-t border-border mb-6">
-                  <span className="font-serif text-lg font-bold">Total (3 weeks)</span>
+                  <span className="font-serif text-lg font-bold">Total ({weeksWithSelections.length} week{weeksWithSelections.length !== 1 ? 's' : ''})</span>
                   <span className="text-xl font-bold text-primary">
-                    {formatPrice(Object.values(weekTotals).reduce((s, t) => s + t, 0).toString())}
+                    {formatPrice(weeksWithSelections.reduce((s, w) => s + weekTotals[w.id], 0).toString())}
                   </span>
                 </div>
 
-                {!allWeeksMeetMinimum && (
+                {!allSelectedWeeksMeetMinimum && (
                   <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                     <p className="text-sm text-destructive flex items-center gap-2">
                       <AlertCircle className="h-4 w-4" />
-                      Each week must meet the ${MINIMUM_PER_WEEK} minimum to proceed.
+                      Each selected week must meet the ${MINIMUM_PER_WEEK} minimum to proceed.
                     </p>
                   </div>
                 )}
 
                 <Button
                   onClick={handleAddAllToCart}
-                  disabled={!allWeeksMeetMinimum || isLoading || isSubmitting}
+                  disabled={!allSelectedWeeksMeetMinimum || isLoading || isSubmitting}
                   className="w-full rounded-full bg-primary hover:bg-primary/90 shadow-md"
                   size="lg"
                 >
