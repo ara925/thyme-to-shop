@@ -33,18 +33,18 @@ const JuiceSubscription = () => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Filter to individual juices only (exclude bundles), show same products in all weeks
+  const individualJuices = useMemo(() => {
+    return allProducts.filter(p => p.node.productType === 'Juice');
+  }, [allProducts]);
+
   const productsByWeek = useMemo(() => {
-    const grouped: Record<string, ShopifyProduct[]> = { 'week-a': [], 'week-b': [], 'week-c': [] };
-    allProducts.forEach(product => {
-      const tags = product.node.tags || [];
-      WEEKS.forEach(week => {
-        if (tags.includes(week.tag)) {
-          grouped[week.id].push(product);
-        }
-      });
+    const grouped: Record<string, ShopifyProduct[]> = {};
+    WEEKS.forEach(week => {
+      grouped[week.id] = individualJuices;
     });
     return grouped;
-  }, [allProducts]);
+  }, [individualJuices]);
 
   const weekTotals = useMemo(() => {
     const totals: Record<string, number> = {};
