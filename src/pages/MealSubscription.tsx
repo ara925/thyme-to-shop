@@ -77,8 +77,8 @@ const MealSubscription = () => {
   };
 
   const handleAddAllToCart = async () => {
-    if (!allWeeksMeetMinimum) {
-      toast.error('Each week must meet the $120 minimum', { position: 'top-center' });
+    if (!allSelectedWeeksMeetMinimum) {
+      toast.error('Each selected week must meet the $120 minimum', { position: 'top-center' });
       return;
     }
 
@@ -321,24 +321,24 @@ const MealSubscription = () => {
                 </div>
 
                 <div className="flex items-center justify-between pt-4 border-t border-border mb-6">
-                  <span className="font-serif text-lg font-bold">Total (3 weeks)</span>
+                  <span className="font-serif text-lg font-bold">Total ({weeksWithSelections.length} week{weeksWithSelections.length !== 1 ? 's' : ''})</span>
                   <span className="text-xl font-bold text-primary">
-                    {formatPrice(Object.values(weekTotals).reduce((s, t) => s + t, 0).toString())}
+                    {formatPrice(weeksWithSelections.reduce((s, w) => s + weekTotals[w.id], 0).toString())}
                   </span>
                 </div>
 
-                {!allWeeksMeetMinimum && (
+                {!allSelectedWeeksMeetMinimum && (
                   <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                     <p className="text-sm text-destructive flex items-center gap-2">
                       <AlertCircle className="h-4 w-4" />
-                      Each week must meet the ${MINIMUM_PER_WEEK} minimum to proceed.
+                      Each selected week must meet the ${MINIMUM_PER_WEEK} minimum to proceed.
                     </p>
                   </div>
                 )}
 
                 <Button
                   onClick={handleAddAllToCart}
-                  disabled={!allWeeksMeetMinimum || isLoading || isSubmitting}
+                  disabled={!allSelectedWeeksMeetMinimum || isLoading || isSubmitting}
                   className="w-full rounded-full bg-primary hover:bg-primary/90 shadow-md"
                   size="lg"
                 >
