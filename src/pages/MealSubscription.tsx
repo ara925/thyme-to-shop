@@ -61,8 +61,9 @@ const MealSubscription = () => {
     return totals;
   }, [selections, productsByWeek]);
 
-  const allWeeksMeetMinimum = WEEKS.every(w => weekTotals[w.id] >= MINIMUM_PER_WEEK);
-  const anySelections = WEEKS.some(w => weekTotals[w.id] > 0);
+  const weeksWithSelections = WEEKS.filter(w => weekTotals[w.id] > 0);
+  const allSelectedWeeksMeetMinimum = weeksWithSelections.length > 0 && weeksWithSelections.every(w => weekTotals[w.id] >= MINIMUM_PER_WEEK);
+  const anySelections = weeksWithSelections.length > 0;
 
   const updateQuantity = (weekId: string, productId: string, delta: number) => {
     setSelections(prev => {

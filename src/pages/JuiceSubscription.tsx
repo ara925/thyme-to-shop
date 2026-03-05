@@ -3,83 +3,110 @@ import { Layout } from '@/components/layout/Layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Leaf, Minus, Plus, ShoppingCart, Loader2, Check, AlertCircle, Percent } from 'lucide-react';
 import { useProducts, useSellingPlans } from '@/hooks/useProducts';
-import { formatPrice } from '@/lib/shopify';
+import { ShopifyProduct, formatPrice } from '@/lib/shopify';
 import { useCartStore } from '@/stores/cartStore';
 import { toast } from 'sonner';
-import { JuiceBundleCards } from '@/components/juices/JuiceBundleCards';
-import { DeliveryScheduler } from '@/components/delivery/DeliveryScheduler';
 
-const MINIMUM_ORDER = 134.99;
+const MINIMUM_PER_WEEK = 134.99;
 const DISCOUNT_PERCENT = 10;
+const WEEKS = [
+  { id: 'week-a', label: 'Week 1', tag: 'week-a' },
+  { id: 'week-b', label: 'Week 2', tag: 'week-b' },
+  { id: 'week-c', label: 'Week 3', tag: 'week-c' },
+];
+
+type WeekSelections = Record<string, Record<string, number>>;
 
 const JuiceSubscription = () => {
-  const { data: juiceProducts = [], isLoading: productsLoading } = useProducts(50, 'product_type:Juice');
+  const { data: allProducts = [], isLoading: productsLoading } = useProducts(50, 'product_type:Juice');
   const { data: sellingPlan = null } = useSellingPlans('product_type:Juice');
   const addItem = useCartStore(state => state.addItem);
   const isLoading = useCartStore(state => state.isLoading);
-  const [selections, setSelections] = useState<Record<string, number>>({});
-  const [billingOption, setBillingOption] = useState<'weekly' | 'full'>('weekly');
+  const [activeTab, setActiveTab] = useState('week-a');
+  const [selections, setSelections] = useState<WeekSelections>({
+    'week-a': {},
+    'week-b': {},
+    'week-c': {},
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const individualJuices = useMemo(() => {
-    return juiceProducts.filter(p => p.node.productType === 'Juice');
-  }, [juiceProducts]);
-
-  const subtotal = useMemo(() => {
-    let total = 0;
-    Object.entries(selections).forEach(([productId, qty]) => {
-      if (qty <= 0) return;
-      const product = individualJuices.find(p => p.node.id === productId);
-      if (product) {
-        total += parseFloat(product.node.priceRange.minVariantPrice.amount) * qty;
-      }
+  const productsByWeek = useMemo(() => {
+    const grouped: Record<string, ShopifyProduct[]> = { 'week-a': [], 'week-b': [], 'week-c': [] };
+    allProducts.forEach(product => {
+      const tags = product.node.tags || [];
+      WEEKS.forEach(week => {
+        if (tags.includes(week.tag)) {
+          grouped[week.id].push(product);
+        }
+      });
     });
-    return total;
-  }, [selections, individualJuices]);
+    return grouped;
+  }, [allProducts]);
 
-  const discount = subtotal * (DISCOUNT_PERCENT / 100);
-  const discountedTotal = subtotal - discount;
-  const meetsMinimum = subtotal >= MINIMUM_ORDER;
-  const remaining = MINIMUM_ORDER - subtotal;
-  const totalItems = Object.values(selections).reduce((sum, q) => sum + q, 0);
-  const fourWeekTotal = discountedTotal * 4;
+  const weekTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    WEEKS.forEach(week => {
+      const weekSel = selections[week.id] || {};
+      let total = 0;
+      Object.entries(weekSel).forEach(([productId, qty]) => {
+        const product = productsByWeek[week.id]?.find(p => p.node.id === productId);
+        if (product && qty > 0) {
+          total += parseFloat(product.node.priceRange.minVariantPrice.amount) * qty;
+        }
+      });
+      totals[week.id] = total;
+    });
+    return totals;
+  }, [selections, productsByWeek]);
 
-  const updateQuantity = (productId: string, delta: number) => {
+  // Only weeks with selections must meet minimum; at least one week required
+  const weeksWithSelections = WEEKS.filter(w => weekTotals[w.id] > 0);
+  const allSelectedWeeksMeetMinimum = weeksWithSelections.length > 0 && weeksWithSelections.every(w => weekTotals[w.id] >= MINIMUM_PER_WEEK);
+  const anySelections = weeksWithSelections.length > 0;
+
+  const updateQuantity = (weekId: string, productId: string, delta: number) => {
     setSelections(prev => {
-      const current = prev[productId] || 0;
+      const current = prev[weekId]?.[productId] || 0;
       const newQty = Math.max(0, current + delta);
-      return { ...prev, [productId]: newQty };
+      return {
+        ...prev,
+        [weekId]: { ...prev[weekId], [productId]: newQty },
+      };
     });
   };
 
-  const handleAddToCart = async () => {
-    if (!meetsMinimum) {
-      toast.error(`Minimum order is $${MINIMUM_ORDER}`, { position: 'top-center' });
+  const handleAddAllToCart = async () => {
+    if (!allSelectedWeeksMeetMinimum) {
+      toast.error(`Each selected week must meet the $${MINIMUM_PER_WEEK} minimum`, { position: 'top-center' });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      for (const [productId, qty] of Object.entries(selections)) {
-        if (qty <= 0) continue;
-        const product = individualJuices.find(p => p.node.id === productId);
-        if (!product) continue;
-        const variant = product.node.variants.edges[0]?.node;
-        if (!variant) continue;
+      for (const week of WEEKS) {
+        const weekSel = selections[week.id] || {};
+        for (const [productId, qty] of Object.entries(weekSel)) {
+          if (qty <= 0) continue;
+          const product = productsByWeek[week.id]?.find(p => p.node.id === productId);
+          if (!product) continue;
+          const variant = product.node.variants.edges[0]?.node;
+          if (!variant) continue;
 
-        await addItem({
-          product,
-          variantId: variant.id,
-          variantTitle: variant.title,
-          price: variant.price,
-          quantity: qty,
-          selectedOptions: variant.selectedOptions || [],
-          sellingPlanId: sellingPlan?.id,
-        });
+          await addItem({
+            product,
+            variantId: variant.id,
+            variantTitle: variant.title,
+            price: variant.price,
+            quantity: qty,
+            selectedOptions: variant.selectedOptions || [],
+            sellingPlanId: sellingPlan?.id,
+          });
+        }
       }
-      toast.success('Juices added to cart! Proceed to checkout.', { position: 'top-center' });
+      toast.success('All juices added to cart! Proceed to checkout.', { position: 'top-center' });
     } catch (error) {
       console.error('Failed to add juices to cart:', error);
       toast.error('Something went wrong. Please try again.', { position: 'top-center' });
@@ -88,9 +115,13 @@ const JuiceSubscription = () => {
     }
   };
 
+  const grandTotal = weeksWithSelections.reduce((s, w) => s + weekTotals[w.id], 0);
+  const totalDiscount = grandTotal * (DISCOUNT_PERCENT / 100);
+  const discountedGrandTotal = grandTotal - totalDiscount;
+
   return (
     <Layout>
-      {/* Hero — matches MealSubscription style */}
+      {/* Hero */}
       <div className="relative overflow-hidden bg-gradient-to-b from-espresso to-primary/90">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,hsl(var(--herb-glow)/0.3),transparent_60%)]" />
         <div className="container relative py-16 md:py-24">
@@ -103,207 +134,229 @@ const JuiceSubscription = () => {
               Weekly Juice Plan
             </h1>
             <p className="mt-4 text-lg text-white/70 max-w-lg">
-              Pick n' Choose your weekly juices, shots & teas. Commit to 4 weeks and save 10% on every order.
+              Pre-select your juices for up to 3 rotating weeks. Minimum ${MINIMUM_PER_WEEK} per week.
+              Save 10% on every order. Cancel anytime.
             </p>
           </div>
 
           <div className="mt-8 flex flex-wrap gap-3">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
-              <span><strong>$134.99</strong> minimum / week</span>
+              <span><strong>${MINIMUM_PER_WEEK}</strong> minimum / week</span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
               <Percent className="h-4 w-4 text-gold" />
               <span><strong>10% off</strong> every week</span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
-              <span><strong>4-week</strong> commitment</span>
+              <span>Charged <strong>weekly</strong></span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
-              <span>Cancel every <strong>4 weeks</strong></span>
+              <span>Cancel <strong>anytime</strong></span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Pre-Set Bundles */}
-      <JuiceBundleCards />
-
-      {/* Juice Builder — matches Meal Planner section */}
+      {/* Juice Planner */}
       <section className="py-12 md:py-20">
         <div className="container">
           <div className="max-w-4xl mx-auto">
             <h2 className="font-serif text-2xl md:text-3xl font-bold text-foreground mb-2">
-              Build Your Weekly Juice Order
+              Build Your Juice Plan
             </h2>
             <p className="text-muted-foreground mb-8">
-              Choose as many juices, shots, and teas as you want. This selection repeats each week for 4 weeks.
+              Select your juices for each week. You only need to fill at least one week to proceed.
             </p>
 
-            {/* Progress bar — same style as meal plan */}
-            <div className={`mb-6 p-4 rounded-xl border ${meetsMinimum ? 'bg-primary/5 border-primary/20' : 'bg-muted/50 border-border'}`}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {meetsMinimum ? (
-                    <Check className="h-5 w-5 text-primary" />
-                  ) : (
-                    <AlertCircle className="h-5 w-5 text-muted-foreground" />
-                  )}
-                  <span className="font-semibold">
-                    Subtotal: {formatPrice(subtotal.toString())}
-                  </span>
-                </div>
-                {!meetsMinimum && subtotal > 0 && (
-                  <span className="text-sm text-muted-foreground">
-                    {formatPrice(remaining.toString())} more to meet minimum
-                  </span>
-                )}
-                {!meetsMinimum && subtotal === 0 && (
-                  <span className="text-sm text-muted-foreground">
-                    ${MINIMUM_ORDER} minimum
-                  </span>
-                )}
-              </div>
-              <div className="mt-3 h-2 rounded-full bg-border overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ${meetsMinimum ? 'bg-primary' : 'bg-accent'}`}
-                  style={{ width: `${Math.min(100, (subtotal / MINIMUM_ORDER) * 100)}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Product list — same card style as meal plan */}
-            {productsLoading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : individualJuices.length === 0 ? (
-              <p className="text-center text-muted-foreground py-12">No juices found.</p>
-            ) : (
-              <div className="space-y-3">
-                {individualJuices.map(product => {
-                  const qty = selections[product.node.id] || 0;
-                  const price = product.node.priceRange.minVariantPrice;
-                  const image = product.node.images.edges[0]?.node;
-
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="grid w-full grid-cols-3 mb-8">
+                {WEEKS.map(week => {
+                  const total = weekTotals[week.id];
+                  const meetsMin = total >= MINIMUM_PER_WEEK;
+                  const hasSelections = total > 0;
                   return (
-                    <Card key={product.node.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
-                      <CardContent className="flex items-center gap-4 p-4">
-                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                          {image ? (
-                            <img src={image.url} alt={image.altText || product.node.title} className="w-full h-full object-cover" />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-herb-light to-muted">
-                              <span className="text-xs text-muted-foreground">No img</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-serif font-bold text-foreground truncate">{product.node.title}</h3>
-                          <p className="text-sm text-muted-foreground line-clamp-1">{product.node.description}</p>
-                        </div>
-                        <div className="text-right flex-shrink-0">
-                          <p className="font-bold text-accent">{formatPrice(price.amount, price.currencyCode)}</p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8 rounded-full"
-                            onClick={() => updateQuantity(product.node.id, -1)}
-                            disabled={qty === 0}
-                          >
-                            <Minus className="h-3.5 w-3.5" />
-                          </Button>
-                          <span className="w-8 text-center font-semibold">{qty}</span>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-8 w-8 rounded-full"
-                            onClick={() => updateQuantity(product.node.id, 1)}
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
+                    <TabsTrigger
+                      key={week.id}
+                      value={week.id}
+                      className="relative flex flex-col gap-0.5 py-3"
+                    >
+                      <span className="font-semibold">{week.label}</span>
+                      {hasSelections && (
+                        <span className={`text-xs ${meetsMin ? 'text-primary' : 'text-destructive'}`}>
+                          {formatPrice(total.toString())}
+                        </span>
+                      )}
+                      {meetsMin && (
+                        <Check className="absolute top-1 right-1 h-3.5 w-3.5 text-primary" />
+                      )}
+                    </TabsTrigger>
                   );
                 })}
-              </div>
-            )}
+              </TabsList>
 
-            {/* Summary — matches meal plan Order Summary style */}
-            {totalItems > 0 && (
+              {WEEKS.map(week => {
+                const weekProducts = productsByWeek[week.id] || [];
+                const total = weekTotals[week.id];
+                const meetsMin = total >= MINIMUM_PER_WEEK;
+                const remaining = MINIMUM_PER_WEEK - total;
+
+                return (
+                  <TabsContent key={week.id} value={week.id}>
+                    {/* Week status bar */}
+                    <div className={`mb-6 p-4 rounded-xl border ${meetsMin ? 'bg-primary/5 border-primary/20' : 'bg-muted/50 border-border'}`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {meetsMin ? (
+                            <Check className="h-5 w-5 text-primary" />
+                          ) : (
+                            <AlertCircle className="h-5 w-5 text-muted-foreground" />
+                          )}
+                          <span className="font-semibold">
+                            {week.label} Total: {formatPrice(total.toString())}
+                          </span>
+                        </div>
+                        {!meetsMin && total > 0 && (
+                          <span className="text-sm text-muted-foreground">
+                            {formatPrice(remaining.toString())} more to meet minimum
+                          </span>
+                        )}
+                        {!meetsMin && total === 0 && (
+                          <span className="text-sm text-muted-foreground">
+                            ${MINIMUM_PER_WEEK} minimum
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-3 h-2 rounded-full bg-border overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${meetsMin ? 'bg-primary' : 'bg-accent'}`}
+                          style={{ width: `${Math.min(100, (total / MINIMUM_PER_WEEK) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    {productsLoading ? (
+                      <div className="flex justify-center py-12">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                      </div>
+                    ) : weekProducts.length === 0 ? (
+                      <p className="text-center text-muted-foreground py-12">No juices found for this week.</p>
+                    ) : (
+                      <div className="space-y-3">
+                        {weekProducts.map(product => {
+                          const qty = selections[week.id]?.[product.node.id] || 0;
+                          const price = product.node.priceRange.minVariantPrice;
+                          const image = product.node.images.edges[0]?.node;
+
+                          return (
+                            <Card key={product.node.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
+                              <CardContent className="flex items-center gap-4 p-4">
+                                <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
+                                  {image ? (
+                                    <img src={image.url} alt={image.altText || product.node.title} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-herb-light to-muted">
+                                      <span className="text-xs text-muted-foreground">No img</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-serif font-bold text-foreground truncate">{product.node.title}</h3>
+                                  <p className="text-sm text-muted-foreground line-clamp-1">{product.node.description}</p>
+                                </div>
+                                <div className="text-right flex-shrink-0">
+                                  <p className="font-bold text-accent">{formatPrice(price.amount, price.currencyCode)}</p>
+                                </div>
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8 rounded-full"
+                                    onClick={() => updateQuantity(week.id, product.node.id, -1)}
+                                    disabled={qty === 0}
+                                  >
+                                    <Minus className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <span className="w-8 text-center font-semibold">{qty}</span>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-8 w-8 rounded-full"
+                                    onClick={() => updateQuantity(week.id, product.node.id, 1)}
+                                  >
+                                    <Plus className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </TabsContent>
+                );
+              })}
+            </Tabs>
+
+            {/* Summary & Add to Cart */}
+            {anySelections && (
               <div className="mt-10 p-6 rounded-2xl bg-card border border-border shadow-lg">
                 <h3 className="font-serif text-xl font-bold mb-4">Order Summary</h3>
-
                 <div className="space-y-3 mb-6">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-primary" />
-                      <span className="font-medium">Weekly juices</span>
-                      <span className="text-sm text-muted-foreground">({totalItems} items)</span>
+                  {WEEKS.map(week => {
+                    const total = weekTotals[week.id];
+                    const meetsMin = total >= MINIMUM_PER_WEEK;
+                    if (total === 0) return null;
+
+                    const weekSel = selections[week.id] || {};
+                    const itemCount = Object.values(weekSel).reduce((sum, q) => sum + q, 0);
+
+                    return (
+                      <div key={week.id} className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {meetsMin ? (
+                            <Check className="h-4 w-4 text-primary" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4 text-destructive" />
+                          )}
+                          <span className="font-medium">{week.label}</span>
+                          <span className="text-sm text-muted-foreground">({itemCount} items)</span>
+                        </div>
+                        <span className={`font-bold ${meetsMin ? 'text-primary' : 'text-destructive'}`}>
+                          {formatPrice(total.toString())}
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {totalDiscount > 0 && (
+                    <div className="flex items-center justify-between text-primary">
+                      <div className="flex items-center gap-2">
+                        <Percent className="h-4 w-4" />
+                        <span className="font-medium">Subscription discount (10%)</span>
+                      </div>
+                      <span className="font-bold">-{formatPrice(totalDiscount.toString())}</span>
                     </div>
-                    <span className="font-bold">{formatPrice(subtotal.toString())}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-primary">
-                    <div className="flex items-center gap-2">
-                      <Percent className="h-4 w-4" />
-                      <span className="font-medium">Subscription discount (10%)</span>
-                    </div>
-                    <span className="font-bold">-{formatPrice(discount.toString())}</span>
-                  </div>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between pt-4 border-t border-border mb-6">
-                  <span className="font-serif text-lg font-bold">Weekly total</span>
-                  <span className="text-xl font-bold text-primary">{formatPrice(discountedTotal.toString())}</span>
+                  <span className="font-serif text-lg font-bold">Total ({weeksWithSelections.length} week{weeksWithSelections.length !== 1 ? 's' : ''})</span>
+                  <span className="text-xl font-bold text-primary">
+                    {formatPrice(discountedGrandTotal.toString())}
+                  </span>
                 </div>
 
-                {/* Billing option */}
-                <div className="mb-6 p-4 rounded-xl bg-muted/50">
-                  <p className="font-semibold text-sm mb-3">Billing preference</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => setBillingOption('weekly')}
-                      className={`p-3 rounded-lg border text-left transition-colors ${
-                        billingOption === 'weekly'
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      <p className="font-semibold text-sm">Pay weekly</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatPrice(discountedTotal.toString())} / week
-                      </p>
-                    </button>
-                    <button
-                      onClick={() => setBillingOption('full')}
-                      className={`p-3 rounded-lg border text-left transition-colors ${
-                        billingOption === 'full'
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/50'
-                      }`}
-                    >
-                      <p className="font-semibold text-sm">Pay 4 weeks upfront</p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatPrice(fourWeekTotal.toString())} total
-                      </p>
-                    </button>
-                  </div>
-                </div>
-
-                {!meetsMinimum && (
+                {!allSelectedWeeksMeetMinimum && (
                   <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                     <p className="text-sm text-destructive flex items-center gap-2">
                       <AlertCircle className="h-4 w-4" />
-                      Minimum order is ${MINIMUM_ORDER} per week.
+                      Each selected week must meet the ${MINIMUM_PER_WEEK} minimum to proceed.
                     </p>
                   </div>
                 )}
 
                 <Button
-                  onClick={handleAddToCart}
-                  disabled={!meetsMinimum || isLoading || isSubmitting}
+                  onClick={handleAddAllToCart}
+                  disabled={!allSelectedWeeksMeetMinimum || isLoading || isSubmitting}
                   className="w-full rounded-full bg-primary hover:bg-primary/90 shadow-md"
                   size="lg"
                 >
@@ -312,20 +365,18 @@ const JuiceSubscription = () => {
                   ) : (
                     <>
                       <ShoppingCart className="mr-2 h-5 w-5" />
-                      Add to Cart
+                      Add All Juices to Cart
                     </>
                   )}
                 </Button>
                 <p className="text-xs text-muted-foreground text-center mt-3">
-                  4-week minimum commitment. Cancel every 4 weeks. 10% discount applied at checkout.
+                  You'll be charged weekly. 10% subscription discount applied. Cancel anytime.
                 </p>
               </div>
             )}
           </div>
         </div>
       </section>
-
-      <DeliveryScheduler />
     </Layout>
   );
 };
