@@ -1,15 +1,15 @@
 import { useState, useMemo } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { Badge } from '@/components/ui/badge';
-import { JuiceBundleCards } from '@/components/juices/JuiceBundleCards';
-import { DeliveryScheduler } from '@/components/delivery/DeliveryScheduler';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Leaf, Minus, Plus, ShoppingCart, Loader2, Check, AlertCircle, Percent } from 'lucide-react';
 import { useProducts, useSellingPlans } from '@/hooks/useProducts';
-import { ShopifyProduct, formatPrice } from '@/lib/shopify';
+import { formatPrice } from '@/lib/shopify';
 import { useCartStore } from '@/stores/cartStore';
 import { toast } from 'sonner';
+import { JuiceBundleCards } from '@/components/juices/JuiceBundleCards';
+import { DeliveryScheduler } from '@/components/delivery/DeliveryScheduler';
 
 const MINIMUM_ORDER = 134.99;
 const DISCOUNT_PERCENT = 10;
@@ -23,7 +23,6 @@ const JuiceSubscription = () => {
   const [billingOption, setBillingOption] = useState<'weekly' | 'full'>('weekly');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Filter to individual juices only (exclude bundles)
   const individualJuices = useMemo(() => {
     return juiceProducts.filter(p => p.node.productType === 'Juice');
   }, [juiceProducts]);
@@ -91,9 +90,9 @@ const JuiceSubscription = () => {
 
   return (
     <Layout>
-      {/* Hero */}
-      <div className="relative overflow-hidden bg-gradient-to-b from-espresso to-accent/80">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_70%_50%,hsl(var(--terracotta)/0.3),transparent_60%)]" />
+      {/* Hero — matches MealSubscription style */}
+      <div className="relative overflow-hidden bg-gradient-to-b from-espresso to-primary/90">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,hsl(var(--herb-glow)/0.3),transparent_60%)]" />
         <div className="container relative py-16 md:py-24">
           <div className="max-w-2xl">
             <Badge className="mb-4 bg-white/10 text-white border-white/20 backdrop-blur-sm">
@@ -101,7 +100,7 @@ const JuiceSubscription = () => {
               Juice Subscription
             </Badge>
             <h1 className="font-serif text-4xl font-bold text-white md:text-6xl tracking-tight">
-              Juice Subscription
+              Weekly Juice Plan
             </h1>
             <p className="mt-4 text-lg text-white/70 max-w-lg">
               Pick n' Choose your weekly juices, shots & teas. Commit to 4 weeks and save 10% on every order.
@@ -110,11 +109,11 @@ const JuiceSubscription = () => {
 
           <div className="mt-8 flex flex-wrap gap-3">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
-              <Percent className="h-4 w-4 text-gold" />
-              <span><strong>10% off</strong> every week</span>
+              <span><strong>$134.99</strong> minimum / week</span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
-              <span><strong>$134.99</strong> minimum / week</span>
+              <Percent className="h-4 w-4 text-gold" />
+              <span><strong>10% off</strong> every week</span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
               <span><strong>4-week</strong> commitment</span>
@@ -129,7 +128,7 @@ const JuiceSubscription = () => {
       {/* Pre-Set Bundles */}
       <JuiceBundleCards />
 
-      {/* Juice Builder */}
+      {/* Juice Builder — matches Meal Planner section */}
       <section className="py-12 md:py-20">
         <div className="container">
           <div className="max-w-4xl mx-auto">
@@ -140,8 +139,8 @@ const JuiceSubscription = () => {
               Choose as many juices, shots, and teas as you want. This selection repeats each week for 4 weeks.
             </p>
 
-            {/* Progress bar */}
-            <div className={`mb-8 p-4 rounded-xl border ${meetsMinimum ? 'bg-primary/5 border-primary/20' : 'bg-muted/50 border-border'}`}>
+            {/* Progress bar — same style as meal plan */}
+            <div className={`mb-6 p-4 rounded-xl border ${meetsMinimum ? 'bg-primary/5 border-primary/20' : 'bg-muted/50 border-border'}`}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {meetsMinimum ? (
@@ -172,7 +171,7 @@ const JuiceSubscription = () => {
               </div>
             </div>
 
-            {/* Product list */}
+            {/* Product list — same card style as meal plan */}
             {productsLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -232,39 +231,43 @@ const JuiceSubscription = () => {
               </div>
             )}
 
-            {/* Summary */}
+            {/* Summary — matches meal plan Order Summary style */}
             {totalItems > 0 && (
               <div className="mt-10 p-6 rounded-2xl bg-card border border-border shadow-lg">
-                <h3 className="font-serif text-xl font-bold mb-4">Subscription Summary</h3>
+                <h3 className="font-serif text-xl font-bold mb-4">Order Summary</h3>
 
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Subtotal ({totalItems} items)</span>
-                    <span>{formatPrice(subtotal.toString())}</span>
+                <div className="space-y-3 mb-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary" />
+                      <span className="font-medium">Weekly juices</span>
+                      <span className="text-sm text-muted-foreground">({totalItems} items)</span>
+                    </div>
+                    <span className="font-bold">{formatPrice(subtotal.toString())}</span>
                   </div>
-                  <div className="flex justify-between text-sm text-primary">
-                    <span className="flex items-center gap-1">
-                      <Percent className="h-3.5 w-3.5" />
-                      Subscription discount (10%)
-                    </span>
-                    <span>-{formatPrice(discount.toString())}</span>
+                  <div className="flex items-center justify-between text-primary">
+                    <div className="flex items-center gap-2">
+                      <Percent className="h-4 w-4" />
+                      <span className="font-medium">Subscription discount (10%)</span>
+                    </div>
+                    <span className="font-bold">-{formatPrice(discount.toString())}</span>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-border">
-                  <span className="font-serif font-bold">Weekly total</span>
+                <div className="flex items-center justify-between pt-4 border-t border-border mb-6">
+                  <span className="font-serif text-lg font-bold">Weekly total</span>
                   <span className="text-xl font-bold text-primary">{formatPrice(discountedTotal.toString())}</span>
                 </div>
 
                 {/* Billing option */}
-                <div className="mt-6 p-4 rounded-xl bg-muted/50">
+                <div className="mb-6 p-4 rounded-xl bg-muted/50">
                   <p className="font-semibold text-sm mb-3">Billing preference</p>
                   <div className="grid grid-cols-2 gap-3">
                     <button
                       onClick={() => setBillingOption('weekly')}
                       className={`p-3 rounded-lg border text-left transition-colors ${
-                        billingOption === 'weekly' 
-                          ? 'border-primary bg-primary/5' 
+                        billingOption === 'weekly'
+                          ? 'border-primary bg-primary/5'
                           : 'border-border hover:border-primary/50'
                       }`}
                     >
@@ -276,8 +279,8 @@ const JuiceSubscription = () => {
                     <button
                       onClick={() => setBillingOption('full')}
                       className={`p-3 rounded-lg border text-left transition-colors ${
-                        billingOption === 'full' 
-                          ? 'border-primary bg-primary/5' 
+                        billingOption === 'full'
+                          ? 'border-primary bg-primary/5'
                           : 'border-border hover:border-primary/50'
                       }`}
                     >
@@ -290,7 +293,7 @@ const JuiceSubscription = () => {
                 </div>
 
                 {!meetsMinimum && (
-                  <div className="mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                  <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                     <p className="text-sm text-destructive flex items-center gap-2">
                       <AlertCircle className="h-4 w-4" />
                       Minimum order is ${MINIMUM_ORDER} per week.
@@ -301,7 +304,7 @@ const JuiceSubscription = () => {
                 <Button
                   onClick={handleAddToCart}
                   disabled={!meetsMinimum || isLoading || isSubmitting}
-                  className="w-full mt-6 rounded-full bg-primary hover:bg-primary/90 shadow-md"
+                  className="w-full rounded-full bg-primary hover:bg-primary/90 shadow-md"
                   size="lg"
                 >
                   {isSubmitting ? (
@@ -322,7 +325,6 @@ const JuiceSubscription = () => {
         </div>
       </section>
 
-      {/* Delivery Scheduling */}
       <DeliveryScheduler />
     </Layout>
   );
