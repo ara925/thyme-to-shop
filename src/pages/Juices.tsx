@@ -1,11 +1,25 @@
+import { useMemo } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { ProductGrid } from '@/components/products/ProductGrid';
 import { useProducts } from '@/hooks/useProducts';
 import { Badge } from '@/components/ui/badge';
 import { Leaf } from 'lucide-react';
+import { getCurrentWeekTag, getCurrentWeekLabel } from '@/lib/weekRotation';
 
 const Juices = () => {
-  const { data: juiceProducts = [], isLoading } = useProducts(50, 'product_type:Juice OR product_type:"Juice Bundle"');
+  const { data: allJuices = [], isLoading } = useProducts(50, 'product_type:Juice OR product_type:"Juice Bundle"');
+  const currentWeek = getCurrentWeekTag();
+  const currentWeekLabel = getCurrentWeekLabel();
+
+  // Individual juices filtered by current week; bundles always shown
+  const juiceProducts = useMemo(
+    () => allJuices.filter(p => {
+      const tags = p.node.tags || [];
+      if (p.node.productType === 'Juice Bundle') return true;
+      return tags.includes(currentWeek);
+    }),
+    [allJuices, currentWeek]
+  );
 
   return (
     <Layout>
@@ -15,7 +29,7 @@ const Juices = () => {
           <div className="max-w-2xl">
             <Badge className="mb-4 bg-white/10 text-white border-white/20 backdrop-blur-sm">
               <Leaf className="mr-1 h-3 w-3" />
-              Fresh & Cold-Pressed
+              {currentWeekLabel} — Fresh & Cold-Pressed
             </Badge>
             <h1 className="font-serif text-4xl font-bold text-white md:text-6xl tracking-tight">
               Fresh Juices & Shots
