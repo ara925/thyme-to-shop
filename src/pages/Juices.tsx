@@ -24,7 +24,7 @@ const Juices = () => {
           <div className="max-w-2xl">
             <Badge className="mb-4 bg-white/10 text-white border-white/20 backdrop-blur-sm">
               <Leaf className="mr-1 h-3 w-3" />
-              Fresh & Cold-Pressed
+              {currentWeekLabel} — Fresh & Cold-Pressed
             </Badge>
             <h1 className="font-serif text-4xl font-bold text-white md:text-6xl tracking-tight">
               Fresh Juices & Shots
