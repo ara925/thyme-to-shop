@@ -5,15 +5,15 @@ interface NutritionLabelProps {
   nutrition: NutritionInfo;
 }
 
-const NUTRIENTS = [
-  { key: 'calories' as const, label: 'Calories', unit: '', icon: Flame, accent: true },
-  { key: 'protein' as const, label: 'Protein', unit: 'g', icon: Dumbbell },
-  { key: 'carbs' as const, label: 'Carbs', unit: 'g', icon: Wheat },
-  { key: 'fat' as const, label: 'Fat', unit: 'g', icon: Droplets },
-  { key: 'fiber' as const, label: 'Fiber', unit: 'g', icon: Leaf },
-  { key: 'sugar' as const, label: 'Sugar', unit: 'g', icon: Candy },
-  { key: 'sodium' as const, label: 'Sodium', unit: 'mg', icon: CircleDot },
-] as const;
+const NUTRIENTS: Array<{ key: keyof NutritionInfo; label: string; unit: string; icon: typeof Flame; accent?: boolean }> = [
+  { key: 'calories', label: 'Calories', unit: '', icon: Flame, accent: true },
+  { key: 'protein', label: 'Protein', unit: 'g', icon: Dumbbell },
+  { key: 'carbs', label: 'Carbs', unit: 'g', icon: Wheat },
+  { key: 'fat', label: 'Fat', unit: 'g', icon: Droplets },
+  { key: 'fiber', label: 'Fiber', unit: 'g', icon: Leaf },
+  { key: 'sugar', label: 'Sugar', unit: 'g', icon: Candy },
+  { key: 'sodium', label: 'Sodium', unit: 'mg', icon: CircleDot },
+];
 
 export function NutritionLabel({ nutrition }: NutritionLabelProps) {
   const available = NUTRIENTS.filter(n => nutrition[n.key] !== undefined);
