@@ -24,7 +24,7 @@ const WeeklyMeals = () => {
           <div className="max-w-2xl">
             <Badge className="mb-4 bg-white/10 text-white border-white/20 backdrop-blur-sm">
               <CalendarDays className="mr-1 h-3 w-3" />
-              This Week's Menu
+              {currentWeekLabel} — This Week's Menu
             </Badge>
             <h1 className="font-serif text-4xl font-bold text-white md:text-6xl tracking-tight">
               Weekly Meal Program

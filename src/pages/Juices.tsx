@@ -1,11 +1,20 @@
+import { useMemo } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { ProductGrid } from '@/components/products/ProductGrid';
 import { useProducts } from '@/hooks/useProducts';
 import { Badge } from '@/components/ui/badge';
 import { Leaf } from 'lucide-react';
+import { getCurrentWeekTag, getCurrentWeekLabel } from '@/lib/weekRotation';
 
 const Juices = () => {
-  const { data: juiceProducts = [], isLoading } = useProducts(50, 'product_type:Juice OR product_type:"Juice Bundle"');
+  const { data: allJuices = [], isLoading } = useProducts(50, 'product_type:Juice OR product_type:"Juice Bundle"');
+  const currentWeek = getCurrentWeekTag();
+  const currentWeekLabel = getCurrentWeekLabel();
+
+  const juiceProducts = useMemo(
+    () => allJuices.filter(p => (p.node.tags || []).includes(currentWeek)),
+    [allJuices, currentWeek]
+  );
 
   return (
     <Layout>
