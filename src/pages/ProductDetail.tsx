@@ -3,11 +3,13 @@ import { useState } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { useProductByHandle } from '@/hooks/useProducts';
 import { useCartStore } from '@/stores/cartStore';
-import { formatPrice } from '@/lib/shopify';
+import { formatPrice, parseNutrition, getHeatingInstructions } from '@/lib/shopify';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, ShoppingCart, ArrowLeft, Minus, Plus } from 'lucide-react';
 import { toast } from 'sonner';
+import { NutritionLabel } from '@/components/products/NutritionLabel';
+import { HeatingInstructions } from '@/components/products/HeatingInstructions';
 
 const ProductDetail = () => {
   const { handle } = useParams<{ handle: string }>();
@@ -48,6 +50,8 @@ const ProductDetail = () => {
   const selectedVariant = variants[selectedVariantIndex]?.node;
   const images = node.images.edges;
   const mainImage = images[0]?.node;
+  const nutrition = parseNutrition(node.metafields);
+  const heatingInstructions = getHeatingInstructions(node.metafields);
 
   const handleAddToCart = async () => {
     if (!selectedVariant) return;
@@ -194,6 +198,14 @@ const ProductDetail = () => {
             )}
           </div>
         </div>
+
+        {/* Nutrition & Heating Instructions */}
+        {(nutrition || heatingInstructions) && (
+          <div className="mt-12 grid gap-6 lg:grid-cols-2">
+            {nutrition && <NutritionLabel nutrition={nutrition} />}
+            {heatingInstructions && <HeatingInstructions instructions={heatingInstructions} />}
+          </div>
+        )}
       </div>
     </Layout>
   );
