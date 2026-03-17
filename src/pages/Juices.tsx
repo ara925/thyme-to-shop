@@ -11,8 +11,13 @@ const Juices = () => {
   const currentWeek = getCurrentWeekTag();
   const currentWeekLabel = getCurrentWeekLabel();
 
+  // Individual juices filtered by current week; bundles always shown
   const juiceProducts = useMemo(
-    () => allJuices.filter(p => (p.node.tags || []).includes(currentWeek)),
+    () => allJuices.filter(p => {
+      const tags = p.node.tags || [];
+      if (p.node.productType === 'Juice Bundle') return true;
+      return tags.includes(currentWeek);
+    }),
     [allJuices, currentWeek]
   );
 
