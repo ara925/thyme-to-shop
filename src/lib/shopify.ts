@@ -232,6 +232,11 @@ export const PRODUCT_BY_HANDLE_QUERY = `
         name
         values
       }
+      metafields(identifiers: ${METAFIELD_IDENTIFIERS}) {
+        key
+        value
+        type
+      }
     }
   }
 `;
