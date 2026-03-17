@@ -2,8 +2,8 @@ import { Link } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ShoppingCart, Loader2 } from 'lucide-react';
-import { ShopifyProduct, formatPrice } from '@/lib/shopify';
+import { ShoppingCart, Loader2, Flame, Dumbbell } from 'lucide-react';
+import { ShopifyProduct, formatPrice, parseNutrition } from '@/lib/shopify';
 import { useCartStore } from '@/stores/cartStore';
 import { toast } from 'sonner';
 
@@ -19,6 +19,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const firstVariant = node.variants.edges[0]?.node;
   const image = node.images.edges[0]?.node;
   const price = node.priceRange.minVariantPrice;
+  const nutrition = parseNutrition(node.metafields);
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
@@ -59,6 +60,22 @@ export function ProductCard({ product }: ProductCardProps) {
             <Badge className="absolute top-3 left-3 bg-card/90 text-foreground backdrop-blur-sm border-0 shadow-sm text-xs font-semibold">
               {node.productType}
             </Badge>
+          )}
+          {nutrition && (nutrition.calories || nutrition.protein) && (
+            <div className="absolute bottom-3 left-3 flex gap-1.5">
+              {nutrition.calories && (
+                <Badge className="bg-card/90 text-foreground backdrop-blur-sm border-0 shadow-sm text-xs font-semibold">
+                  <Flame className="mr-1 h-3 w-3 text-accent" />
+                  {nutrition.calories} cal
+                </Badge>
+              )}
+              {nutrition.protein && (
+                <Badge className="bg-card/90 text-foreground backdrop-blur-sm border-0 shadow-sm text-xs font-semibold">
+                  <Dumbbell className="mr-1 h-3 w-3 text-primary" />
+                  {nutrition.protein}g protein
+                </Badge>
+              )}
+            </div>
           )}
         </div>
         <CardContent className="p-5">
