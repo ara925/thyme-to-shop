@@ -30,6 +30,22 @@ export interface SellingPlanGroup {
   };
 }
 
+export interface ProductMetafield {
+  key: string;
+  value: string;
+  type: string;
+}
+
+export interface NutritionInfo {
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  fiber?: number;
+  sodium?: number;
+  sugar?: number;
+}
+
 export interface ShopifyProduct {
   node: {
     id: string;
@@ -76,7 +92,31 @@ export interface ShopifyProduct {
     };
     tags: string[];
     productType: string;
+    metafields?: Array<ProductMetafield | null>;
   };
+}
+
+export function parseNutrition(metafields?: Array<ProductMetafield | null>): NutritionInfo | null {
+  if (!metafields) return null;
+  const get = (key: string) => {
+    const mf = metafields.find(m => m?.key === key);
+    return mf ? parseFloat(mf.value) : undefined;
+  };
+  const info: NutritionInfo = {
+    calories: get('calories'),
+    protein: get('protein'),
+    carbs: get('carbs'),
+    fat: get('fat'),
+    fiber: get('fiber'),
+    sodium: get('sodium'),
+    sugar: get('sugar'),
+  };
+  return Object.values(info).some(v => v !== undefined) ? info : null;
+}
+
+export function getHeatingInstructions(metafields?: Array<ProductMetafield | null>): string | null {
+  const mf = metafields?.find(m => m?.key === 'heating_instructions');
+  return mf?.value || null;
 }
 
 // GraphQL Queries
