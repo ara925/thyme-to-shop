@@ -120,6 +120,17 @@ export function getHeatingInstructions(metafields?: Array<ProductMetafield | nul
 }
 
 // GraphQL Queries
+const METAFIELD_IDENTIFIERS = `[
+  {namespace: "custom", key: "calories"},
+  {namespace: "custom", key: "protein"},
+  {namespace: "custom", key: "carbs"},
+  {namespace: "custom", key: "fat"},
+  {namespace: "custom", key: "fiber"},
+  {namespace: "custom", key: "sodium"},
+  {namespace: "custom", key: "sugar"},
+  {namespace: "custom", key: "heating_instructions"}
+]`;
+
 export const PRODUCTS_QUERY = `
   query GetProducts($first: Int!, $query: String) {
     products(first: $first, query: $query) {
@@ -165,6 +176,11 @@ export const PRODUCTS_QUERY = `
           options {
             name
             values
+          }
+          metafields(identifiers: ${METAFIELD_IDENTIFIERS}) {
+            key
+            value
+            type
           }
         }
       }
