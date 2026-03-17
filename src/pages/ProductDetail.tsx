@@ -206,7 +206,6 @@ const ProductDetail = () => {
             {heatingInstructions && <HeatingInstructions instructions={heatingInstructions} />}
           </div>
         )}
-        </div>
       </div>
     </Layout>
   );
