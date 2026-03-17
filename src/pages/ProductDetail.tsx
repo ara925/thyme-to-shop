@@ -198,6 +198,15 @@ const ProductDetail = () => {
             )}
           </div>
         </div>
+
+        {/* Nutrition & Heating Instructions */}
+        {(nutrition || heatingInstructions) && (
+          <div className="mt-12 grid gap-6 lg:grid-cols-2">
+            {nutrition && <NutritionLabel nutrition={nutrition} />}
+            {heatingInstructions && <HeatingInstructions instructions={heatingInstructions} />}
+          </div>
+        )}
+        </div>
       </div>
     </Layout>
   );
