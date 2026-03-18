@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { useProductByHandle } from '@/hooks/useProducts';
 import { useCartStore } from '@/stores/cartStore';
-import { formatPrice, parseNutrition, getHeatingInstructions } from '@/lib/shopify';
+import { formatPrice } from '@/lib/shopify';
+import { getMealNutrition, getMealHeatingInstructions } from '@/lib/mealData';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, ShoppingCart, ArrowLeft, Minus, Plus } from 'lucide-react';
@@ -50,8 +51,8 @@ const ProductDetail = () => {
   const selectedVariant = variants[selectedVariantIndex]?.node;
   const images = node.images.edges;
   const mainImage = images[0]?.node;
-  const nutrition = parseNutrition(node.metafields);
-  const heatingInstructions = getHeatingInstructions(node.metafields);
+  const nutrition = getMealNutrition(node.handle);
+  const heatingInstructions = getMealHeatingInstructions(node.handle);
 
   const handleAddToCart = async () => {
     if (!selectedVariant) return;

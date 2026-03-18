@@ -3,7 +3,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ShoppingCart, Loader2, Flame, Dumbbell } from 'lucide-react';
-import { ShopifyProduct, formatPrice, parseNutrition } from '@/lib/shopify';
+import { ShopifyProduct, formatPrice } from '@/lib/shopify';
+import { getMealNutrition } from '@/lib/mealData';
 import { useCartStore } from '@/stores/cartStore';
 import { toast } from 'sonner';
 
@@ -19,7 +20,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const firstVariant = node.variants.edges[0]?.node;
   const image = node.images.edges[0]?.node;
   const price = node.priceRange.minVariantPrice;
-  const nutrition = parseNutrition(node.metafields);
+  const nutrition = getMealNutrition(node.handle);
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();
