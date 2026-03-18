@@ -20,7 +20,7 @@ export function ProductCard({ product }: ProductCardProps) {
   const firstVariant = node.variants.edges[0]?.node;
   const image = node.images.edges[0]?.node;
   const price = node.priceRange.minVariantPrice;
-  const nutrition = parseNutrition(node.metafields);
+  const nutrition = getMealNutrition(node.handle);
 
   const handleAddToCart = async (e: React.MouseEvent) => {
     e.preventDefault();

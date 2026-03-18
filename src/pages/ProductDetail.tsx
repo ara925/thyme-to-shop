@@ -51,8 +51,8 @@ const ProductDetail = () => {
   const selectedVariant = variants[selectedVariantIndex]?.node;
   const images = node.images.edges;
   const mainImage = images[0]?.node;
-  const nutrition = parseNutrition(node.metafields);
-  const heatingInstructions = getHeatingInstructions(node.metafields);
+  const nutrition = getMealNutrition(node.handle);
+  const heatingInstructions = getMealHeatingInstructions(node.handle);
 
   const handleAddToCart = async () => {
     if (!selectedVariant) return;
