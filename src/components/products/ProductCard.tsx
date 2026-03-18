@@ -3,7 +3,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ShoppingCart, Loader2, Flame, Dumbbell } from 'lucide-react';
-import { ShopifyProduct, formatPrice, parseNutrition } from '@/lib/shopify';
+import { ShopifyProduct, formatPrice } from '@/lib/shopify';
+import { getMealNutrition } from '@/lib/mealData';
 import { useCartStore } from '@/stores/cartStore';
 import { toast } from 'sonner';
 
