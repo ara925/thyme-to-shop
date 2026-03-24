@@ -8,9 +8,11 @@ import {
   CART_LINES_UPDATE_MUTATION, 
   CART_LINES_REMOVE_MUTATION,
   CART_QUERY,
+  CART_ATTRIBUTES_UPDATE_MUTATION,
   formatCheckoutUrl,
   isCartNotFoundError
 } from '@/lib/shopify';
+import { type DropoffWindow, DROPOFF_WINDOWS } from '@/lib/orderCutoff';
 
 export interface CartItem {
   lineId: string | null;
