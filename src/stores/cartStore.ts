@@ -12,7 +12,7 @@ import {
   formatCheckoutUrl,
   isCartNotFoundError
 } from '@/lib/shopify';
-import { type DropoffWindow, DROPOFF_WINDOWS } from '@/lib/orderCutoff';
+import { type FulfillmentMethod, type FulfillmentWindow, DROPOFF_WINDOWS, PICKUP_WINDOWS } from '@/lib/orderCutoff';
 
 export interface CartItem {
   lineId: string | null;
@@ -29,13 +29,15 @@ interface CartStore {
   items: CartItem[];
   cartId: string | null;
   checkoutUrl: string | null;
-  deliveryWindow: DropoffWindow | '';
+  deliveryWindow: FulfillmentWindow | '';
+  fulfillmentMethod: FulfillmentMethod;
   isLoading: boolean;
   isSyncing: boolean;
   addItem: (item: Omit<CartItem, 'lineId'>) => Promise<void>;
   updateQuantity: (variantId: string, quantity: number) => Promise<void>;
   removeItem: (variantId: string) => Promise<void>;
-  setDeliveryWindow: (window: DropoffWindow) => Promise<void>;
+  setFulfillmentMethod: (method: FulfillmentMethod) => void;
+  setDeliveryWindow: (window: FulfillmentWindow) => Promise<void>;
   clearCart: () => void;
   syncCart: () => Promise<void>;
   getCheckoutUrl: () => string | null;
@@ -123,6 +125,7 @@ export const useCartStore = create<CartStore>()(
       cartId: null,
       checkoutUrl: null,
       deliveryWindow: '',
+      fulfillmentMethod: 'delivery' as FulfillmentMethod,
       isLoading: false,
       isSyncing: false,
 
@@ -218,19 +221,25 @@ export const useCartStore = create<CartStore>()(
         }
       },
 
-      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null, deliveryWindow: '' }),
+      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null, deliveryWindow: '', fulfillmentMethod: 'delivery' as FulfillmentMethod }),
 
-      setDeliveryWindow: async (window: DropoffWindow) => {
+      setFulfillmentMethod: (method: FulfillmentMethod) => {
+        set({ fulfillmentMethod: method, deliveryWindow: '' });
+      },
+
+      setDeliveryWindow: async (window: FulfillmentWindow) => {
         set({ deliveryWindow: window });
-        const { cartId } = get();
+        const { cartId, fulfillmentMethod } = get();
         if (!cartId) return;
         
-        const windowLabel = DROPOFF_WINDOWS.find(w => w.value === window)?.label || window;
+        const allWindows = [...DROPOFF_WINDOWS, ...PICKUP_WINDOWS];
+        const windowLabel = allWindows.find(w => w.value === window)?.label || window;
         try {
           await storefrontApiRequest(CART_ATTRIBUTES_UPDATE_MUTATION, {
             cartId,
             attributes: [
-              { key: 'Preferred Dropoff Window', value: windowLabel },
+              { key: 'Fulfillment Method', value: fulfillmentMethod === 'pickup' ? 'Pickup' : 'Delivery' },
+              { key: fulfillmentMethod === 'pickup' ? 'Preferred Pickup Window' : 'Preferred Dropoff Window', value: windowLabel },
             ],
           });
         } catch (error) {
@@ -264,7 +273,7 @@ export const useCartStore = create<CartStore>()(
     {
       name: 'place-in-thyme-cart',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ items: state.items, cartId: state.cartId, checkoutUrl: state.checkoutUrl, deliveryWindow: state.deliveryWindow }),
+      partialize: (state) => ({ items: state.items, cartId: state.cartId, checkoutUrl: state.checkoutUrl, deliveryWindow: state.deliveryWindow, fulfillmentMethod: state.fulfillmentMethod }),
     }
   )
 );
