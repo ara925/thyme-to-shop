@@ -343,6 +343,15 @@ export const CART_QUERY = `
   }
 `;
 
+export const CART_ATTRIBUTES_UPDATE_MUTATION = `
+  mutation cartAttributesUpdate($cartId: ID!, $attributes: [AttributeInput!]!) {
+    cartAttributesUpdate(cartId: $cartId, attributes: $attributes) {
+      cart { id }
+      userErrors { field message }
+    }
+  }
+`;
+
 // API Helper Function
 export async function storefrontApiRequest(query: string, variables: Record<string, unknown> = {}) {
   const response = await fetch(SHOPIFY_STOREFRONT_URL, {

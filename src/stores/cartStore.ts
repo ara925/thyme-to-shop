@@ -8,9 +8,11 @@ import {
   CART_LINES_UPDATE_MUTATION, 
   CART_LINES_REMOVE_MUTATION,
   CART_QUERY,
+  CART_ATTRIBUTES_UPDATE_MUTATION,
   formatCheckoutUrl,
   isCartNotFoundError
 } from '@/lib/shopify';
+import { type DropoffWindow, DROPOFF_WINDOWS } from '@/lib/orderCutoff';
 
 export interface CartItem {
   lineId: string | null;
@@ -27,11 +29,13 @@ interface CartStore {
   items: CartItem[];
   cartId: string | null;
   checkoutUrl: string | null;
+  deliveryWindow: DropoffWindow | '';
   isLoading: boolean;
   isSyncing: boolean;
   addItem: (item: Omit<CartItem, 'lineId'>) => Promise<void>;
   updateQuantity: (variantId: string, quantity: number) => Promise<void>;
   removeItem: (variantId: string) => Promise<void>;
+  setDeliveryWindow: (window: DropoffWindow) => Promise<void>;
   clearCart: () => void;
   syncCart: () => Promise<void>;
   getCheckoutUrl: () => string | null;
@@ -118,6 +122,7 @@ export const useCartStore = create<CartStore>()(
       items: [],
       cartId: null,
       checkoutUrl: null,
+      deliveryWindow: '',
       isLoading: false,
       isSyncing: false,
 
@@ -213,7 +218,25 @@ export const useCartStore = create<CartStore>()(
         }
       },
 
-      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null }),
+      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null, deliveryWindow: '' }),
+
+      setDeliveryWindow: async (window: DropoffWindow) => {
+        set({ deliveryWindow: window });
+        const { cartId } = get();
+        if (!cartId) return;
+        
+        const windowLabel = DROPOFF_WINDOWS.find(w => w.value === window)?.label || window;
+        try {
+          await storefrontApiRequest(CART_ATTRIBUTES_UPDATE_MUTATION, {
+            cartId,
+            attributes: [
+              { key: 'Preferred Dropoff Window', value: windowLabel },
+            ],
+          });
+        } catch (error) {
+          console.error('Failed to update delivery attributes:', error);
+        }
+      },
       
       getCheckoutUrl: () => get().checkoutUrl,
       
@@ -241,7 +264,7 @@ export const useCartStore = create<CartStore>()(
     {
       name: 'place-in-thyme-cart',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ items: state.items, cartId: state.cartId, checkoutUrl: state.checkoutUrl }),
+      partialize: (state) => ({ items: state.items, cartId: state.cartId, checkoutUrl: state.checkoutUrl, deliveryWindow: state.deliveryWindow }),
     }
   )
 );
