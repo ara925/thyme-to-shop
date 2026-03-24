@@ -122,6 +122,7 @@ export const useCartStore = create<CartStore>()(
       items: [],
       cartId: null,
       checkoutUrl: null,
+      deliveryWindow: '',
       isLoading: false,
       isSyncing: false,
 
