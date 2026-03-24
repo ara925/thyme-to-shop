@@ -11,7 +11,7 @@ import { toast } from "sonner";
 
 export function CartDrawer() {
   const [isOpen, setIsOpen] = useState(false);
-  const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, getTotalItems, getTotalPrice, deliveryWindow, setDeliveryWindow } = useCartStore();
+  const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, getTotalItems, getTotalPrice, deliveryWindow, setDeliveryWindow, fulfillmentMethod, setFulfillmentMethod } = useCartStore();
   const totalItems = getTotalItems();
   const totalPrice = getTotalPrice();
 
