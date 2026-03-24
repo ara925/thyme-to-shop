@@ -5,10 +5,13 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { ShoppingCart, Minus, Plus, Trash2, ExternalLink, Loader2 } from "lucide-react";
 import { useCartStore } from "@/stores/cartStore";
 import { formatPrice } from "@/lib/shopify";
+import { DeliveryTimeSelect } from "./DeliveryTimeSelect";
+import { CutoffBanner } from "./CutoffBanner";
+import { toast } from "sonner";
 
 export function CartDrawer() {
   const [isOpen, setIsOpen] = useState(false);
-  const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, getTotalItems, getTotalPrice } = useCartStore();
+  const { items, isLoading, isSyncing, updateQuantity, removeItem, getCheckoutUrl, syncCart, getTotalItems, getTotalPrice, deliveryWindow, setDeliveryWindow } = useCartStore();
   const totalItems = getTotalItems();
   const totalPrice = getTotalPrice();
 
@@ -17,6 +20,10 @@ export function CartDrawer() {
   }, [isOpen, syncCart]);
 
   const handleCheckout = () => {
+    if (!deliveryWindow) {
+      toast.error('Please select a preferred dropoff time before checkout.', { position: 'top-center' });
+      return;
+    }
     const checkoutUrl = getCheckoutUrl();
     if (checkoutUrl) {
       window.open(checkoutUrl, '_blank');
@@ -42,6 +49,11 @@ export function CartDrawer() {
           <SheetDescription>
             {totalItems === 0 ? "Your cart is empty" : `${totalItems} item${totalItems !== 1 ? 's' : ''} in your cart`}
           </SheetDescription>
+          {totalItems > 0 && (
+            <div className="pt-1">
+              <CutoffBanner />
+            </div>
+          )}
         </SheetHeader>
         <div className="flex flex-col flex-1 pt-6 min-h-0">
           {items.length === 0 ? (
@@ -110,6 +122,12 @@ export function CartDrawer() {
                 </div>
               </div>
               <div className="flex-shrink-0 space-y-4 pt-4 border-t border-border bg-background">
+                {/* Delivery time preference */}
+                <DeliveryTimeSelect 
+                  value={deliveryWindow} 
+                  onChange={setDeliveryWindow} 
+                />
+
                 <div className="flex justify-between items-center">
                   <span className="text-lg font-semibold font-serif">Total</span>
                   <span className="text-xl font-bold text-primary">
