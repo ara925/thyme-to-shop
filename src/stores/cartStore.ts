@@ -264,7 +264,7 @@ export const useCartStore = create<CartStore>()(
     {
       name: 'place-in-thyme-cart',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ items: state.items, cartId: state.cartId, checkoutUrl: state.checkoutUrl }),
+      partialize: (state) => ({ items: state.items, cartId: state.cartId, checkoutUrl: state.checkoutUrl, deliveryWindow: state.deliveryWindow }),
     }
   )
 );
