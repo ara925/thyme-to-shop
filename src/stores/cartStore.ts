@@ -218,7 +218,25 @@ export const useCartStore = create<CartStore>()(
         }
       },
 
-      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null }),
+      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null, deliveryWindow: '' }),
+
+      setDeliveryWindow: async (window: DropoffWindow) => {
+        set({ deliveryWindow: window });
+        const { cartId } = get();
+        if (!cartId) return;
+        
+        const windowLabel = DROPOFF_WINDOWS.find(w => w.value === window)?.label || window;
+        try {
+          await storefrontApiRequest(CART_ATTRIBUTES_UPDATE_MUTATION, {
+            cartId,
+            attributes: [
+              { key: 'Preferred Dropoff Window', value: windowLabel },
+            ],
+          });
+        } catch (error) {
+          console.error('Failed to update delivery attributes:', error);
+        }
+      },
       
       getCheckoutUrl: () => get().checkoutUrl,
       
