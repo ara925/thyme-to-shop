@@ -221,19 +221,25 @@ export const useCartStore = create<CartStore>()(
         }
       },
 
-      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null, deliveryWindow: '' }),
+      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null, deliveryWindow: '', fulfillmentMethod: 'delivery' as FulfillmentMethod }),
 
-      setDeliveryWindow: async (window: DropoffWindow) => {
+      setFulfillmentMethod: (method: FulfillmentMethod) => {
+        set({ fulfillmentMethod: method, deliveryWindow: '' });
+      },
+
+      setDeliveryWindow: async (window: FulfillmentWindow) => {
         set({ deliveryWindow: window });
-        const { cartId } = get();
+        const { cartId, fulfillmentMethod } = get();
         if (!cartId) return;
         
-        const windowLabel = DROPOFF_WINDOWS.find(w => w.value === window)?.label || window;
+        const allWindows = [...DROPOFF_WINDOWS, ...PICKUP_WINDOWS];
+        const windowLabel = allWindows.find(w => w.value === window)?.label || window;
         try {
           await storefrontApiRequest(CART_ATTRIBUTES_UPDATE_MUTATION, {
             cartId,
             attributes: [
-              { key: 'Preferred Dropoff Window', value: windowLabel },
+              { key: 'Fulfillment Method', value: fulfillmentMethod === 'pickup' ? 'Pickup' : 'Delivery' },
+              { key: fulfillmentMethod === 'pickup' ? 'Preferred Pickup Window' : 'Preferred Dropoff Window', value: windowLabel },
             ],
           });
         } catch (error) {

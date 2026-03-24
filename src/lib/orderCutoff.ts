@@ -74,6 +74,9 @@ export function formatCutoffCountdown(): string {
   return parts.join(' ');
 }
 
+/** Fulfillment method */
+export type FulfillmentMethod = 'delivery' | 'pickup';
+
 /** Delivery window labels */
 export const DROPOFF_WINDOWS = [
   { value: '9am-11am', label: '9:00 AM – 11:00 AM' },
@@ -83,4 +86,13 @@ export const DROPOFF_WINDOWS = [
   { value: '5pm-7pm', label: '5:00 PM – 7:00 PM' },
 ] as const;
 
+/** Pickup window labels */
+export const PICKUP_WINDOWS = [
+  { value: 'pickup-10am-12pm', label: '10:00 AM – 12:00 PM' },
+  { value: 'pickup-12pm-2pm', label: '12:00 PM – 2:00 PM' },
+  { value: 'pickup-2pm-4pm', label: '2:00 PM – 4:00 PM' },
+] as const;
+
 export type DropoffWindow = typeof DROPOFF_WINDOWS[number]['value'];
+export type PickupWindow = typeof PICKUP_WINDOWS[number]['value'];
+export type FulfillmentWindow = DropoffWindow | PickupWindow;
