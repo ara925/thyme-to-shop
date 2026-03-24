@@ -125,6 +125,7 @@ export const useCartStore = create<CartStore>()(
       cartId: null,
       checkoutUrl: null,
       deliveryWindow: '',
+      fulfillmentMethod: 'delivery' as FulfillmentMethod,
       isLoading: false,
       isSyncing: false,
 
