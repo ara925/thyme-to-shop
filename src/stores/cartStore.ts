@@ -12,7 +12,7 @@ import {
   formatCheckoutUrl,
   isCartNotFoundError
 } from '@/lib/shopify';
-import { type DropoffWindow, DROPOFF_WINDOWS } from '@/lib/orderCutoff';
+import { type FulfillmentMethod, type FulfillmentWindow, DROPOFF_WINDOWS, PICKUP_WINDOWS } from '@/lib/orderCutoff';
 
 export interface CartItem {
   lineId: string | null;
