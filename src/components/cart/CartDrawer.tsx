@@ -124,8 +124,10 @@ export function CartDrawer() {
               <div className="flex-shrink-0 space-y-4 pt-4 border-t border-border bg-background">
                 {/* Delivery time preference */}
                 <DeliveryTimeSelect 
+                  fulfillmentMethod={fulfillmentMethod}
                   value={deliveryWindow} 
-                  onChange={setDeliveryWindow} 
+                  onMethodChange={setFulfillmentMethod}
+                  onWindowChange={setDeliveryWindow} 
                 />
 
                 <div className="flex justify-between items-center">
