@@ -55,7 +55,7 @@ export function Hero() {
         <div className="container">
           <div className="grid gap-4 sm:grid-cols-3 mx-auto max-w-4xl">
             {[
-              { icon: Leaf, title: "Farm Fresh", desc: "Locally sourced premium ingredients", color: "bg-primary" },
+              { icon: Leaf, title: "Farm Fresh", desc: "Premium whole foods", color: "bg-primary" },
               { icon: Clock, title: "Weekly Menus", desc: "New rotating dishes every week", color: "bg-accent" },
               { icon: Truck, title: "Local Delivery", desc: "Straight to your door, SoCal", color: "bg-primary" },
             ].map((item, i) => (
