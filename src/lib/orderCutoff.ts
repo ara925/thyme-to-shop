@@ -1,69 +1,172 @@
 /**
- * Order cutoff logic: Thursday 6 PM ET each week.
- * Orders placed after cutoff apply to the following week's delivery.
+ * Order cutoff logic: Thursday at exactly 6 PM America/New_York.
+ *
+ * A fulfillment cycle runs Monday through Sunday. Once the current cycle's
+ * Thursday cutoff has passed, getNextCutoff points to the following Thursday
+ * while the status API continues to report that this cycle is closed.
  */
 
-const CUTOFF_DAY = 4; // Thursday (0 = Sunday)
-const CUTOFF_HOUR = 18; // 6 PM
+export const ORDER_TIME_ZONE = 'America/New_York';
 
-export function getNextCutoff(): Date {
-  const now = new Date();
-  const cutoff = new Date(now);
+const CUTOFF_ISO_DAY = 4; // Thursday (Monday = 1, Sunday = 7)
+const CUTOFF_HOUR = 18;
+const MILLISECONDS_PER_MINUTE = 60 * 1000;
+const MILLISECONDS_PER_HOUR = 60 * MILLISECONDS_PER_MINUTE;
+const MILLISECONDS_PER_DAY = 24 * MILLISECONDS_PER_HOUR;
 
-  // Set to this week's Thursday 6 PM ET
-  const currentDay = cutoff.getDay();
-  let daysUntilThursday = (CUTOFF_DAY - currentDay + 7) % 7;
+const NEW_YORK_DATE_TIME_FORMATTER = new Intl.DateTimeFormat('en-US-u-ca-gregory-nu-latn', {
+  timeZone: ORDER_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+});
 
-  // If it's Thursday but past 6 PM, move to next Thursday
-  if (daysUntilThursday === 0) {
-    const etHour = getETHour(cutoff);
-    if (etHour >= CUTOFF_HOUR) {
-      daysUntilThursday = 7;
+interface CalendarDate {
+  year: number;
+  month: number;
+  day: number;
+}
+
+interface ZonedDateTimeParts extends CalendarDate {
+  hour: number;
+  minute: number;
+  second: number;
+}
+
+export interface CutoffTimeRemaining {
+  days: number;
+  hours: number;
+  minutes: number;
+}
+
+export interface OrderCutoffStatus {
+  currentCycleCutoff: Date;
+  nextCutoff: Date;
+  isCurrentCycleCutoffPassed: boolean;
+  timeUntilCurrentCycleCutoff: CutoffTimeRemaining | null;
+}
+
+function getNewYorkDateTimeParts(date: Date): ZonedDateTimeParts {
+  const values: Partial<Record<Intl.DateTimeFormatPartTypes, number>> = {};
+
+  for (const part of NEW_YORK_DATE_TIME_FORMATTER.formatToParts(date)) {
+    if (
+      part.type === 'year' ||
+      part.type === 'month' ||
+      part.type === 'day' ||
+      part.type === 'hour' ||
+      part.type === 'minute' ||
+      part.type === 'second'
+    ) {
+      values[part.type] = Number(part.value);
     }
   }
 
-  cutoff.setDate(cutoff.getDate() + daysUntilThursday);
-
-  // Set to 6 PM ET (approximate via UTC offset — ET is UTC-5 or UTC-4 during DST)
-  // Using toLocaleString to get accurate ET time
-  const etString = cutoff.toLocaleString('en-US', { timeZone: 'America/New_York' });
-  const etDate = new Date(etString);
-  const offsetMs = cutoff.getTime() - etDate.getTime();
-  cutoff.setHours(CUTOFF_HOUR, 0, 0, 0);
-  cutoff.setTime(cutoff.getTime() + offsetMs);
-
-  return cutoff;
+  return {
+    year: values.year!,
+    month: values.month!,
+    day: values.day!,
+    hour: values.hour!,
+    minute: values.minute!,
+    second: values.second!,
+  };
 }
 
-function getETHour(date: Date): number {
-  const etString = date.toLocaleString('en-US', {
-    timeZone: 'America/New_York',
-    hour: 'numeric',
-    hour12: false,
-  });
-  return parseInt(etString, 10);
+function getTimeZoneOffsetMilliseconds(date: Date): number {
+  const parts = getNewYorkDateTimeParts(date);
+  const representedAsUtc = Date.UTC(
+    parts.year,
+    parts.month - 1,
+    parts.day,
+    parts.hour,
+    parts.minute,
+    parts.second,
+  );
+  const instantWithoutMilliseconds = Math.floor(date.getTime() / 1000) * 1000;
+
+  return representedAsUtc - instantWithoutMilliseconds;
 }
 
-export function isBeforeCutoff(): boolean {
-  return new Date() < getNextCutoff();
+/** Converts an unambiguous New York wall-clock time into its UTC instant. */
+function newYorkDateTimeToInstant(date: CalendarDate, hour: number): Date {
+  const wallClockAsUtc = Date.UTC(date.year, date.month - 1, date.day, hour, 0, 0, 0);
+  let candidate = wallClockAsUtc;
+
+  // Re-evaluate the offset because the first candidate can be on the other
+  // side of a daylight-saving transition from the requested wall-clock time.
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const offset = getTimeZoneOffsetMilliseconds(new Date(candidate));
+    const adjustedCandidate = wallClockAsUtc - offset;
+
+    if (adjustedCandidate === candidate) break;
+    candidate = adjustedCandidate;
+  }
+
+  return new Date(candidate);
 }
 
-export function getTimeUntilCutoff(): { days: number; hours: number; minutes: number } | null {
-  const now = new Date();
-  const cutoff = getNextCutoff();
-  const diff = cutoff.getTime() - now.getTime();
+function addCalendarDays(date: CalendarDate, days: number): CalendarDate {
+  const result = new Date(Date.UTC(date.year, date.month - 1, date.day + days));
 
-  if (diff <= 0) return null;
+  return {
+    year: result.getUTCFullYear(),
+    month: result.getUTCMonth() + 1,
+    day: result.getUTCDate(),
+  };
+}
 
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+function getIsoDay(date: CalendarDate): number {
+  const utcDay = new Date(Date.UTC(date.year, date.month - 1, date.day)).getUTCDay();
+  return utcDay === 0 ? 7 : utcDay;
+}
+
+function toTimeRemaining(milliseconds: number): CutoffTimeRemaining {
+  const days = Math.floor(milliseconds / MILLISECONDS_PER_DAY);
+  const hours = Math.floor((milliseconds % MILLISECONDS_PER_DAY) / MILLISECONDS_PER_HOUR);
+  const minutes = Math.floor((milliseconds % MILLISECONDS_PER_HOUR) / MILLISECONDS_PER_MINUTE);
 
   return { days, hours, minutes };
 }
 
-export function formatCutoffCountdown(): string {
-  const time = getTimeUntilCutoff();
+export function getOrderCutoffStatus(now: Date = new Date()): OrderCutoffStatus {
+  const newYorkNow = getNewYorkDateTimeParts(now);
+  const today = { year: newYorkNow.year, month: newYorkNow.month, day: newYorkNow.day };
+  const currentCycleThursday = addCalendarDays(today, CUTOFF_ISO_DAY - getIsoDay(today));
+  const currentCycleCutoff = newYorkDateTimeToInstant(currentCycleThursday, CUTOFF_HOUR);
+  const isCurrentCycleCutoffPassed = now.getTime() >= currentCycleCutoff.getTime();
+  const nextCutoff = isCurrentCycleCutoffPassed
+    ? newYorkDateTimeToInstant(addCalendarDays(currentCycleThursday, 7), CUTOFF_HOUR)
+    : currentCycleCutoff;
+  const timeUntilCurrentCycleCutoff = isCurrentCycleCutoffPassed
+    ? null
+    : toTimeRemaining(currentCycleCutoff.getTime() - now.getTime());
+
+  return {
+    currentCycleCutoff,
+    nextCutoff,
+    isCurrentCycleCutoffPassed,
+    timeUntilCurrentCycleCutoff,
+  };
+}
+
+export function getNextCutoff(now: Date = new Date()): Date {
+  return getOrderCutoffStatus(now).nextCutoff;
+}
+
+export function isBeforeCutoff(now: Date = new Date()): boolean {
+  return !getOrderCutoffStatus(now).isCurrentCycleCutoffPassed;
+}
+
+export function getTimeUntilCutoff(now: Date = new Date()): CutoffTimeRemaining | null {
+  return getOrderCutoffStatus(now).timeUntilCurrentCycleCutoff;
+}
+
+export function formatCutoffCountdown(now: Date = new Date()): string {
+  const time = getTimeUntilCutoff(now);
   if (!time) return 'Cutoff passed — orders apply to next week';
 
   const parts: string[] = [];

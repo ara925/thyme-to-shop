@@ -1,279 +1,476 @@
 import { create } from 'zustand';
-import { persist, createJSONStorage } from 'zustand/middleware';
-import { 
-  ShopifyProduct, 
-  storefrontApiRequest, 
-  CART_CREATE_MUTATION, 
-  CART_LINES_ADD_MUTATION, 
-  CART_LINES_UPDATE_MUTATION, 
-  CART_LINES_REMOVE_MUTATION,
-  CART_QUERY,
+import { createJSONStorage, persist } from 'zustand/middleware';
+import {
   CART_ATTRIBUTES_UPDATE_MUTATION,
+  CART_CREATE_MUTATION,
+  CART_LINES_ADD_MUTATION,
+  CART_LINES_REMOVE_MUTATION,
+  CART_LINES_UPDATE_MUTATION,
+  CART_QUERY,
+  type CartAttribute,
+  type CartAttributesUpdateData,
+  type CartCreateData,
+  type CartLinesAddData,
+  type CartLinesRemoveData,
+  type CartLinesUpdateData,
+  type CartMutationPayload,
+  type CartQueryData,
+  type MoneyV2,
+  type ShopifyCart,
+  type ShopifyCartLine,
+  type ShopifyProduct,
+  type ShopifyProductNode,
+  type ShopifyUserError,
+  StorefrontApiError,
   formatCheckoutUrl,
-  isCartNotFoundError
+  getStorefrontErrorMessage,
+  isCartNotFoundError,
+  storefrontApiRequest,
 } from '@/lib/shopify';
-import { type FulfillmentMethod, type FulfillmentWindow, DROPOFF_WINDOWS, PICKUP_WINDOWS } from '@/lib/orderCutoff';
+import {
+  DROPOFF_WINDOWS,
+  PICKUP_WINDOWS,
+  type FulfillmentMethod,
+  type FulfillmentWindow,
+} from '@/lib/orderCutoff';
+import { getOrderableWeekTag } from '@/lib/weekRotation';
 
-export interface CartItem {
-  lineId: string | null;
+export interface CartItemInput {
   product: ShopifyProduct;
   variantId: string;
   variantTitle: string;
-  price: { amount: string; currencyCode: string };
+  price: MoneyV2;
   quantity: number;
   selectedOptions: Array<{ name: string; value: string }>;
   sellingPlanId?: string;
+  attributes?: CartAttribute[];
+}
+
+export interface CartItem extends CartItemInput {
+  lineId: string;
+  lineSubtotal: MoneyV2;
 }
 
 interface CartStore {
   items: CartItem[];
   cartId: string | null;
   checkoutUrl: string | null;
+  subtotal: MoneyV2 | null;
   deliveryWindow: FulfillmentWindow | '';
   fulfillmentMethod: FulfillmentMethod;
+  fulfillmentAttributesConfirmed: boolean;
+  error: string | null;
   isLoading: boolean;
   isSyncing: boolean;
-  addItem: (item: Omit<CartItem, 'lineId'>) => Promise<void>;
-  updateQuantity: (variantId: string, quantity: number) => Promise<void>;
-  removeItem: (variantId: string) => Promise<void>;
+  addItem: (item: CartItemInput) => Promise<void>;
+  addItems: (items: CartItemInput[]) => Promise<void>;
+  updateQuantity: (lineId: string, quantity: number) => Promise<void>;
+  removeItem: (lineId: string) => Promise<void>;
   setFulfillmentMethod: (method: FulfillmentMethod) => void;
   setDeliveryWindow: (window: FulfillmentWindow) => Promise<void>;
   clearCart: () => void;
+  clearError: () => void;
   syncCart: () => Promise<void>;
-  getCheckoutUrl: () => string | null;
+  prepareCheckout: () => Promise<string>;
   getTotalItems: () => number;
   getTotalPrice: () => number;
 }
 
-async function createShopifyCart(item: CartItem): Promise<{ cartId: string; checkoutUrl: string; lineId: string } | null> {
-  const line: Record<string, unknown> = { quantity: item.quantity, merchandiseId: item.variantId };
-  if (item.sellingPlanId) line.sellingPlanId = item.sellingPlanId;
-  
-  const data = await storefrontApiRequest(CART_CREATE_MUTATION, {
-    input: { lines: [line] },
-  });
+let operationQueue: Promise<void> = Promise.resolve();
 
-  if (data?.data?.cartCreate?.userErrors?.length > 0) {
-    console.error('Cart creation failed:', data.data.cartCreate.userErrors);
-    return null;
-  }
-
-  const cart = data?.data?.cartCreate?.cart;
-  if (!cart?.checkoutUrl) return null;
-
-  const lineId = cart.lines.edges[0]?.node?.id;
-  if (!lineId) return null;
-
-  return { cartId: cart.id, checkoutUrl: formatCheckoutUrl(cart.checkoutUrl), lineId };
+function enqueueCartOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const queued = operationQueue.then(operation, operation);
+  operationQueue = queued.then(
+    () => undefined,
+    () => undefined,
+  );
+  return queued;
 }
 
-async function addLineToShopifyCart(cartId: string, item: CartItem): Promise<{ success: boolean; lineId?: string; cartNotFound?: boolean }> {
-  const line: Record<string, unknown> = { quantity: item.quantity, merchandiseId: item.variantId };
-  if (item.sellingPlanId) line.sellingPlanId = item.sellingPlanId;
-
-  const data = await storefrontApiRequest(CART_LINES_ADD_MUTATION, {
-    cartId,
-    lines: [line],
-  });
-
-  const userErrors = data?.data?.cartLinesAdd?.userErrors || [];
-  if (isCartNotFoundError(userErrors)) return { success: false, cartNotFound: true };
-  if (userErrors.length > 0) {
-    console.error('Add line failed:', userErrors);
-    return { success: false };
-  }
-
-  const lines = data?.data?.cartLinesAdd?.cart?.lines?.edges || [];
-  const newLine = lines.find((l: { node: { id: string; merchandise: { id: string } } }) => l.node.merchandise.id === item.variantId);
-  return { success: true, lineId: newLine?.node?.id };
+function getAttribute(attributes: CartAttribute[], key: string): string | undefined {
+  return attributes.find((attribute) => attribute.key === key)?.value;
 }
 
-async function updateShopifyCartLine(cartId: string, lineId: string, quantity: number): Promise<{ success: boolean; cartNotFound?: boolean }> {
-  const data = await storefrontApiRequest(CART_LINES_UPDATE_MUTATION, {
-    cartId,
-    lines: [{ id: lineId, quantity }],
-  });
-
-  const userErrors = data?.data?.cartLinesUpdate?.userErrors || [];
-  if (isCartNotFoundError(userErrors)) return { success: false, cartNotFound: true };
-  if (userErrors.length > 0) {
-    console.error('Update line failed:', userErrors);
-    return { success: false };
-  }
-  return { success: true };
+function getWindowLabel(window: FulfillmentWindow): string {
+  return [...DROPOFF_WINDOWS, ...PICKUP_WINDOWS].find((item) => item.value === window)?.label || window;
 }
 
-async function removeLineFromShopifyCart(cartId: string, lineId: string): Promise<{ success: boolean; cartNotFound?: boolean }> {
-  const data = await storefrontApiRequest(CART_LINES_REMOVE_MUTATION, {
-    cartId,
-    lineIds: [lineId],
-  });
+function getWindowValue(label: string | undefined, method: FulfillmentMethod): FulfillmentWindow | '' {
+  if (!label) return '';
+  const windows = method === 'pickup' ? PICKUP_WINDOWS : DROPOFF_WINDOWS;
+  return windows.find((window) => window.label === label)?.value || '';
+}
 
-  const userErrors = data?.data?.cartLinesRemove?.userErrors || [];
-  if (isCartNotFoundError(userErrors)) return { success: false, cartNotFound: true };
-  if (userErrors.length > 0) {
-    console.error('Remove line failed:', userErrors);
-    return { success: false };
+function buildFulfillmentAttributes(
+  method: FulfillmentMethod,
+  window: FulfillmentWindow,
+): CartAttribute[] {
+  const label = getWindowLabel(window);
+  const attributes: CartAttribute[] = [
+    { key: 'Preferred Dropoff Window', value: label },
+    { key: 'Fulfillment Method', value: method === 'pickup' ? 'Pickup' : 'Delivery' },
+  ];
+  if (method === 'pickup') {
+    attributes.push({ key: 'Preferred Pickup Window', value: label });
   }
-  return { success: true };
+  return attributes;
+}
+
+function fulfillmentAttributesMatch(
+  attributes: CartAttribute[],
+  method: FulfillmentMethod,
+  window: FulfillmentWindow,
+): boolean {
+  const expected = buildFulfillmentAttributes(method, window);
+  return expected.every(
+    (attribute) => getAttribute(attributes, attribute.key) === attribute.value,
+  );
+}
+
+function cartMatchesOrderableCatalog(cart: ShopifyCart, now: Date = new Date()): boolean {
+  const orderableWeek = getOrderableWeekTag(now);
+  return cart.lines.edges.every(({ node: line }) => {
+    const { productType, tags } = line.merchandise.product;
+    if (productType !== 'Meal' && productType !== 'Juice') return true;
+    return tags.includes(orderableWeek);
+  });
+}
+
+function throwPayloadErrors(payload: CartMutationPayload | undefined, action: string): ShopifyCart {
+  if (!payload) {
+    throw new StorefrontApiError(`${action} returned no payload`, 'invalid-response');
+  }
+  if (payload.userErrors.length > 0) {
+    throw new StorefrontApiError(
+      payload.userErrors.map((error) => error.message).join(', '),
+      'graphql',
+    );
+  }
+  if (!payload.cart) {
+    throw new StorefrontApiError(`${action} returned no cart`, 'invalid-response');
+  }
+  return payload.cart;
+}
+
+function toProduct(line: ShopifyCartLine): ShopifyProduct {
+  const { product, ...variant } = line.merchandise;
+  const node: ShopifyProductNode = {
+    ...product,
+    variants: { edges: [{ node: variant }] },
+  };
+  return { node };
+}
+
+function toCartItems(cart: ShopifyCart): CartItem[] {
+  return cart.lines.edges.map(({ node: line }) => ({
+    lineId: line.id,
+    product: toProduct(line),
+    variantId: line.merchandise.id,
+    variantTitle: line.merchandise.title,
+    price: line.cost.amountPerQuantity,
+    lineSubtotal: line.cost.totalAmount,
+    quantity: line.quantity,
+    selectedOptions: line.merchandise.selectedOptions,
+    sellingPlanId: line.sellingPlanAllocation?.sellingPlan.id,
+    attributes: line.attributes,
+  }));
+}
+
+function getFulfillmentState(cart: ShopifyCart): Pick<
+  CartStore,
+  'fulfillmentMethod' | 'deliveryWindow' | 'fulfillmentAttributesConfirmed'
+> {
+  const method: FulfillmentMethod =
+    getAttribute(cart.attributes, 'Fulfillment Method') === 'Pickup' ? 'pickup' : 'delivery';
+  const preferredLabel =
+    method === 'pickup'
+      ? getAttribute(cart.attributes, 'Preferred Pickup Window') ||
+        getAttribute(cart.attributes, 'Preferred Dropoff Window')
+      : getAttribute(cart.attributes, 'Preferred Dropoff Window');
+  const deliveryWindow = getWindowValue(preferredLabel, method);
+  return {
+    fulfillmentMethod: method,
+    deliveryWindow,
+    fulfillmentAttributesConfirmed:
+      deliveryWindow !== '' && fulfillmentAttributesMatch(cart.attributes, method, deliveryWindow),
+  };
+}
+
+function stateFromCart(cart: ShopifyCart): Partial<CartStore> {
+  if (cart.totalQuantity === 0 || cart.lines.edges.length === 0) {
+    return emptyCartState();
+  }
+  return {
+    items: toCartItems(cart),
+    cartId: cart.id,
+    checkoutUrl: formatCheckoutUrl(cart.checkoutUrl),
+    subtotal: cart.cost.subtotalAmount,
+    error: null,
+    ...getFulfillmentState(cart),
+  };
+}
+
+function emptyCartState(): Pick<
+  CartStore,
+  | 'items'
+  | 'cartId'
+  | 'checkoutUrl'
+  | 'subtotal'
+  | 'deliveryWindow'
+  | 'fulfillmentMethod'
+  | 'fulfillmentAttributesConfirmed'
+  | 'error'
+> {
+  return {
+    items: [],
+    cartId: null,
+    checkoutUrl: null,
+    subtotal: null,
+    deliveryWindow: '',
+    fulfillmentMethod: 'delivery',
+    fulfillmentAttributesConfirmed: false,
+    error: null,
+  };
+}
+
+function toCartLineInput(item: CartItemInput): Record<string, unknown> {
+  if (item.quantity <= 0) {
+    throw new Error('Quantity must be greater than zero.');
+  }
+  const selectedVariant = item.product.node.variants.edges.find(
+    ({ node }) => node.id === item.variantId,
+  )?.node;
+  if (!selectedVariant?.availableForSale) {
+    throw new Error(`${item.product.node.title} is sold out.`);
+  }
+  return {
+    quantity: item.quantity,
+    merchandiseId: item.variantId,
+    ...(item.sellingPlanId ? { sellingPlanId: item.sellingPlanId } : {}),
+    ...(item.attributes?.length ? { attributes: item.attributes } : {}),
+  };
+}
+
+async function createCart(items: CartItemInput[]): Promise<ShopifyCart> {
+  const data = await storefrontApiRequest<CartCreateData>(CART_CREATE_MUTATION, {
+    input: { lines: items.map(toCartLineInput) },
+  });
+  return throwPayloadErrors(data.cartCreate, 'Cart creation');
+}
+
+async function addCartLines(cartId: string, items: CartItemInput[]): Promise<ShopifyCart> {
+  const data = await storefrontApiRequest<CartLinesAddData>(CART_LINES_ADD_MUTATION, {
+    cartId,
+    lines: items.map(toCartLineInput),
+  });
+  const errors: ShopifyUserError[] = data.cartLinesAdd?.userErrors || [];
+  if (isCartNotFoundError(errors)) {
+    return createCart(items);
+  }
+  return throwPayloadErrors(data.cartLinesAdd, 'Adding cart items');
 }
 
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
-      items: [],
-      cartId: null,
-      checkoutUrl: null,
-      deliveryWindow: '',
-      fulfillmentMethod: 'delivery' as FulfillmentMethod,
+      ...emptyCartState(),
       isLoading: false,
       isSyncing: false,
 
-      addItem: async (item) => {
-        const { items, cartId, clearCart } = get();
-        const existingItem = items.find(i => i.variantId === item.variantId);
-        
-        set({ isLoading: true });
-        try {
-          if (!cartId) {
-            const result = await createShopifyCart({ ...item, lineId: null });
-            if (result) {
-              set({
-                cartId: result.cartId,
-                checkoutUrl: result.checkoutUrl,
-                items: [{ ...item, lineId: result.lineId }]
-              });
-            }
-          } else if (existingItem) {
-            const newQuantity = existingItem.quantity + item.quantity;
-            if (!existingItem.lineId) {
-              console.error('Cannot update quantity for item without lineId:', existingItem);
-              return;
-            }
-            const result = await updateShopifyCartLine(cartId, existingItem.lineId, newQuantity);
-            if (result.success) {
-              const currentItems = get().items;
-              set({ items: currentItems.map(i => i.variantId === item.variantId ? { ...i, quantity: newQuantity } : i) });
-            } else if (result.cartNotFound) {
-              clearCart();
-            }
-          } else {
-            const result = await addLineToShopifyCart(cartId, { ...item, lineId: null });
-            if (result.success) {
-              const currentItems = get().items;
-              set({ items: [...currentItems, { ...item, lineId: result.lineId ?? null }] });
-            } else if (result.cartNotFound) {
-              clearCart();
-            }
-          }
-        } catch (error) {
-          console.error('Failed to add item:', error);
-        } finally {
-          set({ isLoading: false });
-        }
-      },
+      addItem: async (item) => get().addItems([item]),
 
-      updateQuantity: async (variantId, quantity) => {
+      addItems: async (items) =>
+        enqueueCartOperation(async () => {
+          if (items.length === 0) return;
+          set({ isLoading: true, error: null });
+          try {
+            const cartId = get().cartId;
+            const cart = cartId ? await addCartLines(cartId, items) : await createCart(items);
+            set(stateFromCart(cart));
+          } catch (error) {
+            const message = error instanceof Error && !(
+              error instanceof StorefrontApiError
+            ) ? error.message : getStorefrontErrorMessage(error);
+            set({ error: message });
+            throw error;
+          } finally {
+            set({ isLoading: false });
+          }
+        }),
+
+      updateQuantity: async (lineId, quantity) => {
         if (quantity <= 0) {
-          await get().removeItem(variantId);
+          await get().removeItem(lineId);
           return;
         }
-        
-        const { items, cartId, clearCart } = get();
-        const item = items.find(i => i.variantId === variantId);
-        if (!item?.lineId || !cartId) return;
-
-        set({ isLoading: true });
-        try {
-          const result = await updateShopifyCartLine(cartId, item.lineId, quantity);
-          if (result.success) {
-            const currentItems = get().items;
-            set({ items: currentItems.map(i => i.variantId === variantId ? { ...i, quantity } : i) });
-          } else if (result.cartNotFound) {
-            clearCart();
+        await enqueueCartOperation(async () => {
+          const cartId = get().cartId;
+          if (!cartId) throw new Error('Your cart is no longer available.');
+          set({ isLoading: true, error: null });
+          try {
+            const data = await storefrontApiRequest<CartLinesUpdateData>(
+              CART_LINES_UPDATE_MUTATION,
+              { cartId, lines: [{ id: lineId, quantity }] },
+            );
+            const errors = data.cartLinesUpdate?.userErrors || [];
+            if (isCartNotFoundError(errors)) {
+              set(emptyCartState());
+              throw new Error('Your cart expired. Please add the item again.');
+            }
+            set(stateFromCart(throwPayloadErrors(data.cartLinesUpdate, 'Updating cart item')));
+          } catch (error) {
+            const message = error instanceof Error && !(error instanceof StorefrontApiError)
+              ? error.message
+              : getStorefrontErrorMessage(error);
+            set({ error: message });
+            throw error;
+          } finally {
+            set({ isLoading: false });
           }
-        } catch (error) {
-          console.error('Failed to update quantity:', error);
-        } finally {
-          set({ isLoading: false });
-        }
+        });
       },
 
-      removeItem: async (variantId) => {
-        const { items, cartId, clearCart } = get();
-        const item = items.find(i => i.variantId === variantId);
-        if (!item?.lineId || !cartId) return;
-
-        set({ isLoading: true });
-        try {
-          const result = await removeLineFromShopifyCart(cartId, item.lineId);
-          if (result.success) {
-            const currentItems = get().items;
-            const newItems = currentItems.filter(i => i.variantId !== variantId);
-            newItems.length === 0 ? clearCart() : set({ items: newItems });
-          } else if (result.cartNotFound) {
-            clearCart();
+      removeItem: async (lineId) =>
+        enqueueCartOperation(async () => {
+          const cartId = get().cartId;
+          if (!cartId) return;
+          set({ isLoading: true, error: null });
+          try {
+            const data = await storefrontApiRequest<CartLinesRemoveData>(
+              CART_LINES_REMOVE_MUTATION,
+              { cartId, lineIds: [lineId] },
+            );
+            const errors = data.cartLinesRemove?.userErrors || [];
+            if (isCartNotFoundError(errors)) {
+              set(emptyCartState());
+              return;
+            }
+            set(stateFromCart(throwPayloadErrors(data.cartLinesRemove, 'Removing cart item')));
+          } catch (error) {
+            const message = getStorefrontErrorMessage(error);
+            set({ error: message });
+            throw error;
+          } finally {
+            set({ isLoading: false });
           }
-        } catch (error) {
-          console.error('Failed to remove item:', error);
-        } finally {
-          set({ isLoading: false });
-        }
-      },
+        }),
 
-      clearCart: () => set({ items: [], cartId: null, checkoutUrl: null, deliveryWindow: '', fulfillmentMethod: 'delivery' as FulfillmentMethod }),
+      setFulfillmentMethod: (method) =>
+        set({
+          fulfillmentMethod: method,
+          deliveryWindow: '',
+          fulfillmentAttributesConfirmed: false,
+          error: null,
+        }),
 
-      setFulfillmentMethod: (method: FulfillmentMethod) => {
-        set({ fulfillmentMethod: method, deliveryWindow: '' });
-      },
+      setDeliveryWindow: async (window) =>
+        enqueueCartOperation(async () => {
+          const { cartId, fulfillmentMethod } = get();
+          if (!cartId) throw new Error('Add an item before selecting a fulfillment window.');
+          set({ isLoading: true, fulfillmentAttributesConfirmed: false, error: null });
+          try {
+            const attributes = buildFulfillmentAttributes(fulfillmentMethod, window);
+            const data = await storefrontApiRequest<CartAttributesUpdateData>(
+              CART_ATTRIBUTES_UPDATE_MUTATION,
+              { cartId, attributes },
+            );
+            const cart = throwPayloadErrors(
+              data.cartAttributesUpdate,
+              'Saving fulfillment preferences',
+            );
+            if (!fulfillmentAttributesMatch(cart.attributes, fulfillmentMethod, window)) {
+              throw new StorefrontApiError(
+                'Shopify did not confirm the fulfillment preferences',
+                'invalid-response',
+              );
+            }
+            set(stateFromCart(cart));
+          } catch (error) {
+            const message = getStorefrontErrorMessage(error);
+            set({ error: message, fulfillmentAttributesConfirmed: false });
+            throw error;
+          } finally {
+            set({ isLoading: false });
+          }
+        }),
 
-      setDeliveryWindow: async (window: FulfillmentWindow) => {
-        set({ deliveryWindow: window });
-        const { cartId, fulfillmentMethod } = get();
-        if (!cartId) return;
-        
-        const allWindows = [...DROPOFF_WINDOWS, ...PICKUP_WINDOWS];
-        const windowLabel = allWindows.find(w => w.value === window)?.label || window;
-        try {
-          await storefrontApiRequest(CART_ATTRIBUTES_UPDATE_MUTATION, {
-            cartId,
-            attributes: [
-              { key: 'Fulfillment Method', value: fulfillmentMethod === 'pickup' ? 'Pickup' : 'Delivery' },
-              { key: fulfillmentMethod === 'pickup' ? 'Preferred Pickup Window' : 'Preferred Dropoff Window', value: windowLabel },
-            ],
-          });
-        } catch (error) {
-          console.error('Failed to update delivery attributes:', error);
-        }
-      },
-      
-      getCheckoutUrl: () => get().checkoutUrl,
-      
-      getTotalItems: () => get().items.reduce((sum, item) => sum + item.quantity, 0),
-      
-      getTotalPrice: () => get().items.reduce((sum, item) => sum + (parseFloat(item.price.amount) * item.quantity), 0),
+      prepareCheckout: async () =>
+        enqueueCartOperation(async () => {
+          const { cartId, fulfillmentMethod, deliveryWindow, items } = get();
+          if (!cartId || items.length === 0) throw new Error('Your cart is empty.');
+          if (!deliveryWindow) throw new Error('Select a fulfillment window before checkout.');
+          set({ isLoading: true, fulfillmentAttributesConfirmed: false, error: null });
+          try {
+            const attributes = buildFulfillmentAttributes(fulfillmentMethod, deliveryWindow);
+            const data = await storefrontApiRequest<CartAttributesUpdateData>(
+              CART_ATTRIBUTES_UPDATE_MUTATION,
+              { cartId, attributes },
+            );
+            const cart = throwPayloadErrors(data.cartAttributesUpdate, 'Preparing checkout');
+            if (cart.totalQuantity === 0) throw new Error('Your cart is empty.');
+            if (!cartMatchesOrderableCatalog(cart)) {
+              throw new Error(
+                'The ordering menu has changed. Remove unavailable weekly items and add them again before checkout.',
+              );
+            }
+            if (!fulfillmentAttributesMatch(cart.attributes, fulfillmentMethod, deliveryWindow)) {
+              throw new StorefrontApiError(
+                'Shopify did not confirm the fulfillment preferences',
+                'invalid-response',
+              );
+            }
+            const checkoutUrl = formatCheckoutUrl(cart.checkoutUrl);
+            set(stateFromCart(cart));
+            return checkoutUrl;
+          } catch (error) {
+            const message = error instanceof Error && !(error instanceof StorefrontApiError)
+              ? error.message
+              : getStorefrontErrorMessage(error);
+            set({ error: message, fulfillmentAttributesConfirmed: false });
+            throw error;
+          } finally {
+            set({ isLoading: false });
+          }
+        }),
+
+      clearCart: () => set(emptyCartState()),
+      clearError: () => set({ error: null }),
 
       syncCart: async () => {
-        const { cartId, isSyncing, clearCart } = get();
+        const { cartId, isSyncing } = get();
         if (!cartId || isSyncing) return;
-
         set({ isSyncing: true });
         try {
-          const data = await storefrontApiRequest(CART_QUERY, { id: cartId });
-          if (!data) return;
-          const cart = data?.data?.cart;
-          if (!cart || cart.totalQuantity === 0) clearCart();
+          const data = await storefrontApiRequest<CartQueryData>(CART_QUERY, { id: cartId });
+          if (!data.cart) {
+            set(emptyCartState());
+            return;
+          }
+          set(stateFromCart(data.cart));
         } catch (error) {
-          console.error('Failed to sync cart with Shopify:', error);
+          set({ error: getStorefrontErrorMessage(error) });
         } finally {
           set({ isSyncing: false });
         }
-      }
+      },
+
+      getTotalItems: () => get().items.reduce((sum, item) => sum + item.quantity, 0),
+      getTotalPrice: () => Number.parseFloat(get().subtotal?.amount || '0'),
     }),
     {
       name: 'place-in-thyme-cart',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ items: state.items, cartId: state.cartId, checkoutUrl: state.checkoutUrl, deliveryWindow: state.deliveryWindow, fulfillmentMethod: state.fulfillmentMethod }),
-    }
-  )
+      version: 2,
+      migrate: () => ({ ...emptyCartState(), isLoading: false, isSyncing: false }),
+      partialize: (state) => ({
+        items: state.items,
+        cartId: state.cartId,
+        checkoutUrl: state.checkoutUrl,
+        subtotal: state.subtotal,
+        deliveryWindow: state.deliveryWindow,
+        fulfillmentMethod: state.fulfillmentMethod,
+        fulfillmentAttributesConfirmed: state.fulfillmentAttributesConfirmed,
+      }),
+    },
+  ),
 );
