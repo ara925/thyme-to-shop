@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ArrowRight, Leaf, Clock, Truck, Sparkles } from 'lucide-react';
 import heroBg from '@/assets/hero-bg.jpg';
+import heroBgSmall from '@/assets/hero-bg-960.jpg';
 
 export function Hero() {
   return (
@@ -10,7 +11,13 @@ export function Hero() {
       <div className="relative min-h-[85vh] flex items-center">
         <img
           src={heroBg}
+          srcSet={`${heroBgSmall} 960w, ${heroBg} 1920w`}
+          sizes="100vw"
           alt="Fresh meal prep containers"
+          width={1920}
+          height={1080}
+          fetchPriority="high"
+          decoding="async"
           className="absolute inset-0 w-full h-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-espresso/90 via-espresso/70 to-espresso/40" />

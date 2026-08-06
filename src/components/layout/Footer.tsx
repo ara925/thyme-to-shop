@@ -26,11 +26,21 @@ export function Footer() {
               Supporting Operation Helping Hands Southern California.
             </p>
             <div className="mt-6 flex gap-3">
-              <a href="#" className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors">
-                <Instagram className="h-5 w-5" />
+              <a
+                href="https://www.instagram.com/place.in.thyme/"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Place in Thyme on Instagram"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+              >
+                <Instagram className="h-5 w-5" aria-hidden="true" />
               </a>
-              <a href="mailto:info@placeinthyme.com" className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors">
-                <Mail className="h-5 w-5" />
+              <a
+                href="mailto:info@placeinthyme.com"
+                aria-label="Email Place in Thyme"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/10 transition-colors hover:bg-white/20"
+              >
+                <Mail className="h-5 w-5" aria-hidden="true" />
               </a>
             </div>
           </div>

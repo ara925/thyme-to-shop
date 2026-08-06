@@ -1,11 +1,21 @@
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
 import { useProducts } from '@/hooks/useProducts';
 import { ProductGrid } from '@/components/products/ProductGrid';
+import { getCurrentWeekTag } from '@/lib/weekRotation';
 
 export function FeaturedProducts() {
-  const { data: products = [], isLoading } = useProducts(4, 'product_type:Meal');
+  const { data: products = [], isLoading, isError } = useProducts(50, 'product_type:Meal');
+  const currentWeek = getCurrentWeekTag();
+  const featuredProducts = useMemo(
+    () =>
+      products
+        .filter((product) => (product.node.tags || []).includes(currentWeek))
+        .slice(0, 4),
+    [products, currentWeek],
+  );
 
   return (
     <section className="py-24 md:py-32">
@@ -29,8 +39,11 @@ export function FeaturedProducts() {
         </div>
 
         <ProductGrid 
-          products={products.slice(0, 4)} 
+          products={featuredProducts}
           isLoading={isLoading}
+          errorMessage={
+            isError ? 'This week\'s featured meals could not be loaded.' : undefined
+          }
           emptyMessage="No products yet. Check back soon!"
         />
 
