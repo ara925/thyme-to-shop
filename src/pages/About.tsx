@@ -21,7 +21,6 @@ const About = () => {
 
       <section className="py-12 md:py-16">
         <div className="container">
-          <h2 className="sr-only">What guides Place in Thyme</h2>
           <div className="grid gap-8 md:grid-cols-3">
             <Card className="border-border bg-card">
               <CardContent className="p-6 text-center">

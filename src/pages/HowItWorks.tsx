@@ -9,7 +9,7 @@ const HowItWorks = () => {
     {
       icon: Search,
       title: "1. Browse the Menu",
-      description: "Check out this week's rotating meal menu or browse the juice collection."
+      description: "Check out this week's rotating meal menu or browse our permanent juice collection. Our chefs update the weekly menu with fresh, seasonal dishes."
     },
     {
       icon: ShoppingCart,
@@ -19,12 +19,12 @@ const HowItWorks = () => {
     {
       icon: Clock,
       title: "3. Order Before Cutoff",
-      description: "Place your order by Thursday at 6 PM ET to be included in the week's delivery. Orders placed after cutoff will be delivered the following week."
+      description: "Place your order by Thursday at 6PM to be included in the week's delivery. Orders placed after cutoff will be delivered the following week."
     },
     {
       icon: UtensilsCrossed,
       title: "4. We Prepare Fresh",
-      description: "The kitchen prepares your order for the scheduled Sunday delivery."
+      description: "Our chefs prepare your meals fresh over the weekend using premium, locally-sourced ingredients. No freezing, no preservatives."
     },
     {
       icon: Truck,
@@ -51,7 +51,6 @@ const HowItWorks = () => {
 
       <section className="py-12 md:py-16">
         <div className="container">
-          <h2 className="sr-only">Ordering steps</h2>
           <div className="max-w-3xl mx-auto space-y-6">
             {steps.map((step, index) => (
               <Card key={index} className="border-border bg-card">
@@ -84,7 +83,7 @@ const HowItWorks = () => {
                 <CardContent className="p-6 text-center">
                   <Clock className="h-8 w-8 text-primary mx-auto" />
                   <h3 className="mt-4 font-serif text-lg font-semibold">Order Cutoff</h3>
-                  <p className="mt-2 text-2xl font-bold text-primary">Thursday 6 PM ET</p>
+                  <p className="mt-2 text-2xl font-bold text-primary">Thursday 6PM</p>
                 </CardContent>
               </Card>
               <Card className="border-accent/20 bg-terracotta-light/30">

@@ -2,15 +2,10 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { ArrowRight } from 'lucide-react';
 import { useProducts } from '@/hooks/useProducts';
-import { useOrderCycle } from '@/hooks/useOrderCycle';
 import { ProductGrid } from '@/components/products/ProductGrid';
 
 export function FeaturedProducts() {
-  const { data: products = [], isLoading, error, refetch } = useProducts(250, 'product_type:Meal');
-  const { orderableWeek } = useOrderCycle();
-  const featuredProducts = products
-    .filter((product) => product.node.tags.includes(orderableWeek))
-    .slice(0, 4);
+  const { data: products = [], isLoading } = useProducts(4, 'product_type:Meal');
 
   return (
     <section className="py-24 md:py-32">
@@ -34,10 +29,8 @@ export function FeaturedProducts() {
         </div>
 
         <ProductGrid 
-          products={featuredProducts}
+          products={products.slice(0, 4)} 
           isLoading={isLoading}
-          error={error}
-          onRetry={() => void refetch()}
           emptyMessage="No products yet. Check back soon!"
         />
 
