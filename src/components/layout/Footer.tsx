@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Instagram, Mail, MapPin } from 'lucide-react';
+import logo from '@/assets/logo.png';
 
 export function Footer() {
   return (
@@ -11,9 +12,11 @@ export function Footer() {
           {/* Brand */}
           <div className="md:col-span-5">
             <Link to="/" className="inline-flex items-center gap-2 group">
-              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary text-primary-foreground font-serif font-bold text-lg">
-                P
-              </div>
+              <img
+                src={logo}
+                alt="Place in Thyme logo"
+                className="h-11 w-11 rounded-full object-cover"
+              />
               <span className="font-serif text-2xl font-bold text-white tracking-tight">
                 Place in Thyme
               </span>
