@@ -2,8 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,700&family=Lato:wght@300;400;500;600;700;900&display=swap');
-
 /* Place in Thyme — Bold Rustic Elegance */
 
 @layer base {
@@ -30,20 +28,26 @@
     
     /* Muted */
     --muted: 40 18% 91%;
-    --muted-foreground: 20 12% 45%;
+    --muted-foreground: 20 12% 40%;
     
     /* Accent - Warm Terracotta */
-    --accent: 16 65% 48%;
+    --accent: 16 65% 41%;
     --accent-foreground: 48 40% 97%;
     
     /* Destructive */
-    --destructive: 0 65% 50%;
+    --destructive: 0 68% 42%;
     --destructive-foreground: 48 40% 97%;
     
     /* Borders */
     --border: 36 22% 86%;
     --input: 36 22% 86%;
     --ring: 152 38% 28%;
+
+    /* Inverse surfaces, overlays, and shadows */
+    --inverse: 20 35% 14%;
+    --inverse-foreground: 48 40% 97%;
+    --overlay: 20 35% 8%;
+    --shadow: 20 35% 8%;
     
     --radius: 0.75rem;
     
@@ -51,7 +55,7 @@
     --herb: 152 38% 28%;
     --herb-light: 148 28% 90%;
     --herb-glow: 152 45% 40%;
-    --terracotta: 16 65% 48%;
+    --terracotta: 16 65% 41%;
     --terracotta-light: 18 45% 92%;
     --terracotta-dark: 14 60% 38%;
     --wheat: 38 50% 82%;
@@ -87,22 +91,27 @@
     --popover-foreground: 42 30% 93%;
     
     --muted: 20 16% 16%;
-    --muted-foreground: 42 18% 60%;
+    --muted-foreground: 42 18% 68%;
     
-    --accent: 16 55% 50%;
-    --accent-foreground: 48 40% 97%;
+    --accent: 16 55% 52%;
+    --accent-foreground: 20 30% 8%;
     
-    --destructive: 0 55% 45%;
-    --destructive-foreground: 48 40% 97%;
+    --destructive: 0 62% 58%;
+    --destructive-foreground: 20 30% 8%;
     
     --border: 20 16% 20%;
     --input: 20 16% 20%;
     --ring: 152 30% 48%;
+
+    --inverse: 42 30% 93%;
+    --inverse-foreground: 20 30% 8%;
+    --overlay: 20 35% 3%;
+    --shadow: 20 35% 2%;
     
     --herb: 152 30% 42%;
     --herb-light: 152 18% 16%;
     --herb-glow: 152 35% 50%;
-    --terracotta: 16 50% 50%;
+    --terracotta: 16 55% 52%;
     --terracotta-light: 16 28% 16%;
     --terracotta-dark: 14 45% 40%;
     --wheat: 38 28% 22%;
@@ -129,19 +138,44 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
   }
+
+  a:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
   
   h1, h2, h3, h4, h5, h6 {
     @apply font-serif;
+  }
+
+  #main-content h1[tabindex="-1"]:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-4 ring-offset-background;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
 
 @layer utilities {
   .font-serif {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Playfair Display', Georgia, serif;
   }
   
   .font-sans {
-    font-family: 'Lato', sans-serif;
+    font-family: 'Lato', Arial, sans-serif;
   }
 }
 

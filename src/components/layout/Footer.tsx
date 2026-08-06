@@ -1,89 +1,98 @@
+import { Mail, MapPin } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Instagram, Mail, MapPin } from 'lucide-react';
 import logo from '@/assets/logo.png';
+
+const footerLinks = [
+  { to: '/weekly-meals', label: 'Weekly Meals' },
+  { to: '/juices', label: 'Juices & Shots' },
+  { to: '/how-it-works', label: 'How It Works' },
+  { to: '/about', label: 'About Us' },
+];
 
 export function Footer() {
   return (
-    <footer className="relative overflow-hidden bg-espresso text-white/90">
-      <div className="absolute inset-0 bg-gradient-to-br from-espresso via-espresso to-primary/20 opacity-50" />
-      
+    <footer className="relative overflow-hidden bg-inverse text-inverse-foreground">
+      <div className="absolute inset-0 bg-gradient-to-br from-inverse via-inverse to-primary/20 opacity-50" />
+
       <div className="container relative py-16 md:py-20">
         <div className="grid gap-10 md:grid-cols-12">
-          {/* Brand */}
           <div className="md:col-span-5">
-            <Link to="/" className="inline-flex items-center gap-2 group">
+            <Link
+              to="/"
+              className="group inline-flex min-h-11 items-center gap-2 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inverse-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-inverse"
+            >
               <img
                 src={logo}
-                alt="Place in Thyme logo"
+                alt=""
+                width="200"
+                height="200"
                 className="h-11 w-11 rounded-full object-cover"
               />
-              <span className="font-serif text-2xl font-bold text-white tracking-tight">
+              <span className="font-serif text-2xl font-bold tracking-tight text-inverse-foreground">
                 Place in Thyme
               </span>
             </Link>
-            <p className="mt-4 max-w-sm text-sm text-white/60 leading-relaxed">
-              Fresh, chef-prepared meals and cold-pressed juices delivered to your door. 
-              Supporting Operation Helping Hands Southern California.
+            <p className="mt-4 max-w-sm text-sm leading-relaxed text-inverse-foreground/70">
+              Fresh, chef-prepared meals and cold-pressed juices delivered to your door. Supporting Operation Helping
+              Hands Southern California.
             </p>
-            <div className="mt-6 flex gap-3">
-              <a href="#" className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors">
-                <Instagram className="h-5 w-5" />
-              </a>
-              <a href="mailto:info@placeinthyme.com" className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors">
-                <Mail className="h-5 w-5" />
-              </a>
-            </div>
+            <a
+              href="mailto:info@placeinthyme.com"
+              aria-label="Email Place in Thyme"
+              className="mt-6 flex h-11 w-11 items-center justify-center rounded-full bg-inverse-foreground/10 transition-colors hover:bg-inverse-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inverse-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-inverse"
+            >
+              <Mail aria-hidden="true" className="h-5 w-5" />
+            </a>
           </div>
 
-          {/* Quick Links */}
-          <div className="md:col-span-3">
-            <h3 className="font-serif text-lg font-bold text-white mb-4">Menu</h3>
-            <ul className="space-y-3">
-              {[
-                { to: '/weekly-meals', label: 'Weekly Meals' },
-                { to: '/juices', label: 'Juices & Shots' },
-                { to: '/how-it-works', label: 'How It Works' },
-                { to: '/about', label: 'About Us' },
-              ].map(link => (
+          <nav aria-labelledby="footer-menu-heading" className="md:col-span-3">
+            <h2 id="footer-menu-heading" className="mb-4 font-serif text-lg font-bold text-inverse-foreground">
+              Menu
+            </h2>
+            <ul className="space-y-1">
+              {footerLinks.map((link) => (
                 <li key={link.to}>
-                  <Link to={link.to} className="text-sm text-white/60 hover:text-white transition-colors">
+                  <Link
+                    to={link.to}
+                    className="inline-flex min-h-11 items-center rounded-sm text-sm text-inverse-foreground/70 transition-colors hover:text-inverse-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inverse-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-inverse"
+                  >
                     {link.label}
                   </Link>
                 </li>
               ))}
             </ul>
-          </div>
+          </nav>
 
-          {/* Contact */}
           <div className="md:col-span-4">
-            <h3 className="font-serif text-lg font-bold text-white mb-4">Get in Touch</h3>
+            <h2 className="mb-4 font-serif text-lg font-bold text-inverse-foreground">Get in Touch</h2>
             <ul className="space-y-3">
               <li className="flex items-start gap-3">
-                <MapPin className="h-5 w-5 text-accent mt-0.5 shrink-0" />
-                <span className="text-sm text-white/60">Southern California</span>
+                <MapPin aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-gold" />
+                <span className="text-sm text-inverse-foreground/70">Southern California</span>
               </li>
               <li className="flex items-start gap-3">
-                <Mail className="h-5 w-5 text-accent mt-0.5 shrink-0" />
-                <a href="mailto:info@placeinthyme.com" className="text-sm text-white/60 hover:text-white transition-colors">
+                <Mail aria-hidden="true" className="mt-3 h-5 w-5 shrink-0 text-gold" />
+                <a
+                  href="mailto:info@placeinthyme.com"
+                  className="inline-flex min-h-11 items-center rounded-sm text-sm text-inverse-foreground/70 transition-colors hover:text-inverse-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inverse-foreground focus-visible:ring-offset-2 focus-visible:ring-offset-inverse"
+                >
                   info@placeinthyme.com
                 </a>
               </li>
             </ul>
-            
-            <div className="mt-6 p-4 rounded-xl bg-white/5 border border-white/10">
-              <p className="text-sm font-semibold text-white">Order Cutoff</p>
-              <p className="text-sm text-white/60 mt-1">Thursday 6PM · Delivery Sunday</p>
+
+            <div className="mt-6 rounded-xl border border-inverse-foreground/15 bg-inverse-foreground/5 p-4">
+              <p className="text-sm font-semibold text-inverse-foreground">Order Cutoff</p>
+              <p className="mt-1 text-sm text-inverse-foreground/70">Thursday 6 PM ET · Delivery Sunday</p>
             </div>
           </div>
         </div>
 
-        <div className="mt-16 pt-8 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-white/40">
+        <div className="mt-16 flex flex-col items-center justify-between gap-4 border-t border-inverse-foreground/15 pt-8 sm:flex-row">
+          <p className="text-sm text-inverse-foreground/70">
             © {new Date().getFullYear()} Place in Thyme. All rights reserved.
           </p>
-          <p className="text-sm text-white/40">
-            Crafted with ❤️ in Southern California
-          </p>
+          <p className="text-sm text-inverse-foreground/70">Crafted with ❤️ in Southern California</p>
         </div>
       </div>
     </footer>
