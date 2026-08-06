@@ -27,6 +27,15 @@ export function Header() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileMenuOpen(false);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [mobileMenuOpen]);
+
   return (
     <header
       className={cn(
@@ -55,8 +64,9 @@ export function Header() {
             <Link
               key={link.href}
               to={link.href}
+              aria-current={location.pathname === link.href ? 'page' : undefined}
               className={cn(
-                "relative px-4 py-2 text-sm font-semibold tracking-wide uppercase transition-colors rounded-full",
+                "relative inline-flex min-h-11 items-center rounded-full px-4 py-2 text-sm font-semibold uppercase tracking-wide transition-colors",
                 location.pathname === link.href
                   ? "text-primary bg-primary/10"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
@@ -74,16 +84,24 @@ export function Header() {
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden"
+            className="h-11 w-11 md:hidden"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label={mobileMenuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-navigation"
           >
-            {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {mobileMenuOpen ? (
+              <X className="h-5 w-5" aria-hidden="true" />
+            ) : (
+              <Menu className="h-5 w-5" aria-hidden="true" />
+            )}
           </Button>
         </div>
       </div>
 
       {/* Mobile Navigation */}
       <div
+        id="mobile-navigation"
         className={cn(
           "md:hidden overflow-hidden transition-all duration-300 ease-in-out bg-background/95 backdrop-blur-lg",
           mobileMenuOpen ? "max-h-96 border-b border-border" : "max-h-0"
@@ -101,6 +119,7 @@ export function Header() {
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
               )}
               onClick={() => setMobileMenuOpen(false)}
+              aria-current={location.pathname === link.href ? 'page' : undefined}
             >
               {link.label}
             </Link>

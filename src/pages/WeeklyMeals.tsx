@@ -7,7 +7,7 @@ import { Clock, CalendarDays } from 'lucide-react';
 import { getCurrentWeekTag, getCurrentWeekLabel } from '@/lib/weekRotation';
 
 const WeeklyMeals = () => {
-  const { data: products = [], isLoading } = useProducts(50, 'product_type:Meal');
+  const { data: products = [], isLoading, isError } = useProducts(50, 'product_type:Meal');
   const currentWeek = getCurrentWeekTag();
   const currentWeekLabel = getCurrentWeekLabel();
 
@@ -53,6 +53,9 @@ const WeeklyMeals = () => {
           <ProductGrid 
             products={mealProducts} 
             isLoading={isLoading}
+            errorMessage={
+              isError ? 'The live meal menu could not be loaded.' : undefined
+            }
             emptyMessage="No meals available this week. Check back soon!"
           />
         </div>

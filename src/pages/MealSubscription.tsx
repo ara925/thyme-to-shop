@@ -7,10 +7,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CalendarDays, Minus, Plus, ShoppingCart, Loader2, Check, AlertCircle } from 'lucide-react';
 import { useProducts, useSellingPlans } from '@/hooks/useProducts';
 import { ShopifyProduct, formatPrice } from '@/lib/shopify';
-import { useCartStore } from '@/stores/cartStore';
+import { type CartItemInput, useCartStore } from '@/stores/cartStore';
+import { getShopifyImageUrl } from '@/lib/images';
+import { parseMealMinimumCents } from '@/lib/subscriptionMinimum';
+import { SubscriptionProductSkeletons } from '@/components/subscriptions/SubscriptionProductSkeletons';
 import { toast } from 'sonner';
 
-const MINIMUM_PER_WEEK = 120;
+const MEAL_PRODUCT_QUERY = 'product_type:Meal';
+const MEAL_SELLING_PLAN_GROUP = 'Weekly Meal Subscription - $120 Minimum';
+const MEAL_MINIMUM_CENTS = parseMealMinimumCents(MEAL_SELLING_PLAN_GROUP);
+const MEAL_MINIMUM_PER_WEEK = MEAL_MINIMUM_CENTS === null ? null : MEAL_MINIMUM_CENTS / 100;
+const MEAL_MINIMUM_DISPLAY = MEAL_MINIMUM_CENTS === null
+  ? null
+  : formatPrice((MEAL_MINIMUM_CENTS / 100).toFixed(2), 'USD');
 const WEEKS = [
   { id: 'week-a', label: 'Week 1', tag: 'week-a' },
   { id: 'week-b', label: 'Week 2', tag: 'week-b' },
@@ -20,9 +29,17 @@ const WEEKS = [
 type WeekSelections = Record<string, Record<string, number>>;
 
 const MealSubscription = () => {
-  const { data: allProducts = [], isLoading: productsLoading } = useProducts(50, 'product_type:Meal');
-  const { data: sellingPlan = null } = useSellingPlans('product_type:Meal');
-  const addItem = useCartStore(state => state.addItem);
+  const {
+    data: allProducts = [],
+    isLoading: productsLoading,
+    isError: productsError,
+  } = useProducts(50, MEAL_PRODUCT_QUERY);
+  const {
+    data: sellingPlansByProduct,
+    isLoading: sellingPlansLoading,
+    isError: sellingPlansError,
+  } = useSellingPlans(MEAL_PRODUCT_QUERY, MEAL_SELLING_PLAN_GROUP);
+  const addItems = useCartStore(state => state.addItems);
   const isLoading = useCartStore(state => state.isLoading);
   const [activeTab, setActiveTab] = useState('week-a');
   const [selections, setSelections] = useState<WeekSelections>({
@@ -53,7 +70,8 @@ const MealSubscription = () => {
       Object.entries(weekSel).forEach(([productId, qty]) => {
         const product = productsByWeek[week.id]?.find(p => p.node.id === productId);
         if (product && qty > 0) {
-          total += parseFloat(product.node.priceRange.minVariantPrice.amount) * qty;
+          const variant = product.node.variants.edges[0]?.node;
+          if (variant) total += parseFloat(variant.price.amount) * qty;
         }
       });
       totals[week.id] = total;
@@ -62,8 +80,29 @@ const MealSubscription = () => {
   }, [selections, productsByWeek]);
 
   const weeksWithSelections = WEEKS.filter(w => weekTotals[w.id] > 0);
-  const allSelectedWeeksMeetMinimum = weeksWithSelections.length > 0 && weeksWithSelections.every(w => weekTotals[w.id] >= MINIMUM_PER_WEEK);
+  const selectedWeek = weeksWithSelections.length === 1 ? weeksWithSelections[0] : null;
+  const hasExactlyOneSelectedWeek = selectedWeek !== null;
+  const selectedWeekMeetsMinimum = Boolean(
+    selectedWeek
+    && MEAL_MINIMUM_PER_WEEK !== null
+    && weekTotals[selectedWeek.id] >= MEAL_MINIMUM_PER_WEEK,
+  );
   const anySelections = weeksWithSelections.length > 0;
+  const hasSellingPlanConfiguration = Boolean(
+    MEAL_MINIMUM_CENTS !== null
+    && sellingPlansByProduct
+    && Object.keys(sellingPlansByProduct).length > 0,
+  );
+  const selectedItemsAreAvailable = selectedWeek
+    ? Object.entries(selections[selectedWeek.id] || {}).every(([productId, qty]) => {
+      if (qty <= 0) return true;
+      const product = productsByWeek[selectedWeek.id]?.find(
+        item => item.node.id === productId,
+      );
+      const variant = product?.node.variants.edges[0]?.node;
+      return Boolean(variant?.availableForSale && sellingPlansByProduct?.[productId]);
+    })
+    : false;
 
   const updateQuantity = (weekId: string, productId: string, delta: number) => {
     setSelections(prev => {
@@ -77,37 +116,85 @@ const MealSubscription = () => {
   };
 
   const handleAddAllToCart = async () => {
-    if (!allSelectedWeeksMeetMinimum) {
-      toast.error('Each selected week must meet the $120 minimum', { position: 'top-center' });
+    if (weeksWithSelections.length === 0) {
+      toast.error('Choose exactly one menu week before continuing.', { position: 'top-center' });
+      return;
+    }
+    if (weeksWithSelections.length > 1) {
+      toast.error('Choose exactly one menu week. Clear the selections from the other menu tabs.', {
+        position: 'top-center',
+      });
+      return;
+    }
+    if (sellingPlansLoading) {
+      toast.error('Weekly subscription availability is still loading. Please wait a moment.', { position: 'top-center' });
+      return;
+    }
+
+    if (
+      sellingPlansError
+      || !hasSellingPlanConfiguration
+      || !sellingPlansByProduct
+      || MEAL_MINIMUM_CENTS === null
+      || MEAL_MINIMUM_DISPLAY === null
+    ) {
+      toast.error('Weekly meal subscriptions are temporarily unavailable. No one-time order was added.', { position: 'top-center' });
+      return;
+    }
+
+    if (!selectedWeek || !selectedWeekMeetsMinimum) {
+      toast.error(`Your weekly selection must meet the ${MEAL_MINIMUM_DISPLAY} minimum.`, {
+        position: 'top-center',
+      });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      for (const week of WEEKS) {
-        const weekSel = selections[week.id] || {};
-        for (const [productId, qty] of Object.entries(weekSel)) {
-          if (qty <= 0) continue;
-          const product = productsByWeek[week.id]?.find(p => p.node.id === productId);
-          if (!product) continue;
-          const variant = product.node.variants.edges[0]?.node;
-          if (!variant) continue;
-
-          await addItem({
-            product,
-            variantId: variant.id,
-            variantTitle: variant.title,
-            price: variant.price,
-            quantity: qty,
-            selectedOptions: variant.selectedOptions || [],
-            sellingPlanId: sellingPlan?.id,
-          });
+      const cartItems: CartItemInput[] = [];
+      const weekSel = selections[selectedWeek.id] || {};
+      for (const [productId, qty] of Object.entries(weekSel)) {
+        if (qty <= 0) continue;
+        const product = productsByWeek[selectedWeek.id]?.find(p => p.node.id === productId);
+        if (!product) {
+          throw new Error('A selected meal is no longer available. Please update your weekly selection.');
         }
+        const variant = product.node.variants.edges[0]?.node;
+        if (!variant) {
+          throw new Error(`${product.node.title} no longer has an available variant.`);
+        }
+        if (!variant.availableForSale) {
+          throw new Error(`${product.node.title} is sold out. Please update ${selectedWeek.label}.`);
+        }
+        const sellingPlan = sellingPlansByProduct[product.node.id];
+        if (!sellingPlan) {
+          throw new Error(`${product.node.title} is not configured for the weekly meal subscription.`);
+        }
+
+        cartItems.push({
+          product,
+          variantId: variant.id,
+          variantTitle: variant.title,
+          price: variant.price,
+          quantity: qty,
+          selectedOptions: variant.selectedOptions || [],
+          sellingPlanId: sellingPlan.id,
+          attributes: [
+            { key: 'Menu Week', value: selectedWeek.label },
+            { key: '_minimum_group', value: `meal-plan:${selectedWeek.id}` },
+            { key: '_minimum_cents', value: String(MEAL_MINIMUM_CENTS) },
+            { key: '_minimum_currency', value: variant.price.currencyCode },
+            { key: '_minimum_label', value: `${selectedWeek.label} meal plan` },
+          ],
+        });
       }
-      toast.success('All meals added to cart! Proceed to checkout.', { position: 'top-center' });
+      if (cartItems.length === 0) throw new Error('Select at least one available meal before continuing.');
+      await addItems(cartItems);
+      toast.success(`${selectedWeek.label} weekly meal selection added to cart.`, {
+        position: 'top-center',
+      });
     } catch (error) {
-      console.error('Failed to add meals to cart:', error);
-      toast.error('Something went wrong. Please try again.', { position: 'top-center' });
+      toast.error(error instanceof Error ? error.message : 'Something went wrong. Please try again.', { position: 'top-center' });
     } finally {
       setIsSubmitting(false);
     }
@@ -128,20 +215,22 @@ const MealSubscription = () => {
               Weekly Meal Plan
             </h1>
             <p className="mt-4 text-lg text-white/70 max-w-lg">
-              Pre-select your meals for up to 3 rotating weeks. Minimum $120 per week. 
-              Cancel anytime — your plan, your way.
+              Compare all three menu weeks, then choose exactly one. Your selected menu and quantities repeat every week.
             </p>
           </div>
 
           <div className="mt-8 flex flex-wrap gap-3">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
-              <span><strong>$120</strong> minimum / week</span>
+              <span>
+                <strong>{MEAL_MINIMUM_DISPLAY || 'Live minimum unavailable'}</strong>
+                {MEAL_MINIMUM_DISPLAY ? ' minimum / week' : ''}
+              </span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
-              <span>Charged <strong>weekly</strong></span>
+              <span>Selected menu <strong>repeats weekly</strong></span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
-              <span>Cancel <strong>anytime</strong></span>
+              <span>A/B/C rotation <strong>not configured</strong></span>
             </div>
           </div>
         </div>
@@ -152,17 +241,39 @@ const MealSubscription = () => {
         <div className="container">
           <div className="max-w-4xl mx-auto">
             <h2 className="font-serif text-2xl md:text-3xl font-bold text-foreground mb-2">
-              Build Your 3-Week Meal Plan
+              Build Your Weekly Meal Selection
             </h2>
-            <p className="text-muted-foreground mb-8">
-              Select your meals for each week. You only need to fill at least one week to proceed.
+            <p className="text-muted-foreground mb-4">
+              Browse all three tabs, but select meals in exactly one menu week before adding the subscription to cart.
             </p>
+
+            <div className="mb-8 flex items-start gap-2 rounded-xl border border-accent/30 bg-accent/10 p-4 text-sm text-foreground" role="note">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
+              <p>
+                The one menu you select repeats every week. Automatic A/B/C menu rotation is not configured in Shopify.
+              </p>
+            </div>
+
+            {(sellingPlansLoading || sellingPlansError || (!sellingPlansLoading && !hasSellingPlanConfiguration)) && (
+              <div
+                className={`mb-6 flex items-start gap-2 rounded-xl border p-4 text-sm ${sellingPlansError || (!sellingPlansLoading && !hasSellingPlanConfiguration) ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-border bg-muted/50 text-muted-foreground'}`}
+                role="status"
+              >
+                {sellingPlansLoading ? <Loader2 className="mt-0.5 h-4 w-4 animate-spin" /> : <AlertCircle className="mt-0.5 h-4 w-4" />}
+                <span>
+                  {sellingPlansLoading
+                    ? 'Confirming weekly meal subscription availability…'
+                    : 'Weekly meal subscriptions are not configured for these products right now. Adding a one-time order is disabled.'}
+                </span>
+              </div>
+            )}
 
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="grid w-full grid-cols-3 mb-8">
                 {WEEKS.map(week => {
                   const total = weekTotals[week.id];
-                  const meetsMin = total >= MINIMUM_PER_WEEK;
+                  const meetsMin = MEAL_MINIMUM_PER_WEEK !== null
+                    && total >= MEAL_MINIMUM_PER_WEEK;
                   const hasSelections = total > 0;
                   return (
                     <TabsTrigger
@@ -187,8 +298,11 @@ const MealSubscription = () => {
               {WEEKS.map(week => {
                 const weekProducts = productsByWeek[week.id] || [];
                 const total = weekTotals[week.id];
-                const meetsMin = total >= MINIMUM_PER_WEEK;
-                const remaining = MINIMUM_PER_WEEK - total;
+                const meetsMin = MEAL_MINIMUM_PER_WEEK !== null
+                  && total >= MEAL_MINIMUM_PER_WEEK;
+                const remaining = MEAL_MINIMUM_PER_WEEK === null
+                  ? null
+                  : Math.max(0, MEAL_MINIMUM_PER_WEEK - total);
 
                 return (
                   <TabsContent key={week.id} value={week.id}>
@@ -205,14 +319,16 @@ const MealSubscription = () => {
                             {week.label} Total: {formatPrice(total.toString())}
                           </span>
                         </div>
-                        {!meetsMin && total > 0 && (
+                        {!meetsMin && total > 0 && remaining !== null && (
                           <span className="text-sm text-muted-foreground">
                             {formatPrice(remaining.toString())} more to meet minimum
                           </span>
                         )}
                         {!meetsMin && total === 0 && (
                           <span className="text-sm text-muted-foreground">
-                            ${MINIMUM_PER_WEEK} minimum
+                            {MEAL_MINIMUM_DISPLAY
+                              ? `${MEAL_MINIMUM_DISPLAY} minimum`
+                              : 'Live minimum unavailable'}
                           </span>
                         )}
                       </div>
@@ -220,61 +336,83 @@ const MealSubscription = () => {
                       <div className="mt-3 h-2 rounded-full bg-border overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all duration-500 ${meetsMin ? 'bg-primary' : 'bg-accent'}`}
-                          style={{ width: `${Math.min(100, (total / MINIMUM_PER_WEEK) * 100)}%` }}
+                          style={{
+                            width: `${MEAL_MINIMUM_PER_WEEK === null
+                              ? 0
+                              : Math.min(100, (total / MEAL_MINIMUM_PER_WEEK) * 100)}%`,
+                          }}
                         />
                       </div>
                     </div>
 
                     {productsLoading ? (
-                      <div className="flex justify-center py-12">
-                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                      </div>
+                      <SubscriptionProductSkeletons itemLabel="meal" />
+                    ) : productsError ? (
+                      <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center text-destructive">
+                        The live meal catalog could not be loaded. Please refresh and try again.
+                      </p>
                     ) : weekProducts.length === 0 ? (
                       <p className="text-center text-muted-foreground py-12">No meals found for this week.</p>
                     ) : (
                       <div className="space-y-3">
                         {weekProducts.map(product => {
                           const qty = selections[week.id]?.[product.node.id] || 0;
-                          const price = product.node.priceRange.minVariantPrice;
+                          const variant = product.node.variants.edges[0]?.node;
+                          const price = variant?.price || product.node.priceRange.minVariantPrice;
                           const image = product.node.images.edges[0]?.node;
+                          const sellingPlan = sellingPlansByProduct?.[product.node.id];
+                          const canSelect = Boolean(
+                            variant?.availableForSale
+                            && sellingPlan
+                            && MEAL_MINIMUM_CENTS !== null
+                            && !sellingPlansLoading
+                            && !sellingPlansError,
+                          );
 
                           return (
                             <Card key={product.node.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
-                              <CardContent className="flex items-center gap-4 p-4">
+                              <CardContent className="flex flex-wrap items-center gap-4 p-4">
                                 <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
                                   {image ? (
-                                    <img src={image.url} alt={image.altText || product.node.title} className="w-full h-full object-cover" />
+                                    <img src={getShopifyImageUrl(image.url, 128)} alt={image.altText || product.node.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                                   ) : (
                                     <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-herb-light to-muted">
                                       <span className="text-xs text-muted-foreground">No img</span>
                                     </div>
                                   )}
                                 </div>
-                                <div className="flex-1 min-w-0">
+                                <div className="min-w-[9rem] flex-1">
                                   <h3 className="font-serif font-bold text-foreground truncate">{product.node.title}</h3>
                                   <p className="text-sm text-muted-foreground line-clamp-1">{product.node.description}</p>
+                                  {!variant?.availableForSale && <p className="text-xs font-medium text-destructive">Sold out</p>}
+                                  {variant?.availableForSale && !sellingPlansLoading && !sellingPlan && (
+                                    <p className="text-xs font-medium text-destructive">Not available for weekly subscription</p>
+                                  )}
                                 </div>
                                 <div className="text-right flex-shrink-0">
                                   <p className="font-bold text-accent">{formatPrice(price.amount, price.currencyCode)}</p>
                                 </div>
-                                <div className="flex items-center gap-2 flex-shrink-0">
+                                <div className="ml-auto flex flex-shrink-0 items-center gap-2">
                                   <Button
                                     variant="outline"
                                     size="icon"
-                                    className="h-8 w-8 rounded-full"
+                                    className="h-11 w-11 rounded-full"
                                     onClick={() => updateQuantity(week.id, product.node.id, -1)}
                                     disabled={qty === 0}
+                                    aria-label={`Remove one ${product.node.title} from ${week.label}`}
                                   >
-                                    <Minus className="h-3.5 w-3.5" />
+                                    <Minus className="h-4 w-4" aria-hidden="true" />
                                   </Button>
                                   <span className="w-8 text-center font-semibold">{qty}</span>
                                   <Button
                                     variant="outline"
                                     size="icon"
-                                    className="h-8 w-8 rounded-full"
+                                    className="h-11 w-11 rounded-full"
                                     onClick={() => updateQuantity(week.id, product.node.id, 1)}
+                                    disabled={!canSelect}
+                                    aria-label={`Add one ${product.node.title} to ${week.label}`}
                                   >
-                                    <Plus className="h-3.5 w-3.5" />
+                                    <Plus className="h-4 w-4" aria-hidden="true" />
                                   </Button>
                                 </div>
                               </CardContent>
@@ -291,11 +429,12 @@ const MealSubscription = () => {
             {/* Summary & Add to Cart */}
             {anySelections && (
               <div className="mt-10 p-6 rounded-2xl bg-card border border-border shadow-lg">
-                <h3 className="font-serif text-xl font-bold mb-4">Order Summary</h3>
+                <h3 className="font-serif text-xl font-bold mb-4">Weekly Subscription Summary</h3>
                 <div className="space-y-3 mb-6">
                   {WEEKS.map(week => {
                     const total = weekTotals[week.id];
-                    const meetsMin = total >= MINIMUM_PER_WEEK;
+                    const meetsMin = MEAL_MINIMUM_PER_WEEK !== null
+                      && total >= MEAL_MINIMUM_PER_WEEK;
                     if (total === 0) return null;
 
                     const weekSel = selections[week.id] || {};
@@ -321,24 +460,37 @@ const MealSubscription = () => {
                 </div>
 
                 <div className="flex items-center justify-between pt-4 border-t border-border mb-6">
-                  <span className="font-serif text-lg font-bold">Total ({weeksWithSelections.length} week{weeksWithSelections.length !== 1 ? 's' : ''})</span>
-                  <span className="text-xl font-bold text-primary">
-                    {formatPrice(weeksWithSelections.reduce((s, w) => s + weekTotals[w.id], 0).toString())}
+                  <span className="font-serif text-lg font-bold">Weekly recurring total</span>
+                  <span className={`text-xl font-bold ${hasExactlyOneSelectedWeek ? 'text-primary' : 'text-destructive'}`}>
+                    {selectedWeek
+                      ? formatPrice(weekTotals[selectedWeek.id].toString())
+                      : 'Choose one menu'}
                   </span>
                 </div>
 
-                {!allSelectedWeeksMeetMinimum && (
+                {weeksWithSelections.length > 1 && (
                   <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                     <p className="text-sm text-destructive flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4" />
-                      Each selected week must meet the ${MINIMUM_PER_WEEK} minimum to proceed.
+                      <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      Choose exactly one menu week. Clear every selection from the other menu tabs.
+                    </p>
+                  </div>
+                )}
+
+                {selectedWeek && !selectedWeekMeetsMinimum && (
+                  <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                    <p className="text-sm text-destructive flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                      {MEAL_MINIMUM_DISPLAY
+                        ? `Your weekly selection must meet the ${MEAL_MINIMUM_DISPLAY} minimum to proceed.`
+                        : 'The live weekly minimum is unavailable, so this selection cannot be added.'}
                     </p>
                   </div>
                 )}
 
                 <Button
                   onClick={handleAddAllToCart}
-                  disabled={!allSelectedWeeksMeetMinimum || isLoading || isSubmitting}
+                  disabled={productsError || !hasExactlyOneSelectedWeek || !selectedWeekMeetsMinimum || !selectedItemsAreAvailable || !hasSellingPlanConfiguration || sellingPlansLoading || sellingPlansError || isLoading || isSubmitting}
                   className="w-full rounded-full bg-primary hover:bg-primary/90 shadow-md"
                   size="lg"
                 >
@@ -347,12 +499,12 @@ const MealSubscription = () => {
                   ) : (
                     <>
                       <ShoppingCart className="mr-2 h-5 w-5" />
-                      Add All Meals to Cart
+                      Add Weekly Meal Selection to Cart
                     </>
                   )}
                 </Button>
                 <p className="text-xs text-muted-foreground text-center mt-3">
-                  You'll be charged weekly. Cancel anytime before the weekly cutoff.
+                  Only the selected menu is added. It repeats weekly at the weekly recurring total shown above. Automatic A/B/C rotation is not configured; confirm all subscription terms at checkout.
                 </p>
               </div>
             )}

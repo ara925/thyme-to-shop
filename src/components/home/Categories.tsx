@@ -1,8 +1,52 @@
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowRight, UtensilsCrossed, GlassWater } from 'lucide-react';
+import { useProducts } from '@/hooks/useProducts';
+import { formatPrice, type ShopifyProduct } from '@/lib/shopify';
+
+function getLowestLivePrice(products: ShopifyProduct[]) {
+  let lowest: ShopifyProduct['node']['priceRange']['minVariantPrice'] | undefined;
+  for (const product of products) {
+    for (const { node: variant } of product.node.variants.edges) {
+      if (!variant.availableForSale || variant.requiresComponents) continue;
+      const amount = Number.parseFloat(variant.price.amount);
+      if (!Number.isFinite(amount)) continue;
+      if (!lowest || amount < Number.parseFloat(lowest.amount)) lowest = variant.price;
+    }
+  }
+  return lowest;
+}
+
+function LiveStartingPrice({
+  products,
+  isLoading,
+  isError,
+  unit,
+}: {
+  products: ShopifyProduct[];
+  isLoading: boolean;
+  isError: boolean;
+  unit: string;
+}) {
+  const lowestPrice = getLowestLivePrice(products);
+
+  if (isLoading) {
+    return (
+      <span role="status" aria-busy="true">
+        <span className="sr-only">Loading live prices</span>
+        <Skeleton className="inline-block h-5 w-28 align-middle" aria-hidden="true" />
+      </span>
+    );
+  }
+  if (isError || !lowestPrice) return <span>See live pricing</span>;
+  return <span>From {formatPrice(lowestPrice.amount, lowestPrice.currencyCode)}/{unit}</span>;
+}
 
 export function Categories() {
+  const mealQuery = useProducts(50, 'product_type:Meal');
+  const juiceQuery = useProducts(50, 'product_type:Juice AND NOT product_type:"Juice Bundle"');
+
   return (
     <section className="py-24 md:py-32 bg-secondary/40 section-pattern">
       <div className="container">
@@ -34,7 +78,14 @@ export function Categories() {
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
-                <span className="text-sm text-muted-foreground">From $10/meal</span>
+                <span className="text-sm text-muted-foreground" aria-live="polite">
+                  <LiveStartingPrice
+                    products={mealQuery.data || []}
+                    isLoading={mealQuery.isLoading}
+                    isError={mealQuery.isError}
+                    unit="meal"
+                  />
+                </span>
               </div>
             </div>
           </div>
@@ -56,7 +107,14 @@ export function Categories() {
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
-                <span className="text-sm text-muted-foreground">From $3/bottle</span>
+                <span className="text-sm text-muted-foreground" aria-live="polite">
+                  <LiveStartingPrice
+                    products={juiceQuery.data || []}
+                    isLoading={juiceQuery.isLoading}
+                    isError={juiceQuery.isError}
+                    unit="bottle"
+                  />
+                </span>
               </div>
             </div>
           </div>
