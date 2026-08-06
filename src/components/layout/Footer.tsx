@@ -56,7 +56,10 @@ export function Footer() {
                 { to: '/about', label: 'About Us' },
               ].map(link => (
                 <li key={link.to}>
-                  <Link to={link.to} className="text-sm text-white/60 hover:text-white transition-colors">
+                  <Link
+                    to={link.to}
+                    className="inline-flex min-h-11 items-center text-sm text-white/60 transition-colors hover:text-white"
+                  >
                     {link.label}
                   </Link>
                 </li>
@@ -74,7 +77,10 @@ export function Footer() {
               </li>
               <li className="flex items-start gap-3">
                 <Mail className="h-5 w-5 text-accent mt-0.5 shrink-0" />
-                <a href="mailto:info@placeinthyme.com" className="text-sm text-white/60 hover:text-white transition-colors">
+                <a
+                  href="mailto:info@placeinthyme.com"
+                  className="inline-flex min-h-11 items-center text-sm text-white/60 transition-colors hover:text-white"
+                >
                   info@placeinthyme.com
                 </a>
               </li>
