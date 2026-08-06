@@ -1,0 +1,32 @@
+{
+  "/": {
+    "title": "Place in Thyme | Fresh Chef-Prepared Meals Delivered",
+    "description": "Browse Place in Thyme's weekly rotating meal menu, juices, and Sunday delivery options."
+  },
+  "/weekly-meals": {
+    "title": "Weekly Meals | Place in Thyme",
+    "description": "Browse this week's rotating menu of fresh, chef-prepared meals from Place in Thyme."
+  },
+  "/juices": {
+    "title": "Fresh Juices & Shots | Place in Thyme",
+    "description": "Browse cold-pressed juices, wellness shots, and juice bundles from Place in Thyme."
+  },
+  "/subscribe/meals": {
+    "title": "Meal Subscriptions Paused | Place in Thyme",
+    "description": "Online enrollment for Place in Thyme meal subscriptions is temporarily unavailable.",
+    "noIndex": true
+  },
+  "/subscribe/juices": {
+    "title": "Juice Subscriptions Paused | Place in Thyme",
+    "description": "Online enrollment for Place in Thyme juice subscriptions is temporarily unavailable.",
+    "noIndex": true
+  },
+  "/about": {
+    "title": "About Place in Thyme",
+    "description": "Learn about Place in Thyme and its meal delivery service."
+  },
+  "/how-it-works": {
+    "title": "How It Works | Place in Thyme",
+    "description": "Learn how to browse, order, and receive chef-prepared meals from Place in Thyme."
+  }
+}

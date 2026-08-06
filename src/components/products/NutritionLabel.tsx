@@ -1,4 +1,4 @@
-import { NutritionInfo } from '@/lib/shopify';
+import type { NutritionInfo } from '@/lib/shopify';
 import { Flame, Dumbbell, Wheat, Droplets, Leaf, Candy, CircleDot } from 'lucide-react';
 
 interface NutritionLabelProps {
@@ -21,7 +21,7 @@ export function NutritionLabel({ nutrition }: NutritionLabelProps) {
 
   return (
     <div className="rounded-xl border border-border bg-muted/30 p-5">
-      <h3 className="font-serif text-lg font-bold text-foreground mb-4">Nutrition Facts</h3>
+      <h2 className="font-serif text-lg font-bold text-foreground mb-4">Nutrition Facts</h2>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {available.map(({ key, label, unit, icon: Icon, accent }) => (
           <div
@@ -30,7 +30,7 @@ export function NutritionLabel({ nutrition }: NutritionLabelProps) {
               accent ? 'bg-accent/10 border border-accent/20' : 'bg-card border border-border'
             }`}
           >
-            <Icon className={`h-4 w-4 shrink-0 ${accent ? 'text-accent' : 'text-muted-foreground'}`} />
+            <Icon aria-hidden="true" className={`h-4 w-4 shrink-0 ${accent ? 'text-accent' : 'text-muted-foreground'}`} />
             <div>
               <p className="text-xs text-muted-foreground">{label}</p>
               <p className="text-sm font-bold text-foreground">

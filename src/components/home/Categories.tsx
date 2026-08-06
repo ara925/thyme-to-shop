@@ -34,7 +34,6 @@ export function Categories() {
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
-                <span className="text-sm text-muted-foreground">From $10/meal</span>
               </div>
             </div>
           </div>
@@ -47,16 +46,15 @@ export function Categories() {
               </div>
               <h3 className="font-serif text-3xl font-bold text-foreground">Fresh Juices</h3>
               <p className="mt-3 text-muted-foreground leading-relaxed flex-1">
-                Cold-pressed, nutrient-rich juices and wellness shots. Bundles available for maximum savings and freshness every day.
+                Cold-pressed juices and wellness shots, available individually and in bundles.
               </p>
               <div className="mt-6 flex items-center gap-4">
-                <Button asChild className="rounded-full px-6 bg-accent hover:bg-terracotta-dark text-white shadow-lg shadow-accent/20">
+                <Button asChild className="rounded-full px-6 bg-accent hover:bg-terracotta-dark text-accent-foreground shadow-lg shadow-accent/20">
                   <Link to="/juices">
                     Browse Juices
                     <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
-                <span className="text-sm text-muted-foreground">From $3/bottle</span>
               </div>
             </div>
           </div>
