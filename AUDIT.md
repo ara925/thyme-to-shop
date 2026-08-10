@@ -1,29 +1,30 @@
 # Place in Thyme pre-launch audit
 
-Audit date: 2026-08-06  
-Branch: `agent/complete-store-features`  
+Audit date: 2026-08-10
+Branch: `agent/implement-pdf-plans`
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
 
 **GO for preview and client review. NO-GO for accepting real customer payments.**
 
-The storefront features are preserved and substantially completed: all three meal/juice menu tabs, fixed juice bundles, the Pick n' Choose builder, delivery, pickup, and the cart remain present. The payment no-go is caused by Shopify owner/Admin configuration, not by deleted or hidden features.
+The storefront features are preserved and the supplied meal/juice flows are implemented as far as the current subscription system can truthfully support. Meal customers configure all three rotating weeks up front; juice customers configure one repeated mix; and each fixed juice bundle offers both one-time and weekly-subscription actions. The remaining payment no-go is caused by Shopify owner/Admin and subscription-contract configuration, not by deleted or hidden features.
 
 The blocking owner items are:
 
 1. Shopify is on Pause and Build and checkout reports that the store is not set up to receive orders.
-2. No live subscription configuration automates A -> B -> C meal rotation or enforces four successful juice billing cycles.
-3. Local pickup is offered by the storefront but is off in Shopify and lacks an approved pickup address/instructions.
-4. Shipping, tax, payment, subscription, cancellation, refund, privacy, and other launch policies are not approved/configured end to end.
+2. No live subscription configuration automates the documented A -> B -> C meal rotation after all three weekly menus are selected.
+3. The exact 10% juice adjustment is configured, but the live subscription system does not provide the documented weekly-versus-four-week-prepaid choice or four-cycle commitment enforcement.
+4. Local pickup is offered by the storefront but is off in Shopify and lacks an approved pickup address/instructions.
+5. Shipping, tax, payment, subscription, cancellation, refund, privacy, and other launch policies are not approved/configured end to end.
 
 ## Verification snapshot
 
 | Check | Result |
 | --- | --- |
-| `npm run build` | Pass. Vite 7.3.6; 35 sitemap routes; route chunks emitted; main JS 334.01 kB / 108.26 kB gzip. |
+| `npm run build` | Pass. Vite 7.3.6; 35 sitemap routes; route chunks emitted; main JS 334.00 kB / 108.26 kB gzip. Windows system CA trust was required for the local sitemap fetch. |
 | `npx tsc --noEmit --pretty false` | Pass. |
-| `npm test -- --run` | Pass: 12 files, 80/80 tests. |
+| `npm test` | Pass: 13 files, 98/98 tests. |
 | `npm run lint` | Pass: 0 errors, 13 Fast Refresh warnings. |
 | `npm audit` | 2 moderate React Router findings; 0 high/critical. |
 | `npm audit --omit=dev` | 2 moderate React Router findings; 0 high/critical. |
@@ -31,8 +32,8 @@ The blocking owner items are:
 | `git diff --check` | Pass. |
 | Secret scan | No Shopify Admin token, private key, or matching credential pattern in the worktree or Git history. |
 | Production console scan | No `console.log`, `console.warn`, or `console.error` calls in non-test `src` code. |
-| Official Chrome visual/interaction QA | Pass at the available 1680 x 867 Chrome viewport for home, juices, product detail, both planners, Pick n' Choose, cart, fulfillment, and checkout handoff. No horizontal overflow or page-console errors observed. |
-| Exact 375/768/1280/1920 matrix | Still required; exact viewport emulation was not available in the required official Chrome control surface. |
+| Official Chrome visual/interaction QA | Pass at 1680 x 867 and 375 x 812 for the updated meal planner, juice plan, fixed bundles, and Pick n' Choose builder. Meal selections persisted at $132/$120/$126 across all three tabs; the qualified $136 juice mix showed the verified $122.40 estimate; all five fixed bundles exposed one-time and weekly actions. No horizontal overflow or page-console warnings/errors were observed. |
+| Exact 375/768/1280/1920 matrix | 375 px passes for the updated flows. Exact 768/1280/1920 acceptance is still required before public launch. |
 | Lighthouse | Still required on the final public deployment; no score is invented here. |
 
 ## 1. Commerce correctness
@@ -49,21 +50,23 @@ The cart writes `Fulfillment Method` plus the matching `Preferred Dropoff Window
 
 ### RESOLVED IN CODE — exact weekly selling plans, no silent fallback
 
-Selling plans are resolved per product by exact normalized group name. A product fails closed unless exactly one matching plan bills and delivers every week (`src/hooks/useProducts.ts:29-90`). Missing or malformed plan configuration never becomes an accidental one-time purchase.
+Selling plans are resolved per product by exact normalized group name. A product fails closed unless exactly one matching plan bills and delivers every week (`src/hooks/useProducts.ts`). Fixed bundles additionally require a single plan group whose normalized name exactly matches the parent product title. Missing or malformed plan configuration never becomes an accidental subscription purchase.
 
-Meal minimum data is validated from the exact observed group label rather than duplicated as a numeric price (`src/lib/subscriptionMinimum.ts:1-18`, `src/pages/MealSubscription.tsx:16-19`). The juice planner loads exactly one live `Pick n' Choose Bundle` parent and derives its minimum and currency from that live product (`src/pages/JuiceSubscription.tsx:20-74`). The owner must confirm that using the Pick n' Choose parent price is the intended weekly juice-plan rule because the exposed juice selling plan contains no structured minimum.
+The meal planner enforces the documented $120 minimum by parsing the expected selling-plan group label in code; planning and email-request readiness deliberately do not depend on a live selling plan because no current plan can perform the rotation (`src/lib/subscriptionMinimum.ts`, `src/pages/MealSubscription.tsx`). The juice planner loads exactly one live `Pick n' Choose Bundle` parent, derives its minimum and currency from that live product, and checks for an exact single 10% percentage adjustment on every selected weekly plan (`src/pages/JuiceSubscription.tsx`). The owner must still confirm that using the parent price as a retail-before-discount minimum is the intended rule because Shopify exposes no structured minimum on that plan.
 
-### RESOLVED IN CODE — planner recurrence is safe and explicit
+### REQUIREMENT GAP — documented subscription schedules need app/backend support
 
-Both planners retain all three menu tabs but require selections in exactly one tab. Only that selected menu is added as a weekly recurring batch (`src/pages/MealSubscription.tsx:120-181`, `src/pages/JuiceSubscription.tsx:162-238`). The UI clearly states that the selected menu repeats weekly, A/B/C rotation is not configured, and a four-cycle juice commitment is not enforced (`src/pages/MealSubscription.tsx:218-253`, `src/pages/JuiceSubscription.tsx:261-296`).
+The meal PDF and Cory correspondence require the customer to preselect different quantities for **Week 1, Week 2, and Week 3**, with each week reaching the $120 minimum. Those menus then rotate A -> B -> C, billing weekly, with cancellation allowed at any time. Collecting all three weekly selections is a required storefront step, but adding all three batches to the currently exposed weekly selling plan would incorrectly charge and fulfill every batch every week. A subscription app/backend must create or mutate the future contract lines so only the appropriate week is billed and fulfilled.
 
-This avoids the dangerous prior behavior where selections from multiple tabs could all recur every week. It does not pretend to implement future subscription-contract mutation.
+The juice PDF and correspondence define **one Pick n' Choose mix repeated weekly**, not a second three-menu rotation: $134.99 minimum per week, an exact 10% subscription discount, a choice to pay all four weeks up front or pay weekly, and a minimum four-week commitment with cancellation every four weeks. The exact 10% weekly adjustment is now configured and verified. The live plans still do not encode a prepaid-versus-weekly choice or a four-cycle commitment, so those terms cannot be enforced truthfully by cart attributes or frontend copy alone.
 
-### RESOLVED IN CODE — fixed and custom juice bundles remain usable
+### RESOLVED IN ADMIN AND CODE — fixed bundles support one-time and weekly purchase
 
-Fixed bundles keep their live parent SKU, image, description, price, availability, Add action, and Details link (`src/components/juices/JuiceBundleCards.tsx:166-249`). Pick n' Choose uses strict product-type queries, available non-component variants, exact per-product plans, live prices, and the live parent price as a minimum (`src/pages/PickAndChoose.tsx:32-105`, `src/pages/PickAndChoose.tsx:174-263`).
+Fixed bundles keep their live parent SKU, image, description, price, availability, Details action, and separate one-time and weekly-subscription actions (`src/components/juices/JuiceBundleCards.tsx`). The weekly action passes only the verified Shopify selling-plan ID. The Intro Pack, Shot Bundle, and Juice Bundles #1, #2, and #3 parent products are each attached to a same-title weekly plan group; the resolver fails closed independently for any card whose exact plan disappears or becomes ambiguous.
 
-Planner and builder minimum metadata is revalidated from Shopify-returned line subtotals at checkout, so lowering a cart quantity below the minimum is blocked (`src/stores/cartStore.ts:118-174`, `src/stores/cartStore.ts:545`). Official Chrome confirmed the $134.99 builder threshold, a $136.00 16-bottle add, and a clear `$7.49 more` block after reducing the cart to $127.50.
+The custom Pick n' Choose builder remains a safe one-time path using live products, availability, prices, and the live parent price as its minimum (`src/pages/PickAndChoose.tsx`). The separate juice-plan page requires an exact weekly plan, reports whether every selected plan has the exact 10% adjustment, and shows the discounted estimate only when that adjustment is verified. It can still prepare a complete enrollment request when the adjustment is missing so the team can resolve it, but it never adds a cancel-anytime subscription that cannot enforce Cory's required term (`src/pages/JuiceSubscription.tsx`).
+
+The one-time Pick n' Choose builder's minimum metadata is revalidated from Shopify-returned line subtotals at checkout, so lowering its cart quantity below the minimum is blocked (`src/stores/cartStore.ts:118-174`, `src/stores/cartStore.ts:545`). Both subscription planners now prepare email requests and do not enter checkout. Official Chrome confirmed the $134.99 builder threshold, a $136.00 16-bottle add, and a clear `$7.49 more` block after reducing the cart to $127.50.
 
 ### BLOCKER — OWNER/ADMIN — real payment cannot complete
 
@@ -71,7 +74,7 @@ Shopify Admin shows Pause and Build. The Storefront cart and validated checkout 
 
 ### BLOCKER — OWNER/ADMIN — future subscription behavior is not configured
 
-The available plan groups all bill/deliver weekly and have no price adjustments. A subscription app/backend must implement and prove A -> B -> C contract rotation, four-cycle enforcement, cancellation/renewal terms, and any two-tier standalone-versus-plan pricing.
+The verified live plans bill/deliver weekly; the Pick n' Choose component plans now carry an exact 10% adjustment, and each fixed-bundle parent has its verified weekly plan. A subscription app/backend must still implement and prove A -> B -> C meal contract rotation, four-week prepaid and weekly-billed juice choices, four-cycle enforcement, and the approved cancellation/renewal terms.
 
 ## 2. Catalog and data integrity
 
@@ -125,7 +128,7 @@ The cart uses Radix Sheet focus containment and Escape behavior; its close targe
 
 ### SHOULD-FIX — exact viewport, contrast, and assistive-tech acceptance
 
-Official Chrome visual QA passed at the available 1680 x 867 viewport with no horizontal overflow on tested routes. Exact 375, 768, 1280, and 1920 screenshots; full keyboard-only purchase flow; screen-reader smoke testing; and measured WCAG AA contrast remain required on the final public deployment. No unsupported claim is made.
+Official Chrome visual QA passed at 1680 x 867 and at 375 x 812 for the changed flows, with no horizontal overflow on tested routes. Exact 768, 1280, and 1920 screenshots; full keyboard-only purchase flow; screen-reader smoke testing; and measured WCAG AA contrast remain required on the final public deployment. No unsupported claim is made.
 
 ## 6. SEO and metadata
 
@@ -149,7 +152,12 @@ The former placeholder Instagram action now points to the published `place.in.th
 
 ### NEEDS OWNER ACTION — contradictory/missing business facts
 
-The live Intro Pack is $94.99 and says “15% discount,” while its listed components total $120 at current live prices; $94.99 is about 20.84% below $120. Correct the live price, contents, or wording in Shopify.
+The supplied PDFs, their embedded menu artwork, and the live Shopify catalog conflict in the following places:
+
+- The meal PDF's typed item pages agree with current Shopify prices, but the embedded three-menu artwork shows Carne Asada at $20 instead of the typed/live $22; Chicken Balsamic Salad at $16 instead of $16.50; Cajun Chicken at $17 instead of $17.50; Chicken Chickpea Pasta at $16 instead of $16.50; and Southwest Chicken Salad at $15 instead of $16. The artwork also calls the $15.50 Menu #1 item “High Protein Kale Salad,” while the typed page and live product call it “Chickpea Salad.” Confirm that the typed pages/live catalog are the approved source before revising marketing artwork.
+- Shopify exposes a `Weekly Meal Package (Rotating 3-Menu Cycle)` at $95, while the approved meal-plan requirement is a $120 minimum for each configured week. Confirm whether that parent product should be retired, repriced, or used only by the subscription backend.
+- The Juice Bundles PDF and live catalog both price the Intro Pack at $94.99 and label it “15% discount,” but the listed components total $120 at current standalone prices. The displayed price is about 20.84% below that total, not 15%; correct the price, contents, or claim in Shopify and the source document.
+- The remaining fixed juice-bundle prices match the PDF ($89.99, $121.50, $183.50, and $199). Their same-title weekly parent plans repeat those already-discounted live bundle prices without an additional 10% adjustment. Confirm whether that is the intended fixed-bundle subscription price; the separate custom Pick n' Choose weekly plans do carry the exact 10% adjustment.
 
 No structured bottle-count rule exists for Pick n' Choose, so code safely enforces the live $134.99 spend threshold and does not invent a count. Supply a min/max count if one is intended.
 
@@ -185,14 +193,14 @@ Run Lighthouse on the final public home, juices/category, and product-detail pag
 
 1. **Activate commerce:** choose an active Shopify plan, configure/verify the payment provider and financial account, then complete a real order, refund, and failure-path test.
 2. **Choose the subscription source of truth:** decide which installed app owns plans/contracts and finish its setup without breaking existing contracts.
-3. **Automate meal rotation:** implement and prove actual A -> B -> C future-contract line rotation.
-4. **Enforce juice terms:** confirm the $134.99 weekly minimum source, enforce four successful billing cycles, and publish cancellation/renewal terms.
-5. **Define pricing:** approve standalone versus meal-plan prices/discounts and configure live selling-plan adjustments.
-6. **Resolve bundles:** fix the Intro Pack price/discount/content mismatch; supply Pick n' Choose count rules if intended; decide whether fixed bundles stay one-time or recur; confirm component/inventory behavior.
+3. **Complete meal-plan scheduling:** the storefront now requires separate Week 1, Week 2, and Week 3 selections at a $120 minimum each; implement and prove the remaining A -> B -> C future-contract rotation without charging all three batches every week.
+4. **Finish the documented juice contract:** confirm the $134.99 retail-before-discount minimum source, offer four-week prepaid and weekly-billed choices, enforce four successful cycles, and publish cancellation/renewal terms. The exact 10% adjustment is configured.
+5. **Define pricing:** resolve the meal artwork/live-price conflicts and the $95 rotating-package role; approve standalone versus subscription pricing and selling-plan adjustments.
+6. **Confirm bundle economics:** the fixed-bundle parent plans and one-time paths are configured; decide whether subscriptions should repeat the already-discounted parent price or receive an additional adjustment, fix the Intro Pack price/discount/content mismatch, supply Pick n' Choose count rules if intended, and confirm component/inventory behavior.
 7. **Configure fulfillment:** approve shipping zones/rates, taxes, service area, Sunday windows, and cutoff wording; enable/configure local pickup or explicitly withdraw it; supply the pickup address/instructions.
 8. **Approve catalog facts:** product types, week tags, publication, inventory, nutrition/heating, health/ingredient/preservative claims, and the rotating package product's role.
 9. **Supply policies:** privacy, terms, shipping, refund, subscription cancellation/renewal, and any required dietary/allergen disclosures.
 10. **Confirm identity:** contact details, Instagram, Operation Helping Hands statements, final domain/canonicals, social image, analytics/consent, and sender addresses.
-11. **Final acceptance:** exact 375/768/1280/1920 visual QA, keyboard/screen-reader smoke tests, measured contrast, Lighthouse, public console/network review, and real one-time/subscription checkout acceptance.
+11. **Final acceptance:** exact 768/1280/1920 visual QA (375 px has passed for the changed flows), keyboard/screen-reader smoke tests, measured contrast, Lighthouse, public console/network review, and real one-time/subscription checkout acceptance.
 
 No missing product facts, reviews, discounts, plan terms, fulfillment details, or legal policies should be invented to close these items.
