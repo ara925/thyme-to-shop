@@ -1,13 +1,21 @@
 import { useMemo, useState } from 'react';
-import { ArrowRight, ImageOff, Loader2, PackageOpen, ShoppingCart, Sparkles } from 'lucide-react';
+import {
+  ArrowRight,
+  ImageOff,
+  Loader2,
+  PackageOpen,
+  RefreshCw,
+  ShoppingCart,
+  Sparkles,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useProducts } from '@/hooks/useProducts';
-import { formatPrice, type ShopifyProduct } from '@/lib/shopify';
+import { useJuiceBundleSellingPlans, useProducts } from '@/hooks/useProducts';
+import { formatPrice, type SellingPlan, type ShopifyProduct } from '@/lib/shopify';
 import { getShopifyImageSrcSet, getShopifyImageUrl } from '@/lib/images';
 import { useCartStore } from '@/stores/cartStore';
 
@@ -63,6 +71,11 @@ export const JuiceBundleCards = () => {
     isLoading: productsLoading,
     isError,
   } = useProducts(50, 'product_type:"Juice Bundle"');
+  const {
+    data: subscriptionPlans = {},
+    isLoading: plansLoading,
+    isError: plansError,
+  } = useJuiceBundleSellingPlans();
   const addItem = useCartStore((state) => state.addItem);
   const cartIsLoading = useCartStore((state) => state.isLoading);
   const [addingId, setAddingId] = useState<string | null>(null);
@@ -81,14 +94,15 @@ export const JuiceBundleCards = () => {
     return { fixedBundles: fixed, pickAndChooseBundle: pickBundle };
   }, [bundleProducts]);
 
-  const handleAddBundle = async (product: ShopifyProduct) => {
+  const handleAddBundle = async (product: ShopifyProduct, sellingPlan?: SellingPlan) => {
     const variant = getPurchasableVariant(product);
     if (!variant) {
       toast.error(`${product.node.title} is currently unavailable.`, { position: 'top-center' });
       return;
     }
 
-    setAddingId(product.node.id);
+    const actionId = `${product.node.id}:${sellingPlan ? 'subscription' : 'one-time'}`;
+    setAddingId(actionId);
     try {
       await addItem({
         product,
@@ -97,8 +111,14 @@ export const JuiceBundleCards = () => {
         price: variant.price,
         quantity: 1,
         selectedOptions: variant.selectedOptions || [],
+        sellingPlanId: sellingPlan?.id,
       });
-      toast.success(`${product.node.title} added to cart.`, { position: 'top-center' });
+      toast.success(
+        sellingPlan
+          ? `${product.node.title} weekly subscription added to cart.`
+          : `${product.node.title} added to cart.`,
+        { position: 'top-center' },
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'The bundle could not be added.', {
         position: 'top-center',
@@ -112,7 +132,7 @@ export const JuiceBundleCards = () => {
     <section
       id="juice-bundles"
       className="scroll-mt-24 bg-gradient-to-b from-background to-muted/30 py-12 md:py-20"
-      aria-busy={productsLoading}
+      aria-busy={productsLoading || plansLoading}
     >
       <div className="container">
         <div className="mx-auto max-w-6xl">
@@ -176,11 +196,11 @@ export const JuiceBundleCards = () => {
           {productsLoading ? (
             <JuiceBundleLoadingState />
           ) : isError ? (
-            <p className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-center text-sm text-destructive">
+            <p role="alert" className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-center text-sm text-destructive">
               The live bundle catalog could not be loaded. Please try again shortly.
             </p>
           ) : fixedBundles.length === 0 ? (
-            <p className="rounded-2xl border bg-card p-6 text-center text-muted-foreground">
+            <p role="status" className="rounded-2xl border bg-card p-6 text-center text-muted-foreground">
               No ready-made bundles are available right now.
             </p>
           ) : (
@@ -189,7 +209,13 @@ export const JuiceBundleCards = () => {
                 const image = product.node.images.edges[0]?.node;
                 const variant = getPurchasableVariant(product);
                 const displayPrice = variant?.price || product.node.priceRange.minVariantPrice;
-                const isAdding = addingId === product.node.id;
+                const subscriptionPlan = subscriptionPlans[product.node.id];
+                const isAddingOnce = addingId === `${product.node.id}:one-time`;
+                const isAddingSubscription = addingId === `${product.node.id}:subscription`;
+                const displayPriceText = formatPrice(
+                  displayPrice.amount,
+                  displayPrice.currencyCode,
+                );
 
                 return (
                   <Card
@@ -228,33 +254,69 @@ export const JuiceBundleCards = () => {
                       <div className="mt-5 flex flex-col items-start gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
                           <p className="text-2xl font-bold text-foreground">
-                            {formatPrice(displayPrice.amount, displayPrice.currencyCode)}
+                            {displayPriceText}
                           </p>
                           <p className="text-xs text-muted-foreground">One-time bundle</p>
                         </div>
-                        <div className="flex w-full gap-2 sm:w-auto">
-                          <Button
-                            asChild
-                            variant="outline"
-                            className="min-h-11 flex-1 rounded-full sm:flex-none"
-                          >
-                            <Link to={`/product/${encodeURIComponent(product.node.handle)}`}>Details</Link>
-                          </Button>
-                          <Button
-                            type="button"
-                            onClick={() => handleAddBundle(product)}
-                            disabled={!variant || cartIsLoading || isAdding}
-                            className="min-h-11 flex-1 rounded-full sm:flex-none"
-                            aria-label={`Add ${product.node.title} to cart`}
-                          >
-                            {isAdding ? (
-                              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-                            ) : (
-                              <ShoppingCart className="h-4 w-4" aria-hidden="true" />
-                            )}
-                            <span className="ml-2">{isAdding ? 'Adding...' : 'Add'}</span>
-                          </Button>
-                        </div>
+                      </div>
+
+                      <p role="status" aria-live="polite" className="mt-3 text-xs font-medium text-muted-foreground">
+                        {plansLoading
+                          ? 'Checking the live weekly subscription option...'
+                          : plansError
+                            ? 'The weekly subscription option could not be verified. Refresh and try again.'
+                          : subscriptionPlan
+                            ? `Subscription repeats weekly at ${displayPriceText}.`
+                            : 'Weekly subscription is unavailable for this bundle.'}
+                      </p>
+
+                      <div className="mt-4 grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+                        <Button asChild variant="outline" className="min-h-11 rounded-full">
+                          <Link to={`/product/${encodeURIComponent(product.node.handle)}`}>
+                            Details
+                          </Link>
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => handleAddBundle(product)}
+                          disabled={!variant || cartIsLoading || isAddingOnce}
+                          className="min-h-11 rounded-full"
+                          aria-label={`Add ${product.node.title} to cart one time`}
+                        >
+                          {isAddingOnce ? (
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <ShoppingCart className="h-4 w-4" aria-hidden="true" />
+                          )}
+                          <span className="ml-2">{isAddingOnce ? 'Adding...' : 'One-time'}</span>
+                        </Button>
+                        <Button
+                          type="button"
+                          onClick={() => {
+                            if (subscriptionPlan) {
+                              void handleAddBundle(product, subscriptionPlan);
+                            }
+                          }}
+                          disabled={
+                            !variant ||
+                            !subscriptionPlan ||
+                            plansLoading ||
+                            plansError ||
+                            cartIsLoading ||
+                            isAddingSubscription
+                          }
+                          className="min-h-11 rounded-full sm:col-span-2"
+                          aria-label={`Subscribe weekly to ${product.node.title}`}
+                        >
+                          {isAddingSubscription ? (
+                            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                          )}
+                          <span className="ml-2">
+                            {isAddingSubscription ? 'Adding...' : 'Subscribe weekly'}
+                          </span>
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>

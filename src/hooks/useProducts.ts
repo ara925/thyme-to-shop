@@ -18,13 +18,95 @@ export interface SellingPlanProductEdge {
   };
 }
 
+export interface JuiceBundleSellingPlanProductEdge extends SellingPlanProductEdge {
+  node: SellingPlanProductEdge['node'] & {
+    title: string;
+    productType: string;
+  };
+}
+
 interface SellingPlansQueryData {
   products: {
     edges: SellingPlanProductEdge[];
   };
 }
 
+interface JuiceBundleSellingPlansQueryData {
+  products: {
+    edges: JuiceBundleSellingPlanProductEdge[];
+  };
+}
+
 export type SellingPlansByProductId = Record<string, SellingPlan>;
+
+export const JUICE_BUNDLE_PRODUCT_QUERY = 'product_type:"Juice Bundle"';
+
+export const JUICE_BUNDLE_SELLING_PLANS_QUERY = `
+  query GetJuiceBundleSellingPlans($first: Int!, $query: String) {
+    products(first: $first, query: $query) {
+      edges {
+        node {
+          id
+          title
+          productType
+          sellingPlanGroups(first: 20) {
+            edges {
+              node {
+                name
+                options {
+                  name
+                  values
+                }
+                sellingPlans(first: 10) {
+                  edges {
+                    node {
+                      id
+                      name
+                      description
+                      options {
+                        name
+                        value
+                      }
+                      priceAdjustments {
+                        adjustmentValue {
+                          __typename
+                          ... on SellingPlanPercentagePriceAdjustment {
+                            percentage: adjustmentPercentage
+                          }
+                          ... on SellingPlanFixedAmountPriceAdjustment {
+                            adjustmentAmount {
+                              amount
+                              currencyCode
+                            }
+                          }
+                        }
+                      }
+                      recurringDeliveries
+                      billingPolicy {
+                        __typename
+                        ... on SellingPlanRecurringBillingPolicy {
+                          interval
+                          intervalCount
+                        }
+                      }
+                      deliveryPolicy {
+                        __typename
+                        ... on SellingPlanRecurringDeliveryPolicy {
+                          interval
+                          intervalCount
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
 
 export function normalizeSellingPlanGroupName(name: string): string {
   return name
@@ -90,6 +172,37 @@ export function resolveSellingPlansByProduct(
   }, {});
 }
 
+export function resolveJuiceBundleSellingPlans(
+  products: JuiceBundleSellingPlanProductEdge[],
+): SellingPlansByProductId {
+  return products.reduce<SellingPlansByProductId>((plansByProduct, product) => {
+    const { id, productType, title } = product.node;
+    const groups = product.node.sellingPlanGroups?.edges || [];
+    const normalizedTitle = normalizeSellingPlanGroupName(title);
+
+    if (
+      productType !== 'Juice Bundle' ||
+      !normalizedTitle ||
+      groups.length !== 1 ||
+      normalizeSellingPlanGroupName(groups[0].node.name) !== normalizedTitle
+    ) {
+      return plansByProduct;
+    }
+
+    const plans = groups[0].node.sellingPlans.edges;
+    if (
+      plans.length !== 1
+      || !isWeeklyRecurringPlan(plans[0].node)
+      || plans[0].node.priceAdjustments.length !== 0
+    ) {
+      return plansByProduct;
+    }
+
+    plansByProduct[id] = plans[0].node;
+    return plansByProduct;
+  }, {});
+}
+
 export function useProducts(first: number = 50, query?: string) {
   return useQuery({
     queryKey: ['products', first, query],
@@ -139,6 +252,20 @@ export function useSellingPlans(productQuery: string, exactGroupName: string) {
       return resolveSellingPlansByProduct(response.data.products.edges, exactGroupName);
     },
     enabled: Boolean(productQuery && normalizedGroupName),
+    retry: false,
+  });
+}
+
+export function useJuiceBundleSellingPlans() {
+  return useQuery({
+    queryKey: ['sellingPlans', 'juice-bundle-parent-title'],
+    queryFn: async (): Promise<SellingPlansByProductId> => {
+      const response = await storefrontApiRequest<JuiceBundleSellingPlansQueryData>(
+        JUICE_BUNDLE_SELLING_PLANS_QUERY,
+        { first: 50, query: JUICE_BUNDLE_PRODUCT_QUERY },
+      );
+      return resolveJuiceBundleSellingPlans(response.data.products.edges);
+    },
     retry: false,
   });
 }

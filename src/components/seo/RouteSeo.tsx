@@ -25,7 +25,7 @@ const ROUTE_METADATA: Record<string, RouteMetadata> = {
   },
   '/juices/pick-and-choose': {
     title: 'Pick n’ Choose | Place in Thyme',
-    description: 'Build a custom recurring juice bundle from eligible live Place in Thyme products and prices.',
+    description: 'Build a one-time custom juice bundle from eligible live Place in Thyme products and prices.',
   },
   '/subscribe/meals': {
     title: 'Weekly Meal Plan | Place in Thyme',

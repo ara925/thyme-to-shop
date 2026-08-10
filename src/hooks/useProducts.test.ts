@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { SELLING_PLANS_QUERY, type SellingPlan, type SellingPlanGroup } from '@/lib/shopify';
 import {
+  JUICE_BUNDLE_PRODUCT_QUERY,
+  JUICE_BUNDLE_SELLING_PLANS_QUERY,
   normalizeSellingPlanGroupName,
+  resolveJuiceBundleSellingPlans,
   resolveSellingPlansByProduct,
+  type JuiceBundleSellingPlanProductEdge,
   type SellingPlanProductEdge,
 } from './useProducts';
 
@@ -40,6 +44,22 @@ function createProduct(id: string, groups: SellingPlanGroup[]): SellingPlanProdu
   return {
     node: {
       id,
+      sellingPlanGroups: { edges: groups.map(group => ({ node: group })) },
+    },
+  };
+}
+
+function createBundleProduct(
+  id: string,
+  title: string,
+  groups: SellingPlanGroup[],
+  productType = 'Juice Bundle',
+): JuiceBundleSellingPlanProductEdge {
+  return {
+    node: {
+      id,
+      title,
+      productType,
       sellingPlanGroups: { edges: groups.map(group => ({ node: group })) },
     },
   };
@@ -150,5 +170,110 @@ describe('selling-plan group resolution', () => {
 
     expect(() => resolveSellingPlansByProduct(products, groupName))
       .toThrow('must bill and deliver every week');
+  });
+});
+
+describe('juice bundle parent selling-plan resolution', () => {
+  it('queries only Juice Bundle products and includes the title and cadence fields', () => {
+    expect(JUICE_BUNDLE_PRODUCT_QUERY).toBe('product_type:"Juice Bundle"');
+    expect(JUICE_BUNDLE_SELLING_PLANS_QUERY).toContain('title');
+    expect(JUICE_BUNDLE_SELLING_PLANS_QUERY).toContain('productType');
+    expect(JUICE_BUNDLE_SELLING_PLANS_QUERY).toContain('billingPolicy {');
+    expect(JUICE_BUNDLE_SELLING_PLANS_QUERY).toContain('deliveryPolicy {');
+  });
+
+  it('returns each exact same-title weekly plan independently', () => {
+    const introPlan = createPlan('intro-weekly');
+    const shotPlan = createPlan('shot-weekly');
+    const products = [
+      createBundleProduct(
+        'intro',
+        'Intro Pack Bundle',
+        [createGroup('  INTRO PACK BUNDLE  ', [introPlan])],
+      ),
+      createBundleProduct(
+        'shots',
+        'Shot Bundle',
+        [createGroup('Shot Bundle', [shotPlan])],
+      ),
+    ];
+
+    expect(resolveJuiceBundleSellingPlans(products)).toEqual({
+      intro: introPlan,
+      shots: shotPlan,
+    });
+  });
+
+  it('excludes Pick n Choose when its parent product has no selling-plan group', () => {
+    const products = [createBundleProduct('pick', "Pick n' Choose Bundle", [])];
+
+    expect(resolveJuiceBundleSellingPlans(products)).toEqual({});
+  });
+
+  it.each([
+    [
+      'the product type is not Juice Bundle',
+      createBundleProduct('intro', 'Intro Pack Bundle', [
+        createGroup('Intro Pack Bundle', [createPlan('weekly')]),
+      ], 'Juice'),
+    ],
+    [
+      'the only group does not exactly match the product title',
+      createBundleProduct('intro', 'Intro Pack Bundle', [
+        createGroup('Intro Pack Subscription', [createPlan('weekly')]),
+      ]),
+    ],
+    [
+      'the product has more than one group',
+      createBundleProduct('intro', 'Intro Pack Bundle', [
+        createGroup('Intro Pack Bundle', [createPlan('weekly')]),
+        createGroup('Legacy plan', [createPlan('legacy')]),
+      ]),
+    ],
+    [
+      'the exact group has more than one plan',
+      createBundleProduct('intro', 'Intro Pack Bundle', [
+        createGroup('Intro Pack Bundle', [createPlan('weekly'), createPlan('other')]),
+      ]),
+    ],
+    [
+      'the plan is not billed weekly',
+      createBundleProduct('intro', 'Intro Pack Bundle', [
+        createGroup('Intro Pack Bundle', [createPlan('monthly', {
+          billingPolicy: {
+            __typename: 'SellingPlanRecurringBillingPolicy',
+            interval: 'MONTH',
+            intervalCount: 1,
+          },
+        })]),
+      ]),
+    ],
+    [
+      'the plan is not delivered weekly',
+      createBundleProduct('intro', 'Intro Pack Bundle', [
+        createGroup('Intro Pack Bundle', [createPlan('monthly-delivery', {
+          deliveryPolicy: {
+            __typename: 'SellingPlanRecurringDeliveryPolicy',
+            interval: 'MONTH',
+            intervalCount: 1,
+          },
+        })]),
+      ]),
+    ],
+    [
+      'the plan changes the parent bundle price',
+      createBundleProduct('intro', 'Intro Pack Bundle', [
+        createGroup('Intro Pack Bundle', [createPlan('discounted', {
+          priceAdjustments: [{
+            adjustmentValue: {
+              __typename: 'SellingPlanPercentagePriceAdjustment',
+              percentage: 10,
+            },
+          }],
+        })]),
+      ]),
+    ],
+  ])('fails closed per product when %s', (_case, product) => {
+    expect(resolveJuiceBundleSellingPlans([product])).toEqual({});
   });
 });

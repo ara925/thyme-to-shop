@@ -76,7 +76,7 @@ const Juices = () => {
               Individual juices, shots, and teas
             </h2>
             <p className="mt-3 text-muted-foreground">
-              Add any available item on its own, or open Pick n&apos; Choose to create a recurring custom bundle.
+              Add any available item on its own, or open Pick n&apos; Choose to build a one-time custom bundle.
             </p>
           </div>
           <ProductGrid
