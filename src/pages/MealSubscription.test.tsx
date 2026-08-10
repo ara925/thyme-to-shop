@@ -1,10 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SellingPlan, ShopifyProduct } from '@/lib/shopify';
+import { parseMoneyAmountToCents } from '@/lib/mealRotation';
 import MealSubscription from './MealSubscription';
 
 const mocks = vi.hoisted(() => ({
-  addItems: vi.fn(),
   useProducts: vi.fn(),
   useSellingPlans: vi.fn(),
 }));
@@ -18,16 +18,13 @@ vi.mock('@/hooks/useProducts', () => ({
   useSellingPlans: mocks.useSellingPlans,
 }));
 
-vi.mock('@/stores/cartStore', () => ({
-  useCartStore: (selector: (state: { addItems: typeof mocks.addItems; isLoading: boolean }) => unknown) =>
-    selector({ addItems: mocks.addItems, isLoading: false }),
-}));
-
-vi.mock('sonner', () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
-}));
-
-function createProduct(): ShopifyProduct {
+function createProduct({
+  amount = '120.00',
+  availableForSale = true,
+}: {
+  amount?: string;
+  availableForSale?: boolean;
+} = {}): ShopifyProduct {
   return {
     node: {
       id: 'meal-product',
@@ -36,7 +33,7 @@ function createProduct(): ShopifyProduct {
       handle: 'weekly-meal',
       productType: 'Meal',
       tags: ['week-a', 'week-b', 'week-c'],
-      priceRange: { minVariantPrice: { amount: '120.00', currencyCode: 'USD' } },
+      priceRange: { minVariantPrice: { amount, currencyCode: 'USD' } },
       images: { edges: [] },
       options: [{ name: 'Title', values: ['Default Title'] }],
       variants: {
@@ -44,8 +41,8 @@ function createProduct(): ShopifyProduct {
           node: {
             id: 'meal-variant',
             title: 'Default Title',
-            price: { amount: '120.00', currencyCode: 'USD' },
-            availableForSale: true,
+            price: { amount, currencyCode: 'USD' },
+            availableForSale,
             requiresComponents: false,
             selectedOptions: [],
           },
@@ -64,11 +61,32 @@ const weeklyPlan: SellingPlan = {
   recurringDeliveries: true,
 };
 
+const switchToWeek = (weekNumber: number) => {
+  fireEvent.mouseDown(screen.getByRole('tab', { name: new RegExp(`week ${weekNumber}`, 'i') }), { button: 0 });
+};
+
+const addOneMealToWeek = (weekNumber: number) => {
+  switchToWeek(weekNumber);
+  fireEvent.click(screen.getByRole('button', { name: new RegExp(`add one weekly meal to week ${weekNumber}`, 'i') }));
+};
+
+describe('parseMoneyAmountToCents', () => {
+  it('converts and rounds Shopify decimal strings without accumulating floating-point totals', () => {
+    expect(parseMoneyAmountToCents('120')).toBe(12000);
+    expect(parseMoneyAmountToCents('39.99')).toBe(3999);
+    expect(parseMoneyAmountToCents('19.995')).toBe(2000);
+    expect(parseMoneyAmountToCents('not-a-price')).toBeNull();
+  });
+});
+
 describe('MealSubscription', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.addItems.mockResolvedValue(undefined);
-    mocks.useProducts.mockReturnValue({ data: [createProduct()], isLoading: false });
+    mocks.useProducts.mockReturnValue({
+      data: [createProduct()],
+      isLoading: false,
+      isError: false,
+    });
     mocks.useSellingPlans.mockReturnValue({
       data: { 'meal-product': weeklyPlan },
       isLoading: false,
@@ -76,56 +94,73 @@ describe('MealSubscription', () => {
     });
   });
 
-  it('adds only the selected menu as one weekly attributed batch', async () => {
+  it('collects all three independent weeks and produces a complete prefilled rotation request', () => {
     render(<MealSubscription />);
 
     expect(mocks.useSellingPlans).toHaveBeenCalledWith(
       'product_type:Meal',
       'Weekly Meal Subscription - $120 Minimum',
     );
-    fireEvent.click(screen.getByRole('button', { name: /add one weekly meal to week 1/i }));
-    fireEvent.click(screen.getByRole('button', { name: /add weekly meal selection to cart/i }));
 
-    await waitFor(() => expect(mocks.addItems).toHaveBeenCalledTimes(1));
-    expect(mocks.addItems).toHaveBeenCalledWith([expect.objectContaining({
-      variantId: 'meal-variant',
-      price: { amount: '120.00', currencyCode: 'USD' },
-      quantity: 1,
-      sellingPlanId: 'weekly-meal-plan',
-      attributes: expect.arrayContaining([
-        { key: 'Menu Week', value: 'Week 1' },
-        { key: '_minimum_group', value: 'meal-plan:week-a' },
-        { key: '_minimum_cents', value: '12000' },
-      ]),
-    })]);
+    addOneMealToWeek(1);
+    addOneMealToWeek(2);
+    addOneMealToWeek(3);
+
+    const summary = screen.getByRole('region', { name: /three-week rotation summary/i });
+    expect(within(summary).getByText(/week 1 → week 2 → week 3 → repeat/i)).toBeInTheDocument();
+    expect(within(summary).getAllByText('$120.00')).toHaveLength(3);
+    expect(within(summary).getAllByText(/1 × weekly meal/i)).toHaveLength(3);
+
+    const requestLink = within(summary).getByRole('link', { name: /request this three-week rotation/i });
+    const decodedHref = decodeURIComponent(requestLink.getAttribute('href') || '');
+    expect(decodedHref).toContain('mailto:info@placeinthyme.com');
+    expect(decodedHref).toContain('Week 1 - $120.00');
+    expect(decodedHref).toContain('Week 2 - $120.00');
+    expect(decodedHref).toContain('Week 3 - $120.00');
+    expect(decodedHref).toContain('1 x Weekly Meal at $120.00 each');
+    expect(decodedHref).toContain('Week 1 -> Week 2 -> Week 3 -> repeat');
   });
 
-  it('preserves selections but blocks checkout when they span multiple menu weeks', () => {
+  it('preserves each week while switching tabs and requires every week to meet the minimum', () => {
     render(<MealSubscription />);
 
-    fireEvent.click(screen.getByRole('button', { name: /add one weekly meal to week 1/i }));
-    fireEvent.mouseDown(screen.getByRole('tab', { name: /week 2/i }), { button: 0 });
-    fireEvent.click(screen.getByRole('button', { name: /add one weekly meal to week 2/i }));
+    addOneMealToWeek(1);
+    addOneMealToWeek(2);
+    switchToWeek(1);
 
-    expect(screen.getByText(/choose exactly one menu week/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /add weekly meal selection to cart/i })).toBeDisabled();
-    expect(mocks.addItems).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: /remove one weekly meal from week 1/i })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /complete all three weeks to request/i })).toBeDisabled();
+    expect(screen.queryByRole('link', { name: /request this three-week rotation/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/complete all three menus at \$120.00 or more per week/i)).toBeInTheDocument();
   });
 
-  it('discloses that the selected menu repeats without automatic rotation', () => {
+  it('does not send ordinary weekly selling plans to cart and explains the Shopify limitation', () => {
     render(<MealSubscription />);
 
-    expect(screen.getByText(/selected menu and quantities repeat every week/i)).toBeInTheDocument();
-    expect(screen.getByText(/automatic a\/b\/c menu rotation is not configured in shopify/i)).toBeInTheDocument();
+    expect(screen.getByText(/will not add three weekly sets to your cart/i)).toBeInTheDocument();
+    expect(screen.getByText(/those plans do not alternate the three menus/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add.*cart/i })).not.toBeInTheDocument();
   });
 
-  it('fails closed when the exact live selling-plan group is absent', () => {
+  it('still allows planning when no standard selling plan exists, without pretending checkout works', () => {
     mocks.useSellingPlans.mockReturnValue({ data: {}, isLoading: false, isError: false });
     render(<MealSubscription />);
 
-    expect(screen.getByText(/adding a one-time order is disabled/i)).toBeInTheDocument();
+    expect(screen.getByText(/automated three-week rotation is not available in checkout yet/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add one weekly meal to week 1/i })).toBeEnabled();
+  });
+
+  it('keeps sold-out meals visible but prevents selecting them', () => {
+    mocks.useProducts.mockReturnValue({
+      data: [createProduct({ availableForSale: false })],
+      isLoading: false,
+      isError: false,
+    });
+    render(<MealSubscription />);
+
+    expect(screen.getByText(/sold out/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add one weekly meal to week 1/i })).toBeDisabled();
-    expect(mocks.addItems).not.toHaveBeenCalled();
+    expect(screen.queryByRole('link', { name: /request this three-week rotation/i })).not.toBeInTheDocument();
   });
 
   it('uses accessible layout-preserving skeletons while meal products load', () => {
