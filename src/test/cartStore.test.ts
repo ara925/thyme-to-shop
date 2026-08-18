@@ -36,6 +36,7 @@ import {
   type CartItem,
   type CartItemInput,
   useCartStore,
+  validateCartBundleDependencies,
   validateCartMinimums,
 } from '@/stores/cartStore';
 
@@ -168,6 +169,24 @@ function setCartState(serverCart: ShopifyCart) {
   });
 }
 
+function cartItem(
+  lineId: string,
+  subtotal: string,
+  attributes: CartAttribute[] = [],
+  quantity = input.quantity,
+  unitAmount = subtotal,
+  currencyCode = 'USD',
+): CartItem {
+  return {
+    ...input,
+    lineId,
+    price: { amount: unitAmount, currencyCode },
+    lineSubtotal: { amount: subtotal, currencyCode },
+    quantity,
+    attributes,
+  };
+}
+
 describe('Shopify cart mutation warning contract', () => {
   it.each([
     ['create', CART_CREATE_MUTATION],
@@ -208,6 +227,152 @@ describe('cart purchase minimums', () => {
     expect(() => validateCartMinimums([minimumItem('line-a', '134.50')])).toThrow(
       "Pick n' Choose Bundle needs $0.49 more before checkout.",
     );
+  });
+});
+
+describe('cart bundle dependencies', () => {
+  const primary = (instance: string): CartAttribute[] => [
+    { key: '_bundle_instance', value: instance },
+    { key: '_bundle_role', value: 'primary' },
+  ];
+  const addOn = (instance: string): CartAttribute[] => [
+    { key: '_bundle_instance', value: instance },
+    { key: '_bundle_role', value: 'add-on' },
+    { key: '_bundle_add_on_type', value: 'hibiscus-tea' },
+  ];
+
+  it('accepts a fixed bundle primary with its optional add-on', () => {
+    expect(() => validateCartBundleDependencies([
+      cartItem('fixed-primary', '94.99', primary('fixed-1')),
+      cartItem('fixed-add-on', '3.00', addOn('fixed-1'), 1),
+    ])).not.toThrow();
+  });
+
+  it('accepts an exact $3 USD add-on subtotal for each selected unit', () => {
+    expect(() => validateCartBundleDependencies([
+      cartItem('fixed-primary', '94.99', primary('fixed-2')),
+      cartItem('fixed-add-on', '6.00', addOn('fixed-2'), 2, '3.00'),
+    ])).not.toThrow();
+  });
+
+  it('accepts a Pick n Choose mix whose add-on is excluded from the minimum', () => {
+    const minimumAttributes: CartAttribute[] = [
+      { key: '_minimum_group', value: 'pick-1' },
+      { key: '_minimum_cents', value: '13499' },
+      { key: '_minimum_currency', value: 'USD' },
+      { key: '_minimum_label', value: "Pick n' Choose Bundle" },
+    ];
+    const items = [
+      cartItem('pick-primary-a', '80.00', [...primary('pick-1'), ...minimumAttributes]),
+      cartItem('pick-primary-b', '55.00', [...primary('pick-1'), ...minimumAttributes]),
+      cartItem('pick-add-on', '3.00', addOn('pick-1'), 1),
+    ];
+
+    expect(() => validateCartMinimums(items)).not.toThrow();
+    expect(() => validateCartBundleDependencies(items)).not.toThrow();
+  });
+
+  it('rejects an add-on after every primary in its group is removed', () => {
+    expect(() => validateCartBundleDependencies([
+      cartItem('orphan-add-on', '3.00', addOn('orphaned'), 1),
+    ])).toThrow('An add-on must remain with its bundle');
+  });
+
+  it.each([
+    ['server unit price drift', '3.00', 1, '4.00', 'USD'],
+    ['server subtotal drift', '4.00', 1, '3.00', 'USD'],
+    ['server currency drift', '3.00', 1, '3.00', 'CAD'],
+  ] as const)('rejects %s for Hibiscus', (_case, subtotal, quantity, unitAmount, currencyCode) => {
+    expect(() => validateCartBundleDependencies([
+      cartItem('primary', '94.99', primary('price-check')),
+      cartItem(
+        'add-on',
+        subtotal,
+        addOn('price-check'),
+        quantity,
+        unitAmount,
+        currencyCode,
+      ),
+    ])).toThrow('approved $3.00 USD Hibiscus add-on price could not be verified');
+  });
+
+  it.each([
+    [
+      'missing add-on type',
+      [
+        { key: '_bundle_instance', value: 'typed-add-on' },
+        { key: '_bundle_role', value: 'add-on' },
+      ],
+      'incomplete',
+    ],
+    [
+      'unknown add-on type',
+      [
+        { key: '_bundle_instance', value: 'typed-add-on' },
+        { key: '_bundle_role', value: 'add-on' },
+        { key: '_bundle_add_on_type', value: 'unknown' },
+      ],
+      'invalid',
+    ],
+  ] as Array<[string, CartAttribute[], string]>)('rejects %s', (_case, attributes, message) => {
+    expect(() => validateCartBundleDependencies([
+      cartItem('primary', '94.99', primary('typed-add-on')),
+      cartItem('add-on', '3.00', attributes, 1),
+    ])).toThrow(message);
+  });
+
+  it('preserves ordinary lines and primary-only bundles', () => {
+    expect(() => validateCartBundleDependencies([
+      cartItem('ordinary', '10.00'),
+      cartItem('primary', '94.99', primary('primary-only')),
+    ])).not.toThrow();
+  });
+
+  it.each([
+    [
+      'missing role',
+      [{ key: '_bundle_instance', value: 'broken' }],
+      'incomplete',
+    ],
+    [
+      'missing instance',
+      [{ key: '_bundle_role', value: 'add-on' }],
+      'incomplete',
+    ],
+    [
+      'blank relationship values',
+      [
+        { key: '_bundle_instance', value: '' },
+        { key: '_bundle_role', value: '' },
+      ],
+      'incomplete',
+    ],
+    [
+      'unknown role',
+      [
+        { key: '_bundle_instance', value: 'broken' },
+        { key: '_bundle_role', value: 'extra' },
+      ],
+      'invalid',
+    ],
+    [
+      'orphaned add-on type marker',
+      [{ key: '_bundle_add_on_type', value: 'hibiscus-tea' }],
+      'incomplete',
+    ],
+    [
+      'add-on type on a primary',
+      [
+        { key: '_bundle_instance', value: 'broken' },
+        { key: '_bundle_role', value: 'primary' },
+        { key: '_bundle_add_on_type', value: 'hibiscus-tea' },
+      ],
+      'invalid',
+    ],
+  ] as Array<[string, CartAttribute[], string]>)('rejects %s metadata', (_case, attributes, message) => {
+    expect(() => validateCartBundleDependencies([
+      cartItem('broken-line', '3.00', attributes),
+    ])).toThrow(message);
   });
 });
 
@@ -532,6 +697,96 @@ describe('fulfillment confirmation and checkout', () => {
       cartId: confirmed.id,
       attributes,
     });
+  });
+
+  it('blocks checkout when Shopify returns an orphaned bundle add-on', async () => {
+    const attributes: CartAttribute[] = [
+      { key: 'Fulfillment Method', value: 'Delivery' },
+      { key: 'Preferred Dropoff Window', value: '9:00 AM – 11:00 AM' },
+    ];
+    const orphanedCart = cart({
+      attributes,
+      lines: [line({
+        lineId: 'gid://shopify/CartLine/orphan-add-on',
+        sellingPlanId: null,
+        quantity: 1,
+        unitAmount: '3.00',
+        totalAmount: '3.00',
+        attributes: [
+          { key: '_bundle_instance', value: 'removed-bundle' },
+          { key: '_bundle_role', value: 'add-on' },
+          { key: '_bundle_add_on_type', value: 'hibiscus-tea' },
+        ],
+      })],
+      subtotal: '3.00',
+    });
+    useCartStore.setState({
+      fulfillmentMethod: 'delivery',
+      deliveryWindow: '9am-11am',
+      fulfillmentAttributesConfirmed: true,
+    });
+    storefrontMocks.request.mockResolvedValueOnce({
+      data: {
+        cartAttributesUpdate: { cart: orphanedCart, userErrors: [], warnings: [] },
+      },
+    } satisfies { data: CartAttributesUpdateData });
+
+    await expect(useCartStore.getState().prepareCheckout()).rejects.toThrow(
+      'An add-on must remain with its bundle',
+    );
+    expect(useCartStore.getState().fulfillmentAttributesConfirmed).toBe(false);
+  });
+
+  it('blocks checkout when Shopify returns a changed Hibiscus add-on price', async () => {
+    const attributes: CartAttribute[] = [
+      { key: 'Fulfillment Method', value: 'Delivery' },
+      { key: 'Preferred Dropoff Window', value: '9:00 AM – 11:00 AM' },
+    ];
+    const bundleInstance = 'server-price-check';
+    const changedPriceCart = cart({
+      attributes,
+      lines: [
+        line({
+          lineId: 'gid://shopify/CartLine/bundle-primary',
+          sellingPlanId: null,
+          quantity: 1,
+          unitAmount: '94.99',
+          totalAmount: '94.99',
+          attributes: [
+            { key: '_bundle_instance', value: bundleInstance },
+            { key: '_bundle_role', value: 'primary' },
+          ],
+        }),
+        line({
+          lineId: 'gid://shopify/CartLine/changed-price-add-on',
+          sellingPlanId: null,
+          quantity: 1,
+          unitAmount: '4.00',
+          totalAmount: '4.00',
+          attributes: [
+            { key: '_bundle_instance', value: bundleInstance },
+            { key: '_bundle_role', value: 'add-on' },
+            { key: '_bundle_add_on_type', value: 'hibiscus-tea' },
+          ],
+        }),
+      ],
+      subtotal: '98.99',
+    });
+    useCartStore.setState({
+      fulfillmentMethod: 'delivery',
+      deliveryWindow: '9am-11am',
+      fulfillmentAttributesConfirmed: true,
+    });
+    storefrontMocks.request.mockResolvedValueOnce({
+      data: {
+        cartAttributesUpdate: { cart: changedPriceCart, userErrors: [], warnings: [] },
+      },
+    } satisfies { data: CartAttributesUpdateData });
+
+    await expect(useCartStore.getState().prepareCheckout()).rejects.toThrow(
+      'approved $3.00 USD Hibiscus add-on price could not be verified',
+    );
+    expect(useCartStore.getState().fulfillmentAttributesConfirmed).toBe(false);
   });
 
   it('preserves pickup and writes only the pickup-specific window key', async () => {

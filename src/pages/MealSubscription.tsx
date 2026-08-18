@@ -11,6 +11,7 @@ import { getShopifyImageUrl } from '@/lib/images';
 import { parseMoneyAmountToCents } from '@/lib/mealRotation';
 import { parseMealMinimumCents } from '@/lib/subscriptionMinimum';
 import { SubscriptionProductSkeletons } from '@/components/subscriptions/SubscriptionProductSkeletons';
+import { isCustomerFacingProduct } from '@/lib/productVisibility';
 
 const MEAL_PRODUCT_QUERY = 'product_type:Meal';
 const MEAL_SELLING_PLAN_GROUP = 'Weekly Meal Subscription - $120 Minimum';
@@ -57,6 +58,7 @@ const MealSubscription = () => {
       'week-c': [],
     };
     allProducts.forEach(product => {
+      if (!isCustomerFacingProduct(product)) return;
       const tags = product.node.tags || [];
       WEEKS.forEach(week => {
         if (tags.includes(week.tag)) grouped[week.id].push(product);
@@ -99,8 +101,13 @@ const MealSubscription = () => {
     && !productsLoading
     && !productsError,
   );
-  const hasStandardWeeklyPlans = Boolean(
-    sellingPlansByProduct && Object.keys(sellingPlansByProduct).length > 0,
+  const rotationProductIds = useMemo(() => (
+    new Set(WEEKS.flatMap(week => productsByWeek[week.id].map(product => product.node.id)))
+  ), [productsByWeek]);
+  const allRotationProductsHaveStandardWeeklyPlans = Boolean(
+    rotationProductIds.size > 0
+    && sellingPlansByProduct
+    && Array.from(rotationProductIds).every(productId => sellingPlansByProduct[productId]),
   );
 
   const requestHref = useMemo(() => {
@@ -109,8 +116,11 @@ const MealSubscription = () => {
     const lines = [
       'Hello Place in Thyme,',
       '',
-      'I would like to request this three-week meal-plan rotation:',
-      'Week 1 -> Week 2 -> Week 3 -> repeat',
+      'Please manually set up this confirmed three-week meal plan:',
+      'Rotation: Week 1 -> Week 2 -> Week 3 -> repeat',
+      'Billing: Charge only the active week\'s actual selected total, once per week.',
+      `Minimum: Each week is at least ${formatCents(MEAL_MINIMUM_CENTS)}.`,
+      'Cancellation: Cancel anytime.',
       '',
     ];
 
@@ -135,11 +145,10 @@ const MealSubscription = () => {
       0,
     );
     lines.push(`Three-week total: ${formatCents(rotationTotal)}`);
-    lines.push(`Minimum per week: ${formatCents(MEAL_MINIMUM_CENTS)}`);
     lines.push('');
-    lines.push('I understand the rotating Shopify subscription is not automated yet. Please confirm availability, the weekly billing amount, delivery schedule, and how to start.');
+    lines.push('Please reply with the first delivery date and confirm when manual enrollment is active. I understand that Shopify does not yet automate the A -> B -> C contract rotation, so the team will schedule and manage this rotation manually.');
 
-    const subject = 'Three-week meal rotation request';
+    const subject = 'Set up my three-week meal plan';
     return `mailto:${ROTATION_REQUEST_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`;
   }, [productsByWeek, requestIsReady, selections, weekTotalsCents]);
 
@@ -185,7 +194,10 @@ const MealSubscription = () => {
               <span>Planned rotation <strong>1 → 2 → 3</strong></span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
-              <span>Setup <strong>needs team confirmation</strong></span>
+              <span>Billing <strong>actual selected week total</strong></span>
+            </div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
+              <span><strong>Cancel anytime</strong></span>
             </div>
           </div>
         </div>
@@ -201,16 +213,26 @@ const MealSubscription = () => {
               Fill every menu tab. Your choices stay in place while you move between weeks, and each week must meet the {MEAL_MINIMUM_DISPLAY || 'live'} minimum.
             </p>
 
+            <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-foreground" role="note">
+              <p className="font-semibold">Confirmed plan terms</p>
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
+                <li>Choose at least {MEAL_MINIMUM_DISPLAY || 'the required minimum'} of meals for each of the three weeks.</li>
+                <li>Each week, billing is for that active menu's actual selected total—not a flat {MEAL_MINIMUM_DISPLAY || 'minimum'} charge.</li>
+                <li>The menus repeat in order: Week 1 → Week 2 → Week 3.</li>
+                <li>You may cancel anytime.</li>
+              </ul>
+            </div>
+
             <div className="mb-8 flex items-start gap-2 rounded-xl border border-accent/30 bg-accent/10 p-4 text-sm text-foreground" role="note">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
               <p>
-                <strong>Shopify setup note:</strong>{' '}
+                <strong>Manual enrollment:</strong>{' '}
                 {sellingPlansLoading
-                  ? 'We are checking the current subscription setup. '
-                  : sellingPlansError || !hasStandardWeeklyPlans
-                    ? 'The automated three-week rotation is not available in checkout yet. '
-                    : 'Standard weekly plans are present, but those plans do not alternate the three menus. '}
-                This planner will not add three weekly sets to your cart, because that would charge for all three menus every week. Complete the plan below and email it to us for confirmation.
+                  ? 'We are checking the current weekly-plan configuration. '
+                  : sellingPlansError || !allRotationProductsHaveStandardWeeklyPlans
+                    ? 'One or more meal items do not expose the expected weekly plan. '
+                    : 'Weekly plans exist for the meal items, but ordinary weekly plans cannot alternate three different menu selections. '}
+                Shopify does not yet automate the three-week contract rotation. This planner will not add all three sets to your cart, which would charge for every menu every week. Complete the plan below and send it to the team for manual enrollment and scheduling.
               </p>
               {sellingPlansLoading && <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />}
             </div>
@@ -334,11 +356,10 @@ const MealSubscription = () => {
                                   </Button>
                                   <span
                                     className="w-8 text-center font-semibold"
-                                    role="status"
-                                    aria-live="polite"
-                                    aria-atomic="true"
-                                    aria-label={`${product.node.title} quantity for ${week.label}`}
                                   >
+                                    <span className="sr-only">
+                                      {product.node.title} quantity for {week.label}:{' '}
+                                    </span>
                                     {quantity}
                                   </span>
                                   <Button
@@ -431,17 +452,17 @@ const MealSubscription = () => {
                 <Button asChild className="h-auto min-h-11 w-full whitespace-normal rounded-full bg-primary py-3 text-center leading-tight shadow-md hover:bg-primary/90" size="lg">
                   <a href={requestHref}>
                     <Mail className="mr-2 h-5 w-5" aria-hidden="true" />
-                    Request This Three-Week Rotation
+                    Send Plan for Manual Setup
                   </a>
                 </Button>
               ) : (
                 <Button disabled className="h-auto min-h-11 w-full whitespace-normal rounded-full py-3 text-center leading-tight" size="lg">
                   <Mail className="mr-2 h-5 w-5" aria-hidden="true" />
-                  Complete All Three Weeks to Request
+                  Complete All Three Weeks to Send Plan
                 </Button>
               )}
               <p className="text-xs text-muted-foreground text-center mt-3">
-                This opens a prefilled email to {ROTATION_REQUEST_EMAIL} with every selected meal and quantity. Our team will confirm availability, weekly billing, and delivery details before the plan starts.
+                This opens a prefilled email to {ROTATION_REQUEST_EMAIL} with every selected meal, the actual weekly totals, and the confirmed terms. The team will reply with the first delivery date when manual enrollment is active.
               </p>
             </div>
           </div>

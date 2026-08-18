@@ -4,6 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ArrowRight, UtensilsCrossed, GlassWater } from 'lucide-react';
 import { useProducts } from '@/hooks/useProducts';
 import { formatPrice, type ShopifyProduct } from '@/lib/shopify';
+import { isCustomerFacingProduct } from '@/lib/productVisibility';
 
 function getLowestLivePrice(products: ShopifyProduct[]) {
   let lowest: ShopifyProduct['node']['priceRange']['minVariantPrice'] | undefined;
@@ -80,7 +81,7 @@ export function Categories() {
                 </Button>
                 <span className="text-sm text-muted-foreground" aria-live="polite">
                   <LiveStartingPrice
-                    products={mealQuery.data || []}
+                    products={(mealQuery.data || []).filter(isCustomerFacingProduct)}
                     isLoading={mealQuery.isLoading}
                     isError={mealQuery.isError}
                     unit="meal"
@@ -109,7 +110,7 @@ export function Categories() {
                 </Button>
                 <span className="text-sm text-muted-foreground" aria-live="polite">
                   <LiveStartingPrice
-                    products={juiceQuery.data || []}
+                    products={(juiceQuery.data || []).filter(isCustomerFacingProduct)}
                     isLoading={juiceQuery.isLoading}
                     isError={juiceQuery.isError}
                     unit="bottle"

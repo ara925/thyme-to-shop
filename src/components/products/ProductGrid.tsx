@@ -1,4 +1,5 @@
 import { ShopifyProduct } from '@/lib/shopify';
+import { isCustomerFacingProduct } from '@/lib/productVisibility';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ProductCard } from './ProductCard';
 
@@ -67,7 +68,9 @@ export function ProductGrid({
     );
   }
 
-  if (products.length === 0) {
+  const customerFacingProducts = products.filter(isCustomerFacingProduct);
+
+  if (customerFacingProducts.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-center">
         <p className="text-lg text-muted-foreground">{emptyMessage}</p>
@@ -80,7 +83,7 @@ export function ProductGrid({
 
   return (
     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      {products.map((product) => (
+      {customerFacingProducts.map((product) => (
         <ProductCard key={product.node.id} product={product} />
       ))}
     </div>

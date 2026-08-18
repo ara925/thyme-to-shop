@@ -21,7 +21,13 @@ const Juices = () => {
     () =>
       allJuices.filter((product) => {
         const tags = product.node.tags || [];
-        return product.node.productType === 'Juice' && tags.includes(currentWeek);
+        const isComponentOnly = product.node.variants.edges.length > 0
+          && product.node.variants.edges.every(({ node: variant }) => variant.requiresComponents);
+        return (
+          product.node.productType === 'Juice'
+          && tags.includes(currentWeek)
+          && !isComponentOnly
+        );
       }),
     [allJuices, currentWeek],
   );

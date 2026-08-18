@@ -16,6 +16,15 @@ const staticRoutes = [
   '/about',
   '/how-it-works',
 ];
+const excludedProductHandles = new Set([
+  // These products are routed to an approved category or planner instead of
+  // having a customer-facing product-detail page.
+  'weekly-meal-package-rotating-3-menu-cycle',
+  'hibiscus-tea-sweetened',
+  'hibiscus-tea-add-on',
+  // Pick n' Choose has a dedicated builder route.
+  'pick-n-choose-bundle',
+]);
 
 const response = await fetch(`https://${storeDomain}/api/${apiVersion}/graphql.json`, {
   method: 'POST',
@@ -52,7 +61,7 @@ const productRoutes = (payload.data?.products?.edges || [])
   .map(({ node }) => node)
   .filter((node) => {
     if (!node || typeof node.handle !== 'string' || node.handle.length === 0) return false;
-    if (node.handle === 'pick-n-choose-bundle') return false;
+    if (excludedProductHandles.has(node.handle.trim().toLowerCase())) return false;
     return (node.variants?.edges || []).some(({ node: variant }) => !variant.requiresComponents);
   })
   .map((node) => node.handle)

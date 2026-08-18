@@ -94,7 +94,7 @@ describe('MealSubscription', () => {
     });
   });
 
-  it('collects all three independent weeks and produces a complete prefilled rotation request', () => {
+  it('collects all three independent weeks and produces a complete manual-enrollment handoff', () => {
     render(<MealSubscription />);
 
     expect(mocks.useSellingPlans).toHaveBeenCalledWith(
@@ -111,14 +111,47 @@ describe('MealSubscription', () => {
     expect(within(summary).getAllByText('$120.00')).toHaveLength(3);
     expect(within(summary).getAllByText(/1 × weekly meal/i)).toHaveLength(3);
 
-    const requestLink = within(summary).getByRole('link', { name: /request this three-week rotation/i });
+    expect(screen.getByText(/each week, billing is for that active menu's actual selected total/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/cancel anytime/i).length).toBeGreaterThan(0);
+
+    const requestLink = within(summary).getByRole('link', { name: /send plan for manual setup/i });
     const decodedHref = decodeURIComponent(requestLink.getAttribute('href') || '');
     expect(decodedHref).toContain('mailto:info@placeinthyme.com');
+    expect(decodedHref).toContain('Set up my three-week meal plan');
+    expect(decodedHref).toContain("Billing: Charge only the active week's actual selected total, once per week.");
+    expect(decodedHref).toContain('Cancellation: Cancel anytime.');
     expect(decodedHref).toContain('Week 1 - $120.00');
     expect(decodedHref).toContain('Week 2 - $120.00');
     expect(decodedHref).toContain('Week 3 - $120.00');
     expect(decodedHref).toContain('1 x Weekly Meal at $120.00 each');
-    expect(decodedHref).toContain('Week 1 -> Week 2 -> Week 3 -> repeat');
+    expect(decodedHref).toContain('Rotation: Week 1 -> Week 2 -> Week 3 -> repeat');
+    expect(decodedHref).not.toContain('Please confirm availability, the weekly billing amount');
+  });
+
+  it('hands off each actual selected weekly total instead of replacing it with a flat minimum', () => {
+    mocks.useProducts.mockReturnValue({
+      data: [createProduct({ amount: '65.00' })],
+      isLoading: false,
+      isError: false,
+    });
+    render(<MealSubscription />);
+
+    addOneMealToWeek(1);
+    addOneMealToWeek(1);
+    addOneMealToWeek(2);
+    addOneMealToWeek(2);
+    addOneMealToWeek(2);
+    addOneMealToWeek(3);
+    addOneMealToWeek(3);
+
+    const summary = screen.getByRole('region', { name: /three-week rotation summary/i });
+    const requestLink = within(summary).getByRole('link', { name: /send plan for manual setup/i });
+    const decodedHref = decodeURIComponent(requestLink.getAttribute('href') || '');
+
+    expect(decodedHref).toContain('Week 1 - $130.00');
+    expect(decodedHref).toContain('Week 2 - $195.00');
+    expect(decodedHref).toContain('Week 3 - $130.00');
+    expect(decodedHref).toContain('Three-week total: $455.00');
   });
 
   it('preserves each week while switching tabs and requires every week to meet the minimum', () => {
@@ -129,16 +162,31 @@ describe('MealSubscription', () => {
     switchToWeek(1);
 
     expect(screen.getByRole('button', { name: /remove one weekly meal from week 1/i })).toBeEnabled();
-    expect(screen.getByRole('button', { name: /complete all three weeks to request/i })).toBeDisabled();
-    expect(screen.queryByRole('link', { name: /request this three-week rotation/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /complete all three weeks to send plan/i })).toBeDisabled();
+    expect(screen.queryByRole('link', { name: /send plan for manual setup/i })).not.toBeInTheDocument();
     expect(screen.getByText(/complete all three menus at \$120.00 or more per week/i)).toBeInTheDocument();
+  });
+
+  it('announces the changing week total without a second quantity live region', () => {
+    render(<MealSubscription />);
+
+    const addButton = screen.getByRole('button', {
+      name: /add one weekly meal to week 1/i,
+    });
+    const controls = addButton.parentElement;
+    expect(controls).not.toBeNull();
+    const quantity = within(controls as HTMLElement).getByText('0');
+
+    expect(quantity).not.toHaveAttribute('role');
+    expect(quantity).not.toHaveAttribute('aria-live');
+    expect(screen.getByRole('status')).toHaveTextContent('Week 1 Total: $0.00');
   });
 
   it('does not send ordinary weekly selling plans to cart and explains the Shopify limitation', () => {
     render(<MealSubscription />);
 
-    expect(screen.getByText(/will not add three weekly sets to your cart/i)).toBeInTheDocument();
-    expect(screen.getByText(/those plans do not alternate the three menus/i)).toBeInTheDocument();
+    expect(screen.getByText(/will not add all three sets to your cart/i)).toBeInTheDocument();
+    expect(screen.getByText(/ordinary weekly plans cannot alternate three different menu selections/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /add.*cart/i })).not.toBeInTheDocument();
   });
 
@@ -146,7 +194,7 @@ describe('MealSubscription', () => {
     mocks.useSellingPlans.mockReturnValue({ data: {}, isLoading: false, isError: false });
     render(<MealSubscription />);
 
-    expect(screen.getByText(/automated three-week rotation is not available in checkout yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/one or more meal items do not expose the expected weekly plan/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add one weekly meal to week 1/i })).toBeEnabled();
   });
 
@@ -160,7 +208,7 @@ describe('MealSubscription', () => {
 
     expect(screen.getByText(/sold out/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /add one weekly meal to week 1/i })).toBeDisabled();
-    expect(screen.queryByRole('link', { name: /request this three-week rotation/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /send plan for manual setup/i })).not.toBeInTheDocument();
   });
 
   it('uses accessible layout-preserving skeletons while meal products load', () => {

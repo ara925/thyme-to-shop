@@ -38,12 +38,14 @@ function createProduct({
   amount = '134.99',
   description = liveDescription,
   availableForSale = true,
+  requiresComponents = false,
 }: {
   id?: string;
   title?: string;
   amount?: string;
   description?: string;
   availableForSale?: boolean;
+  requiresComponents?: boolean;
 } = {}): ShopifyProduct {
   return {
     node: {
@@ -63,7 +65,7 @@ function createProduct({
             title: 'Default Title',
             price: { amount, currencyCode: 'USD' },
             availableForSale,
-            requiresComponents: false,
+            requiresComponents,
             selectedOptions: [],
           },
         }],
@@ -130,6 +132,7 @@ const weeklyPlanWithTenPercent: SellingPlan = {
   ...weeklyPlan,
   id: 'weekly-plan-with-ten-percent',
   priceAdjustments: [{
+    orderCount: null,
     adjustmentValue: {
       __typename: 'SellingPlanPercentagePriceAdjustment',
       percentage: 10,
@@ -139,6 +142,14 @@ const weeklyPlanWithTenPercent: SellingPlan = {
 
 function getPlusButton(productTitle = 'Green Cleanse 12oz'): HTMLButtonElement {
   return screen.getByRole('button', { name: `Add one ${productTitle}` });
+}
+
+function chooseWeeklyBilling(): void {
+  fireEvent.click(screen.getByRole('radio', { name: /pay weekly for four weeks/i }));
+}
+
+function choosePrepaidBilling(): void {
+  fireEvent.click(screen.getByRole('radio', { name: /prepay all four weeks/i }));
 }
 
 describe('JuiceSubscription', () => {
@@ -184,6 +195,10 @@ describe('JuiceSubscription', () => {
     expect(screen.getByText(/add \$34\.99 more to meet the \$134\.99 live weekly minimum/i)).toBeInTheDocument();
 
     fireEvent.click(getPlusButton());
+    expect(screen.getByRole('button', { name: /request this 4-week subscription/i })).toBeDisabled();
+    expect(screen.getByText(/choose a billing preference to prepare the enrollment request/i)).toBeInTheDocument();
+
+    chooseWeeklyBilling();
     expect(screen.getByRole('link', { name: /request this 4-week subscription/i })).toHaveAttribute(
       'href',
       expect.stringContaining('mailto:info@placeinthyme.com'),
@@ -199,6 +214,7 @@ describe('JuiceSubscription', () => {
 
     expect(screen.getAllByText(/\$150\.01/).length).toBeGreaterThan(0);
     fireEvent.click(getPlusButton());
+    chooseWeeklyBilling();
 
     const requestLink = screen.getByRole('link', { name: /request this 4-week subscription/i });
     const href = requestLink.getAttribute('href') || '';
@@ -208,7 +224,7 @@ describe('JuiceSubscription', () => {
     expect(body).toContain('Weekly retail total: $150.01');
     expect(body).toContain('Live weekly minimum: $150.01');
     expect(body).toContain('10% off the selected retail total and a minimum four-week commitment');
-    expect(body).toContain('weekly billing and prepaid-in-full options');
+    expect(body).toContain('Billing preference: Pay weekly for four weeks.');
     expect(mocks.addItems).not.toHaveBeenCalled();
   });
 
@@ -216,9 +232,10 @@ describe('JuiceSubscription', () => {
     render(<JuiceSubscription />);
 
     expect(screen.getByText(/weekly plan found; exact 10% adjustment missing/i)).toBeInTheDocument();
-    expect(screen.getByText(/retail prices only; it does not claim or charge an unconfigured discount/i)).toBeInTheDocument();
+    expect(screen.getByText(/retail prices only; the confirmed discount must be configured or applied during manual enrollment/i)).toBeInTheDocument();
 
     fireEvent.click(getPlusButton());
+    chooseWeeklyBilling();
     const requestLink = screen.getByRole('link', { name: /request this 4-week subscription/i });
     const body = decodeURIComponent((requestLink.getAttribute('href') || '').split('&body=')[1]);
     expect(body).toContain('Exact 10% percentage adjustment on every selected plan: No');
@@ -239,11 +256,146 @@ describe('JuiceSubscription', () => {
     fireEvent.click(getPlusButton());
     expect(screen.getByText('Estimated weekly total after verified 10%')).toBeInTheDocument();
     expect(screen.getByText('$121.49')).toBeInTheDocument();
+    choosePrepaidBilling();
+    expect(screen.getByText(/estimated four-week prepaid total: \$485\.96/i)).toBeInTheDocument();
     const requestLink = screen.getByRole('link', { name: /request this 4-week subscription/i });
     const body = decodeURIComponent((requestLink.getAttribute('href') || '').split('&body=')[1]);
     expect(body).toContain('Exact 10% percentage adjustment on every selected plan: Yes');
     expect(body).toContain('Estimated weekly total after verified 10% plan adjustment: $121.49');
+    expect(body).toContain('Estimated four-week prepaid total: $485.96');
+    expect(body).toContain('Billing preference: Prepay all four weeks.');
     expect(mocks.addItems).not.toHaveBeenCalled();
+  });
+
+  it.each([3, 4])(
+    'rejects an exact 10%% adjustment capped at %i orders for the ongoing subscription',
+    (orderCount) => {
+      mocks.useSellingPlans.mockReturnValue({
+        data: {
+          'green-cleanse': {
+            ...weeklyPlanWithTenPercent,
+            priceAdjustments: [{
+              orderCount,
+              adjustmentValue: {
+                __typename: 'SellingPlanPercentagePriceAdjustment',
+                percentage: 10,
+              },
+            }],
+          },
+        },
+        isLoading: false,
+        isError: false,
+      });
+
+      render(<JuiceSubscription />);
+
+      expect(screen.getByText(/weekly plan found; exact 10% adjustment missing/i)).toBeInTheDocument();
+      fireEvent.click(getPlusButton());
+      expect(screen.queryByText('Estimated weekly total after verified 10%')).not.toBeInTheDocument();
+    },
+  );
+
+  it('keeps Sweetened Hibiscus outside the minimum and discount as a one-time add-on', () => {
+    const green = createProduct({ amount: '134.99' });
+    const hibiscus = createProduct({
+      id: 'hibiscus',
+      title: 'Hibiscus Tea (Sweetened)',
+      amount: '3.00',
+      description: '12oz Hibiscus Tea.',
+    });
+    const componentOnly = createProduct({
+      id: 'hibiscus-component',
+      title: 'Hibiscus Tea Add-On',
+      amount: '3.00',
+      requiresComponents: true,
+    });
+    mockProductQueries([green, hibiscus, componentOnly]);
+    mocks.useSellingPlans.mockReturnValue({
+      data: { 'green-cleanse': weeklyPlanWithTenPercent },
+      isLoading: false,
+      isError: false,
+    });
+    render(<JuiceSubscription />);
+
+    expect(screen.queryByRole('button', { name: 'Add one Hibiscus Tea (Sweetened)' }))
+      .not.toBeInTheDocument();
+    const addOnButton = screen.getByRole('button', {
+      name: /add one one-time hibiscus tea add-on/i,
+    });
+    fireEvent.click(addOnButton);
+    fireEvent.click(addOnButton);
+    expect(screen.getByText(/does not count toward the \$134\.99 minimum/i)).toBeInTheDocument();
+
+    fireEvent.click(getPlusButton());
+    choosePrepaidBilling();
+    expect(screen.getByText('Weekly mix retail total')).toBeInTheDocument();
+    expect(screen.getByText(/excluded from the weekly minimum and discount/i)).toBeInTheDocument();
+    expect(screen.getByText(/estimated four-week prepaid total: \$485\.96/i)).toBeInTheDocument();
+
+    const requestLink = screen.getByRole('link', { name: /request this 4-week subscription/i });
+    const body = decodeURIComponent((requestLink.getAttribute('href') || '').split('&body=')[1]);
+    expect(body).toContain('Weekly retail total: $134.99');
+    expect(body).toContain('Estimated weekly total after verified 10% plan adjustment: $121.49');
+    expect(body).toContain('Estimated four-week prepaid total: $485.96');
+    expect(body).toContain('Optional one-time add-on: 2 x Hibiscus Tea (Sweetened) = $6.00');
+    expect(body).toContain('One-time Hibiscus add-on total: $6.00');
+    expect(body).toContain('excluded from the weekly minimum and 10% discount');
+    expect(body).toContain('Billing preference: Prepay all four weeks.');
+    expect(mocks.addItems).not.toHaveBeenCalled();
+  });
+
+  it('excludes every exact Hibiscus title from the mix when the live add-on match is ambiguous', () => {
+    const green = createProduct({ amount: '134.99' });
+    const firstHibiscus = createProduct({
+      id: 'hibiscus-one',
+      title: 'Hibiscus Tea (Sweetened)',
+      amount: '3.00',
+    });
+    const secondHibiscus = createProduct({
+      id: 'hibiscus-two',
+      title: 'Hibiscus Tea (Sweetened)',
+      amount: '3.00',
+    });
+    mockProductQueries([green, firstHibiscus, secondHibiscus]);
+    mocks.useSellingPlans.mockReturnValue({
+      data: { 'green-cleanse': weeklyPlanWithTenPercent },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<JuiceSubscription />);
+
+    expect(screen.queryByRole('button', { name: 'Add one Hibiscus Tea (Sweetened)' }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add one one-time hibiscus tea add-on/i }))
+      .not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/one exact live product could not be verified/i);
+
+    fireEvent.click(getPlusButton());
+    chooseWeeklyBilling();
+    expect(screen.getByRole('link', { name: /request this 4-week subscription/i })).toBeInTheDocument();
+  });
+
+  it('fails closed for the add-on when its live price is not exactly $3.00 USD', () => {
+    const green = createProduct({ amount: '134.99' });
+    const changedPriceHibiscus = createProduct({
+      id: 'hibiscus',
+      title: 'Hibiscus Tea (Sweetened)',
+      amount: '4.00',
+    });
+    mockProductQueries([green, changedPriceHibiscus]);
+    mocks.useSellingPlans.mockReturnValue({
+      data: { 'green-cleanse': weeklyPlanWithTenPercent },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<JuiceSubscription />);
+
+    expect(screen.getByText(/approved \$3\.00 USD add-on price could not be verified/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add one one-time hibiscus tea add-on/i })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Add one Hibiscus Tea (Sweetened)' }))
+      .not.toBeInTheDocument();
   });
 
   it('validates that each selectable product has the exact live weekly plan', () => {

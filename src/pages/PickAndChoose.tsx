@@ -15,9 +15,18 @@ import {
 } from '@/hooks/useProducts';
 import { formatPrice, type ShopifyProduct, type ShopifyVariant } from '@/lib/shopify';
 import { getShopifyImageSrcSet, getShopifyImageUrl } from '@/lib/images';
+import {
+  HIBISCUS_ADD_ON_ATTRIBUTE_VALUE,
+  HIBISCUS_ADD_ON_TITLE,
+  HIBISCUS_ADD_ON_TYPE_ATTRIBUTE,
+  hasExpectedHibiscusAddOnPrice,
+} from '@/lib/hibiscusAddOn';
+import {
+  PICK_AND_CHOOSE_BUNDLE_TITLE,
+  normalizeJuiceBundleTitle,
+  resolveJuiceBundleCatalog,
+} from '@/lib/juiceBundleCatalog';
 import { type CartItemInput, useCartStore } from '@/stores/cartStore';
-
-const PICK_AND_CHOOSE_PRODUCT_TITLE = "Pick n' Choose Bundle";
 
 export type QuantitiesByProductId = Record<string, number>;
 
@@ -33,12 +42,26 @@ export function getSelectableVariant(product: ShopifyProduct): ShopifyVariant | 
 }
 
 export function findPickAndChooseBundle(products: ShopifyProduct[]): ShopifyProduct | undefined {
-  const normalizedTitle = normalizeSellingPlanGroupName(PICK_AND_CHOOSE_PRODUCT_TITLE);
-  return products.find(
+  const normalizedTitle = normalizeJuiceBundleTitle(PICK_AND_CHOOSE_BUNDLE_TITLE);
+  const matches = products.filter(
     (product) =>
       product.node.productType === 'Juice Bundle' &&
-      normalizeSellingPlanGroupName(product.node.title) === normalizedTitle,
+      normalizeJuiceBundleTitle(product.node.title) === normalizedTitle,
   );
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+export function findHibiscusTeaAddOn(products: ShopifyProduct[]): ShopifyProduct | undefined {
+  const normalizedTitle = normalizeSellingPlanGroupName(HIBISCUS_ADD_ON_TITLE);
+  const matches = products.filter(
+    (product) =>
+      product.node.productType === 'Juice'
+      && normalizeSellingPlanGroupName(product.node.title) === normalizedTitle,
+  );
+  if (matches.length !== 1) return undefined;
+
+  const variant = getSelectableVariant(matches[0]);
+  return variant && hasExpectedHibiscusAddOnPrice(variant.price) ? matches[0] : undefined;
 }
 
 export function getEligiblePickAndChooseProducts(
@@ -47,9 +70,43 @@ export function getEligiblePickAndChooseProducts(
   return products
     .filter(
       (product) =>
-        product.node.productType === 'Juice' && Boolean(getSelectableVariant(product)),
+        product.node.productType === 'Juice'
+        && normalizeSellingPlanGroupName(product.node.title)
+          !== normalizeSellingPlanGroupName(HIBISCUS_ADD_ON_TITLE)
+        && Boolean(getSelectableVariant(product)),
     )
     .sort((left, right) => left.node.title.localeCompare(right.node.title));
+}
+
+export function buildHibiscusAddOnCartItem(
+  product: ShopifyProduct | undefined,
+  quantity: number,
+  bundleLabel: string,
+  bundleInstance: string,
+): CartItemInput | null {
+  if (!product || quantity <= 0) return null;
+  const variant = getSelectableVariant(product);
+  if (!variant) {
+    throw new Error(`${HIBISCUS_ADD_ON_TITLE} is no longer available.`);
+  }
+  if (!hasExpectedHibiscusAddOnPrice(variant.price)) {
+    throw new Error('The approved $3.00 USD Hibiscus add-on price could not be verified.');
+  }
+  return {
+    product,
+    variantId: variant.id,
+    variantTitle: variant.title,
+    price: variant.price,
+    quantity,
+    selectedOptions: variant.selectedOptions || [],
+    sellingPlanId: undefined,
+    attributes: [
+      { key: '_bundle_instance', value: bundleInstance },
+      { key: '_bundle_label', value: `Hibiscus add-on for ${bundleLabel}` },
+      { key: '_bundle_role', value: 'add-on' },
+      { key: HIBISCUS_ADD_ON_TYPE_ATTRIBUTE, value: HIBISCUS_ADD_ON_ATTRIBUTE_VALUE },
+    ],
+  };
 }
 
 export function calculateSelectionCents(
@@ -94,6 +151,7 @@ export function buildPickAndChooseCartItems(
           { key: '_minimum_cents', value: String(minimumCents) },
           { key: '_minimum_currency', value: currencyCode },
           { key: '_minimum_label', value: bundleLabel },
+          { key: '_bundle_role', value: 'primary' },
         ],
       },
     ];
@@ -173,15 +231,26 @@ const PickAndChoose = () => {
   const addItems = useCartStore((state) => state.addItems);
   const cartIsLoading = useCartStore((state) => state.isLoading);
   const [quantities, setQuantities] = useState<QuantitiesByProductId>({});
+  const [hibiscusAddOnQuantity, setHibiscusAddOnQuantity] = useState(0);
 
-  const parentBundle = useMemo(
-    () => findPickAndChooseBundle(bundleCatalog),
+  const bundleCatalogContract = useMemo(
+    () => resolveJuiceBundleCatalog(bundleCatalog),
     [bundleCatalog],
   );
+  const parentBundle = bundleCatalogContract.isValid
+    ? bundleCatalogContract.pickAndChooseBundle
+    : undefined;
   const eligibleProducts = useMemo(
     () => getEligiblePickAndChooseProducts(juiceCatalog),
     [juiceCatalog],
   );
+  const hibiscusAddOnProduct = useMemo(
+    () => findHibiscusTeaAddOn(juiceCatalog),
+    [juiceCatalog],
+  );
+  const hibiscusAddOnVariant = hibiscusAddOnProduct
+    ? getSelectableVariant(hibiscusAddOnProduct)
+    : undefined;
 
   const minimumMoney = parentBundle?.node.priceRange.minVariantPrice;
   const minimumCents = moneyToCents(minimumMoney?.amount || '0');
@@ -196,7 +265,11 @@ const PickAndChoose = () => {
   const parentAvailable = Boolean(parentVariant);
   const isLoading = juicesLoading || bundlesLoading;
   const hasConfigurationError =
-    juicesError || bundlesError || !parentBundle || minimumCents <= 0;
+    juicesError
+    || bundlesError
+    || !bundleCatalogContract.isValid
+    || !parentBundle
+    || minimumCents <= 0;
   const canAdd =
     !isLoading &&
     !hasConfigurationError &&
@@ -204,6 +277,7 @@ const PickAndChoose = () => {
     minimumCents > 0 &&
     selectedUnits > 0 &&
     selectedCents >= minimumCents &&
+    (hibiscusAddOnQuantity === 0 || Boolean(hibiscusAddOnVariant)) &&
     !cartIsLoading;
 
   const updateQuantity = (productId: string, nextQuantity: number) => {
@@ -247,9 +321,20 @@ const PickAndChoose = () => {
       );
 
       if (selectedItems.length === 0) return;
+      const addOnItem = buildHibiscusAddOnCartItem(
+        hibiscusAddOnProduct,
+        hibiscusAddOnQuantity,
+        parentBundle.node.title,
+        bundleInstance,
+      );
+      if (addOnItem) selectedItems.push(addOnItem);
       await addItems(selectedItems);
       setQuantities({});
-      toast.success(`${parentBundle.node.title} added to cart.`, { position: 'top-center' });
+      setHibiscusAddOnQuantity(0);
+      toast.success(
+        `${parentBundle.node.title}${hibiscusAddOnQuantity > 0 ? ' with Hibiscus Tea add-on' : ''} added to cart.`,
+        { position: 'top-center' },
+      );
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'The bundle could not be added.', {
         position: 'top-center',
@@ -289,7 +374,7 @@ const PickAndChoose = () => {
               ) : (
                 <>
                   <h1 className="text-4xl font-bold tracking-tight text-foreground md:text-6xl">
-                    {parentBundle?.node.title || "Pick n' Choose Bundle"}
+                    {parentBundle?.node.title || PICK_AND_CHOOSE_BUNDLE_TITLE}
                   </h1>
                   <p className="mt-4 max-w-2xl text-lg leading-relaxed text-muted-foreground">
                     {parentBundle?.node.description ||
@@ -317,7 +402,7 @@ const PickAndChoose = () => {
                 sizes="(min-width: 1024px) 40vw, 100vw"
                 alt={parentBundle.node.images.edges[0].node.altText || parentBundle.node.title}
                 className="aspect-[4/3] w-full rounded-3xl object-cover shadow-xl"
-                fetchPriority="high"
+                loading="eager"
                 decoding="async"
               />
             ) : (
@@ -337,9 +422,26 @@ const PickAndChoose = () => {
           ) : hasConfigurationError ? (
             <div role="alert" className="mx-auto max-w-2xl rounded-2xl border border-destructive/30 bg-destructive/5 p-7 text-center">
               <h2 className="text-xl font-bold text-foreground">This bundle needs a store update</h2>
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                The live bundle product or minimum could not be loaded. No substitute product or price has been applied.
-              </p>
+              {juicesError || bundlesError ? (
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  The live bundle product or minimum could not be loaded. No substitute product or price has been applied.
+                </p>
+              ) : !bundleCatalogContract.isValid ? (
+                <>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    The live Juice Bundle catalog does not match the approved setup. No substitute bundle or price has been applied.
+                  </p>
+                  <ul className="mt-4 list-disc space-y-1 pl-5 text-left text-sm text-muted-foreground">
+                    {bundleCatalogContract.issues.map((issue) => (
+                      <li key={issue}>{issue}</li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  The live bundle minimum is unavailable. No substitute price has been applied.
+                </p>
+              )}
             </div>
           ) : eligibleProducts.length === 0 ? (
             <div role="status" className="mx-auto max-w-2xl rounded-2xl border bg-card p-7 text-center">
@@ -445,6 +547,58 @@ const PickAndChoose = () => {
                     );
                   })}
                 </div>
+
+                {hibiscusAddOnProduct && hibiscusAddOnVariant && (
+                  <Card className="mt-6 border-accent/30 bg-accent/5">
+                    <CardContent className="flex flex-col items-stretch gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-[12rem] flex-1">
+                        <h3 className="font-serif text-lg font-bold text-foreground">
+                          Optional one-time Hibiscus Tea add-on
+                        </h3>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {formatPrice(hibiscusAddOnVariant.price.amount, hibiscusAddOnVariant.price.currencyCode)} each. Added once, with no selling plan, charged separately, and excluded from the {formatPrice((minimumCents / 100).toFixed(2), currencyCode)} minimum.
+                        </p>
+                      </div>
+                      <div
+                        className="flex items-center gap-2 self-end sm:self-auto"
+                        role="group"
+                        aria-label="One-time Hibiscus Tea add-on quantity"
+                      >
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-11 w-11 rounded-full"
+                          onClick={() => setHibiscusAddOnQuantity((quantity) => Math.max(0, quantity - 1))}
+                          disabled={hibiscusAddOnQuantity === 0 || cartIsLoading}
+                          aria-label="Remove one one-time Hibiscus Tea add-on"
+                        >
+                          <Minus className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                        <span className="w-8 text-center font-semibold" role="status" aria-live="polite" aria-atomic="true">
+                          <span className="sr-only">One-time Hibiscus Tea add-on quantity: </span>
+                          {hibiscusAddOnQuantity}
+                        </span>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-11 w-11 rounded-full"
+                          onClick={() => setHibiscusAddOnQuantity((quantity) => quantity + 1)}
+                          disabled={cartIsLoading}
+                          aria-label="Add one one-time Hibiscus Tea add-on"
+                        >
+                          <Plus className="h-4 w-4" aria-hidden="true" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+                {!hibiscusAddOnProduct && (
+                  <p role="status" className="mt-6 rounded-xl border border-accent/30 bg-accent/5 p-4 text-sm text-foreground">
+                    The optional $3.00 USD Hibiscus Tea add-on is currently unavailable. It remains excluded from the bundle minimum.
+                  </p>
+                )}
               </div>
 
               <aside className="rounded-3xl border bg-card p-6 shadow-lg lg:sticky lg:top-28" aria-label="Bundle summary">
@@ -481,6 +635,20 @@ const PickAndChoose = () => {
                         );
                       })}
                     </ul>
+                  )}
+
+                  {hibiscusAddOnQuantity > 0 && hibiscusAddOnVariant && (
+                    <div className="flex justify-between gap-3 rounded-xl border border-accent/30 bg-accent/5 p-3 text-sm">
+                      <span className="text-muted-foreground">
+                        {hibiscusAddOnQuantity} x one-time Hibiscus add-on
+                      </span>
+                      <span className="font-semibold">
+                        {formatPrice(
+                          ((moneyToCents(hibiscusAddOnVariant.price.amount) * hibiscusAddOnQuantity) / 100).toFixed(2),
+                          hibiscusAddOnVariant.price.currencyCode,
+                        )}
+                      </span>
+                    </div>
                   )}
 
                   <div className="border-t pt-4">

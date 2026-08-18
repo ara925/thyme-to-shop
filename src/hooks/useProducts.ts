@@ -68,6 +68,7 @@ export const JUICE_BUNDLE_SELLING_PLANS_QUERY = `
                         value
                       }
                       priceAdjustments {
+                        orderCount
                         adjustmentValue {
                           __typename
                           ... on SellingPlanPercentagePriceAdjustment {

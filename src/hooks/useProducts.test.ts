@@ -72,6 +72,7 @@ describe('selling-plan group resolution', () => {
     expect(SELLING_PLANS_QUERY).toContain('deliveryPolicy {');
     expect(SELLING_PLANS_QUERY).toContain('SellingPlanRecurringDeliveryPolicy');
     expect(SELLING_PLANS_QUERY).toContain('intervalCount');
+    expect(SELLING_PLANS_QUERY).toContain('orderCount');
   });
 
   it('normalizes typography and whitespace without fuzzy word matching', () => {
@@ -180,6 +181,7 @@ describe('juice bundle parent selling-plan resolution', () => {
     expect(JUICE_BUNDLE_SELLING_PLANS_QUERY).toContain('productType');
     expect(JUICE_BUNDLE_SELLING_PLANS_QUERY).toContain('billingPolicy {');
     expect(JUICE_BUNDLE_SELLING_PLANS_QUERY).toContain('deliveryPolicy {');
+    expect(JUICE_BUNDLE_SELLING_PLANS_QUERY).toContain('orderCount');
   });
 
   it('returns each exact same-title weekly plan independently', () => {
@@ -265,6 +267,7 @@ describe('juice bundle parent selling-plan resolution', () => {
       createBundleProduct('intro', 'Intro Pack Bundle', [
         createGroup('Intro Pack Bundle', [createPlan('discounted', {
           priceAdjustments: [{
+            orderCount: null,
             adjustmentValue: {
               __typename: 'SellingPlanPercentagePriceAdjustment',
               percentage: 10,

@@ -4,12 +4,18 @@ import { SubscriptionProductSkeletons } from '@/components/subscriptions/Subscri
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   normalizeSellingPlanGroupName,
   useProducts,
   useSellingPlans,
 } from '@/hooks/useProducts';
 import { getShopifyImageUrl } from '@/lib/images';
+import {
+  HIBISCUS_ADD_ON_TITLE,
+  hasExpectedHibiscusAddOnPrice,
+} from '@/lib/hibiscusAddOn';
 import { type SellingPlan, type ShopifyProduct, formatPrice } from '@/lib/shopify';
 import { parsePositiveMoneyCents } from '@/lib/subscriptionMinimum';
 import {
@@ -27,17 +33,28 @@ const JUICE_BUNDLE_PRODUCT_QUERY = 'product_type:"Juice Bundle"';
 const PICK_AND_CHOOSE_PRODUCT_TITLE = "Pick n' Choose Bundle";
 const JUICE_SELLING_PLAN_GROUP = 'Pick n\u2019 Choose Bundle';
 const REQUEST_EMAIL = 'info@placeinthyme.com';
-const REQUESTED_DISCOUNT_PERCENT = 10;
+const CONFIRMED_DISCOUNT_PERCENT = 10;
 
 type Selections = Record<string, number>;
+type BillingPreference = 'weekly' | 'prepaid';
+
+const BILLING_PREFERENCE_COPY: Record<BillingPreference, string> = {
+  weekly: 'Pay weekly for four weeks',
+  prepaid: 'Prepay all four weeks',
+};
 
 function hasExactTenPercentAdjustment(plan: SellingPlan | undefined): boolean {
   if (!plan || plan.priceAdjustments.length !== 1) return false;
 
-  const adjustment = plan.priceAdjustments[0].adjustmentValue;
+  const priceAdjustment = plan.priceAdjustments[0];
+  const adjustment = priceAdjustment.adjustmentValue;
   return (
-    adjustment.__typename === 'SellingPlanPercentagePriceAdjustment'
-    && adjustment.percentage === REQUESTED_DISCOUNT_PERCENT
+    // Shopify uses null to mean the adjustment always applies. The approved
+    // subscription can renew after its four-week minimum, so a finite cap is
+    // not sufficient even when it covers the first four orders.
+    priceAdjustment.orderCount === null
+    && adjustment.__typename === 'SellingPlanPercentagePriceAdjustment'
+    && adjustment.percentage === CONFIRMED_DISCOUNT_PERCENT
   );
 }
 
@@ -62,6 +79,8 @@ const JuiceSubscription = () => {
     isError: sellingPlansError,
   } = useSellingPlans(JUICE_PRODUCT_QUERY, JUICE_SELLING_PLAN_GROUP);
   const [selections, setSelections] = useState<Selections>({});
+  const [billingPreference, setBillingPreference] = useState<BillingPreference | null>(null);
+  const [hibiscusAddOnQuantity, setHibiscusAddOnQuantity] = useState(0);
 
   const pickAndChooseMatches = useMemo(() => {
     const normalizedTitle = normalizeSellingPlanGroupName(PICK_AND_CHOOSE_PRODUCT_TITLE);
@@ -81,11 +100,37 @@ const JuiceSubscription = () => {
     ? formatPrice(minimumMoney.amount, minimumMoney.currencyCode)
     : null;
 
-  const individualJuices = useMemo(() => allProducts.filter(product => {
+  const standaloneJuices = useMemo(() => allProducts.filter(product => {
     if (product.node.productType !== 'Juice') return false;
     const variant = product.node.variants.edges[0]?.node;
     return Boolean(variant && !variant.requiresComponents);
   }), [allProducts]);
+  const hibiscusAddOnMatches = useMemo(() => {
+    const normalizedTitle = normalizeSellingPlanGroupName(HIBISCUS_ADD_ON_TITLE);
+    return standaloneJuices.filter(product => (
+      normalizeSellingPlanGroupName(product.node.title) === normalizedTitle
+    ));
+  }, [standaloneJuices]);
+  const hibiscusAddOnProduct = hibiscusAddOnMatches.length === 1
+    ? hibiscusAddOnMatches[0]
+    : null;
+  const hibiscusAddOnVariant = hibiscusAddOnProduct?.node.variants.edges[0]?.node;
+  const hibiscusAddOnHasExpectedPrice = Boolean(
+    hibiscusAddOnVariant
+    && hasExpectedHibiscusAddOnPrice(hibiscusAddOnVariant.price),
+  );
+  const hibiscusAddOnPriceCents = hibiscusAddOnVariant && hibiscusAddOnHasExpectedPrice
+    ? parsePositiveMoneyCents(hibiscusAddOnVariant.price.amount)
+    : null;
+  const hibiscusAddOnTotalCents = hibiscusAddOnPriceCents === null
+    ? 0
+    : hibiscusAddOnPriceCents * hibiscusAddOnQuantity;
+  const individualJuices = useMemo(() => {
+    const normalizedTitle = normalizeSellingPlanGroupName(HIBISCUS_ADD_ON_TITLE);
+    return standaloneJuices.filter(product => (
+      normalizeSellingPlanGroupName(product.node.title) !== normalizedTitle
+    ));
+  }, [standaloneJuices]);
 
   const selectedItems = useMemo(() => {
     const items: Array<{
@@ -131,8 +176,11 @@ const JuiceSubscription = () => {
     && selectedItems.every(item => hasExactTenPercentAdjustment(item.sellingPlan)),
   );
   const estimatedDiscountedWeeklyCents = everySelectedPlanHasExactDiscount
-    ? Math.round(weeklyRetailCents * ((100 - REQUESTED_DISCOUNT_PERCENT) / 100))
+    ? Math.round(weeklyRetailCents * ((100 - CONFIRMED_DISCOUNT_PERCENT) / 100))
     : null;
+  const estimatedPrepaidCents = estimatedDiscountedWeeklyCents === null
+    ? null
+    : estimatedDiscountedWeeklyCents * 4;
   const everyCatalogPlanHasExactDiscount = Boolean(
     individualJuices.length > 0
     && individualJuices.every(product => (
@@ -147,6 +195,19 @@ const JuiceSubscription = () => {
       && variant.price.currencyCode === minimumMoney.currencyCode,
     );
   });
+  const hibiscusAddOnSelectable = Boolean(
+    hibiscusAddOnProduct
+    && hibiscusAddOnVariant?.availableForSale
+    && !hibiscusAddOnVariant.requiresComponents
+    && hibiscusAddOnHasExpectedPrice
+    && hibiscusAddOnPriceCents !== null
+    && minimumMoney
+    && hibiscusAddOnVariant.price.currencyCode === minimumMoney.currencyCode
+  );
+  const hibiscusAddOnSelectionValid = Boolean(
+    hibiscusAddOnQuantity === 0
+    || hibiscusAddOnSelectable
+  );
 
   const configurationLoading = sellingPlansLoading || juiceBundleLoading;
   const minimumConfigurationUnavailable = Boolean(
@@ -162,6 +223,7 @@ const JuiceSubscription = () => {
     meetsMinimum
     && everySelectedItemHasExactWeeklyPlan
     && selectedItemsRemainAvailable
+    && hibiscusAddOnSelectionValid
     && !productsError
     && !sellingPlansError
     && !minimumConfigurationUnavailable
@@ -169,7 +231,7 @@ const JuiceSubscription = () => {
   );
 
   const requestMailto = useMemo(() => {
-    if (!canRequest || !minimumMoney || minimumCents === null) return null;
+    if (!canRequest || !minimumMoney || minimumCents === null || !billingPreference) return null;
 
     const itemLines = selectedItems.map(item => {
       const lineTotalCents = item.priceCents * item.quantity;
@@ -182,30 +244,48 @@ const JuiceSubscription = () => {
       "I'd like to request the four-week Pick n' Choose juice subscription with this weekly mix:",
       '',
       ...itemLines,
+      ...(hibiscusAddOnQuantity > 0 && hibiscusAddOnProduct
+        ? [
+            '',
+            `Optional one-time add-on: ${hibiscusAddOnQuantity} x ${hibiscusAddOnProduct.node.title} = ${formatCents(hibiscusAddOnTotalCents, minimumMoney.currencyCode)}`,
+            'The Hibiscus add-on is requested once, has no selling plan, and is excluded from the weekly minimum and 10% discount.',
+          ]
+        : []),
       '',
       `Weekly retail total: ${formatCents(weeklyRetailCents, minimumMoney.currencyCode)}`,
       ...(estimatedDiscountedWeeklyCents === null
         ? []
         : [`Estimated weekly total after verified 10% plan adjustment: ${formatCents(estimatedDiscountedWeeklyCents, minimumMoney.currencyCode)}`]),
+      ...(billingPreference === 'prepaid' && estimatedPrepaidCents !== null
+        ? [`Estimated four-week prepaid total: ${formatCents(estimatedPrepaidCents, minimumMoney.currencyCode)}`]
+        : []),
+      ...(hibiscusAddOnQuantity > 0
+        ? [`One-time Hibiscus add-on total: ${formatCents(hibiscusAddOnTotalCents, minimumMoney.currencyCode)}`]
+        : []),
       `Live weekly minimum: ${formatCents(minimumCents, minimumMoney.currencyCode)}`,
       '',
-      'Requested subscription terms: 10% off the selected retail total and a minimum four-week commitment.',
-      'Billing preference: Please confirm both weekly billing and prepaid-in-full options.',
+      'Confirmed subscription terms: 10% off the selected retail total and a minimum four-week commitment.',
+      `Billing preference: ${BILLING_PREFERENCE_COPY[billingPreference]}.`,
       '',
       'Live Shopify configuration check:',
       `- Exact weekly plan on every selected juice: ${everySelectedItemHasExactWeeklyPlan ? 'Yes' : 'No'}`,
       `- Exact 10% percentage adjustment on every selected plan: ${everySelectedPlanHasExactDiscount ? 'Yes' : 'No'}`,
       '- Four-cycle commitment / prepaid option enforceable in online checkout: No; this is not currently exposed by the storefront configuration.',
       '',
-      'Please confirm the final discounted price, billing schedule, delivery or pickup details, and enrollment steps before charging me.',
+      'Please send the manual enrollment or payment link, billing schedule, and delivery or pickup details before charging me.',
     ].join('\n');
 
     return `mailto:${REQUEST_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }, [
     canRequest,
+    billingPreference,
     everySelectedItemHasExactWeeklyPlan,
     everySelectedPlanHasExactDiscount,
     estimatedDiscountedWeeklyCents,
+    estimatedPrepaidCents,
+    hibiscusAddOnProduct,
+    hibiscusAddOnQuantity,
+    hibiscusAddOnTotalCents,
     minimumCents,
     minimumMoney,
     selectedItems,
@@ -243,10 +323,10 @@ const JuiceSubscription = () => {
               {minimumDisplay ? <span>&nbsp;retail minimum / week</span> : null}
             </div>
             <div className="inline-flex items-center rounded-full border border-white/10 bg-white/10 px-5 py-2.5 text-sm text-white backdrop-blur-sm">
-              {everyCatalogPlanHasExactDiscount ? 'Verified plan:' : 'Requested term:'}<strong>&nbsp;10% off</strong>
+              Confirmed term: <strong>&nbsp;10% off</strong>
             </div>
             <div className="inline-flex items-center rounded-full border border-white/10 bg-white/10 px-5 py-2.5 text-sm text-white backdrop-blur-sm">
-              Requested term: <strong>&nbsp;4-week minimum</strong>
+              Confirmed term: <strong>&nbsp;4-week minimum</strong>
             </div>
           </div>
         </div>
@@ -266,19 +346,19 @@ const JuiceSubscription = () => {
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
               <div className="space-y-2">
                 <p>
-                  The intended subscription is 10% off with a four-week minimum commitment, with weekly or prepaid-in-full billing to be confirmed.
+                  The confirmed subscription is 10% off with a four-week minimum commitment. Choose weekly billing or four-week prepayment below for manual enrollment.
                 </p>
                 <p>
                   {sellingPlansLoading
                     ? 'Checking the live weekly plans and discount configuration…'
                     : everyCatalogPlanHasExactDiscount
                       ? 'An exact 10% percentage adjustment is present on every live weekly juice plan. Online subscription checkout still remains unavailable until the four-cycle commitment or prepaid option can be verified and enforced.'
-                      : 'Shopify still needs an exact 10% percentage adjustment on every live weekly juice plan. The four-cycle commitment and prepaid option also cannot currently be verified or enforced in online checkout, so this page will not add a misleading subscription to the cart.'}
+                      : 'Shopify still needs the confirmed exact 10% percentage adjustment on every live weekly juice plan. The four-cycle commitment and prepaid option also cannot currently be enforced in online checkout, so this page will not add a misleading subscription to the cart.'}
                 </p>
                 <p className="font-medium">
                   {everyCatalogPlanHasExactDiscount
-                    ? 'The request below shows the live retail total and an estimated weekly total after the verified 10% plan adjustment. The final charge still requires team confirmation.'
-                    : 'The request below shows retail prices only; it does not claim or charge an unconfigured discount.'}
+                    ? 'The request below shows the live retail total and an estimated weekly total after the verified 10% plan adjustment. Enrollment and four-cycle enforcement remain manual.'
+                    : 'The request below shows retail prices only; the confirmed discount must be configured or applied during manual enrollment.'}
                 </p>
               </div>
             </div>
@@ -424,9 +504,6 @@ const JuiceSubscription = () => {
                           </Button>
                           <span
                             className="w-8 text-center font-semibold"
-                            role="status"
-                            aria-live="polite"
-                            aria-atomic="true"
                             aria-label={`${product.node.title} quantity`}
                           >
                             {quantity}
@@ -449,6 +526,70 @@ const JuiceSubscription = () => {
               </div>
             )}
 
+            {!productsLoading && !productsError && hibiscusAddOnProduct && hibiscusAddOnVariant && (
+              <Card className="mt-6 border-accent/30 bg-accent/5 shadow-sm">
+                <CardContent className="flex flex-col items-stretch gap-4 p-5 sm:flex-row sm:items-center">
+                  <div className="min-w-[12rem] flex-1">
+                    <h3 className="font-serif font-bold text-foreground">
+                      Optional one-time Hibiscus Tea add-on
+                    </h3>
+                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                      {formatPrice(hibiscusAddOnVariant.price.amount, hibiscusAddOnVariant.price.currencyCode)} each. Requested once with the first order, with no selling plan. It does not count toward the {minimumDisplay || 'weekly'} minimum and does not receive the 10% subscription discount.
+                    </p>
+                    {!hibiscusAddOnVariant.availableForSale && (
+                      <p className="mt-2 text-xs font-medium text-destructive">Currently sold out</p>
+                    )}
+                    {minimumMoney && hibiscusAddOnVariant.price.currencyCode !== minimumMoney.currencyCode && (
+                      <p className="mt-2 text-xs font-medium text-destructive">Currency does not match the Pick n&apos; Choose request</p>
+                    )}
+                    {!hibiscusAddOnHasExpectedPrice && (
+                      <p className="mt-2 text-xs font-medium text-destructive">
+                        The approved $3.00 USD add-on price could not be verified. Add-on selection is disabled.
+                      </p>
+                    )}
+                  </div>
+                  <div
+                    className="flex flex-shrink-0 items-center gap-2 self-end sm:ml-auto sm:self-auto"
+                    role="group"
+                    aria-label="One-time Hibiscus Tea add-on quantity"
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11 rounded-full"
+                      onClick={() => setHibiscusAddOnQuantity((quantity) => Math.max(0, quantity - 1))}
+                      disabled={hibiscusAddOnQuantity === 0}
+                      aria-label="Remove one one-time Hibiscus Tea add-on"
+                    >
+                      <Minus className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                    <span className="w-8 text-center font-semibold" role="status" aria-live="polite" aria-atomic="true">
+                      <span className="sr-only">One-time Hibiscus Tea add-on quantity: </span>
+                      {hibiscusAddOnQuantity}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11 rounded-full"
+                      onClick={() => setHibiscusAddOnQuantity((quantity) => quantity + 1)}
+                      disabled={!hibiscusAddOnSelectable}
+                      aria-label="Add one one-time Hibiscus Tea add-on"
+                    >
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {!productsLoading && !productsError && hibiscusAddOnMatches.length !== 1 && (
+              <p role="alert" className="mt-6 rounded-xl border border-accent/30 bg-accent/5 p-4 text-sm text-foreground">
+                The optional $3.00 Hibiscus Tea add-on is unavailable because one exact live product could not be verified. It remains excluded from the subscription mix.
+              </p>
+            )}
+
             {anySelections && (
               <div className="mt-10 rounded-2xl border border-border bg-card p-6 shadow-lg">
                 <h3 className="mb-4 font-serif text-xl font-bold">Four-Week Subscription Request</h3>
@@ -466,11 +607,23 @@ const JuiceSubscription = () => {
                 </div>
 
                 <div className="mb-6 flex items-center justify-between border-t border-border pt-4">
-                  <span className="font-serif text-lg font-bold">Weekly retail total</span>
+                  <span className="font-serif text-lg font-bold">Weekly mix retail total</span>
                   <span className={`text-xl font-bold ${meetsMinimum ? 'text-primary' : 'text-destructive'}`}>
                     {formatCents(weeklyRetailCents, minimumMoney?.currencyCode)}
                   </span>
                 </div>
+
+                {hibiscusAddOnQuantity > 0 && hibiscusAddOnProduct && (
+                  <div className="mb-6 flex items-center justify-between rounded-xl border border-accent/30 bg-accent/5 p-4">
+                    <div>
+                      <span className="font-serif text-base font-bold">One-time Hibiscus add-on</span>
+                      <p className="text-xs text-muted-foreground">Excluded from the weekly minimum and discount</p>
+                    </div>
+                    <span className="text-lg font-bold text-accent">
+                      {formatCents(hibiscusAddOnTotalCents, minimumMoney?.currencyCode)}
+                    </span>
+                  </div>
+                )}
 
                 {estimatedDiscountedWeeklyCents !== null && (
                   <div className="mb-6 flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 p-4">
@@ -496,10 +649,52 @@ const JuiceSubscription = () => {
                   <div className="mb-4 rounded-lg border border-accent/30 bg-accent/10 p-3">
                     <p className="flex items-start gap-2 text-sm text-foreground">
                       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
-                      The selected weekly plans do not all contain the requested exact 10% percentage adjustment. Your email requests that term, but this retail total is not presented as discounted pricing.
+                      The selected weekly plans do not all contain the confirmed exact 10% percentage adjustment. The enrollment request preserves that term, but this retail total is not presented as discounted pricing.
                     </p>
                   </div>
                 )}
+
+                <div className="mb-5 rounded-xl border border-border bg-muted/30 p-4">
+                  <h3 className="font-serif text-base font-bold text-foreground">Billing preference</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Select how you want the confirmed four-week enrollment billed. This records a manual-enrollment choice; Shopify does not currently expose a four-payment commitment or prepaid plan for online checkout.
+                  </p>
+                  <RadioGroup
+                    className="mt-4 gap-3"
+                    value={billingPreference || ''}
+                    onValueChange={(value) => setBillingPreference(value as BillingPreference)}
+                    aria-label="Billing preference"
+                  >
+                    <Label htmlFor="juice-billing-weekly" className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 leading-relaxed">
+                      <RadioGroupItem value="weekly" id="juice-billing-weekly" className="mt-0.5" />
+                      <span>
+                        <span className="block">Pay weekly for four weeks</span>
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          Four weekly charges for the same mix. The confirmed four-cycle rule must be enforced during manual enrollment.
+                        </span>
+                      </span>
+                    </Label>
+                    <Label htmlFor="juice-billing-prepaid" className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 leading-relaxed">
+                      <RadioGroupItem value="prepaid" id="juice-billing-prepaid" className="mt-0.5" />
+                      <span>
+                        <span className="block">Prepay all four weeks</span>
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          One upfront payment covering four deliveries. No live prepaid selling plan is configured, so enrollment remains manual.
+                        </span>
+                      </span>
+                    </Label>
+                  </RadioGroup>
+                  {billingPreference === 'prepaid' && estimatedPrepaidCents !== null && (
+                    <p className="mt-3 text-sm font-semibold text-primary">
+                      Estimated four-week prepaid total: {formatCents(estimatedPrepaidCents, minimumMoney?.currencyCode)}
+                    </p>
+                  )}
+                  {!billingPreference && (
+                    <p className="mt-3 text-xs font-medium text-accent" role="status">
+                      Choose a billing preference to prepare the enrollment request.
+                    </p>
+                  )}
+                </div>
 
                 {requestMailto ? (
                   <Button asChild className="h-auto min-h-11 w-full whitespace-normal rounded-full bg-primary py-3 text-center leading-tight shadow-md hover:bg-primary/90" size="lg">
@@ -515,7 +710,7 @@ const JuiceSubscription = () => {
                   </Button>
                 )}
                 <p className="mt-3 text-center text-xs text-muted-foreground">
-                  This opens a prefilled email to {REQUEST_EMAIL}. Nothing is added to the cart and no charge is made. Place in Thyme must confirm the final price, four-week commitment, billing option, and fulfillment details before enrollment.
+                  This opens a prefilled email to {REQUEST_EMAIL}. Nothing is added to the cart and no charge is made. Place in Thyme must manually apply the confirmed discount and four-week commitment, honor the selected billing preference, and provide fulfillment details before enrollment.
                 </p>
               </div>
             )}

@@ -16,7 +16,7 @@ export function Hero() {
           alt="Fresh meal prep containers"
           width={1920}
           height={1080}
-          fetchPriority="high"
+          loading="eager"
           decoding="async"
           className="absolute inset-0 w-full h-full object-cover"
         />

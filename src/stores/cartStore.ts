@@ -35,6 +35,12 @@ import {
   type FulfillmentMethod,
   type FulfillmentWindow,
 } from '@/lib/orderCutoff';
+import {
+  HIBISCUS_ADD_ON_ATTRIBUTE_VALUE,
+  HIBISCUS_ADD_ON_CURRENCY,
+  HIBISCUS_ADD_ON_PRICE_CENTS,
+  HIBISCUS_ADD_ON_TYPE_ATTRIBUTE,
+} from '@/lib/hibiscusAddOn';
 
 export interface CartItemInput {
   product: ShopifyProduct;
@@ -98,6 +104,10 @@ const MINIMUM_GROUP_ATTRIBUTE = '_minimum_group';
 const MINIMUM_CENTS_ATTRIBUTE = '_minimum_cents';
 const MINIMUM_CURRENCY_ATTRIBUTE = '_minimum_currency';
 const MINIMUM_LABEL_ATTRIBUTE = '_minimum_label';
+const BUNDLE_INSTANCE_ATTRIBUTE = '_bundle_instance';
+const BUNDLE_ROLE_ATTRIBUTE = '_bundle_role';
+const BUNDLE_PRIMARY_ROLE = 'primary';
+const BUNDLE_ADD_ON_ROLE = 'add-on';
 
 interface CartMinimumGroup {
   label: string;
@@ -168,6 +178,103 @@ export function validateCartMinimums(items: CartItem[]): void {
           (remaining / 100).toFixed(2),
           group.currencyCode,
         )} more before checkout.`,
+      );
+    }
+  }
+}
+
+interface CartBundleDependencyGroup {
+  hasPrimary: boolean;
+  hasAddOn: boolean;
+}
+
+/** Ensures optional add-ons cannot outlive the bundle or custom mix they belong to. */
+export function validateCartBundleDependencies(items: CartItem[]): void {
+  const groups = new Map<string, CartBundleDependencyGroup>();
+
+  for (const item of items) {
+    const attributes = item.attributes || [];
+    const instanceAttributes = attributes.filter(
+      (attribute) => attribute.key === BUNDLE_INSTANCE_ATTRIBUTE,
+    );
+    const roleAttributes = attributes.filter(
+      (attribute) => attribute.key === BUNDLE_ROLE_ATTRIBUTE,
+    );
+    const addOnTypeAttributes = attributes.filter(
+      (attribute) => attribute.key === HIBISCUS_ADD_ON_TYPE_ATTRIBUTE,
+    );
+
+    if (
+      instanceAttributes.length === 0
+      && roleAttributes.length === 0
+      && addOnTypeAttributes.length === 0
+    ) continue;
+    if (
+      instanceAttributes.length > 1
+      || roleAttributes.length > 1
+      || addOnTypeAttributes.length > 1
+    ) {
+      throw new Error(
+        'A bundle relationship is invalid. Remove the affected item and add it again.',
+      );
+    }
+
+    const instance = instanceAttributes[0]?.value;
+    const role = roleAttributes[0]?.value;
+    const addOnType = addOnTypeAttributes[0]?.value;
+    if (!instance?.trim() || !role?.trim()) {
+      throw new Error(
+        'A bundle relationship is incomplete. Remove the affected item and add it again.',
+      );
+    }
+    if (role !== BUNDLE_PRIMARY_ROLE && role !== BUNDLE_ADD_ON_ROLE) {
+      throw new Error(
+        'A bundle relationship is invalid. Remove the affected item and add it again.',
+      );
+    }
+    if (role === BUNDLE_PRIMARY_ROLE && addOnTypeAttributes.length > 0) {
+      throw new Error(
+        'A bundle add-on type is invalid. Remove the affected item and add it again.',
+      );
+    }
+    if (role === BUNDLE_ADD_ON_ROLE) {
+      if (!addOnType?.trim()) {
+        throw new Error(
+          'A bundle add-on type is incomplete. Remove the affected item and add it again.',
+        );
+      }
+      if (addOnType !== HIBISCUS_ADD_ON_ATTRIBUTE_VALUE) {
+        throw new Error(
+          'A bundle add-on type is invalid. Remove the affected item and add it again.',
+        );
+      }
+
+      const hasExpectedPrice = (
+        Number.isInteger(item.quantity)
+        && item.quantity > 0
+        && item.price.currencyCode === HIBISCUS_ADD_ON_CURRENCY
+        && item.lineSubtotal.currencyCode === HIBISCUS_ADD_ON_CURRENCY
+        && moneyToCents(item.price) === HIBISCUS_ADD_ON_PRICE_CENTS
+        && moneyToCents(item.lineSubtotal) === HIBISCUS_ADD_ON_PRICE_CENTS * item.quantity
+      );
+      if (!hasExpectedPrice) {
+        throw new Error(
+          'The approved $3.00 USD Hibiscus add-on price could not be verified. '
+          + 'Remove the add-on and add it again.',
+        );
+      }
+    }
+
+    const group = groups.get(instance) || { hasPrimary: false, hasAddOn: false };
+    if (role === BUNDLE_PRIMARY_ROLE) group.hasPrimary = true;
+    if (role === BUNDLE_ADD_ON_ROLE) group.hasAddOn = true;
+    groups.set(instance, group);
+  }
+
+  for (const group of groups.values()) {
+    if (group.hasAddOn && !group.hasPrimary) {
+      throw new Error(
+        'An add-on must remain with its bundle. Remove the add-on or add the bundle again.',
       );
     }
   }
@@ -542,7 +649,9 @@ export const useCartStore = create<CartStore>()(
                 'invalid-response',
               );
             }
-            validateCartMinimums(toCartItems(cart));
+            const cartItems = toCartItems(cart);
+            validateCartMinimums(cartItems);
+            validateCartBundleDependencies(cartItems);
             const checkoutUrl = formatCheckoutUrl(cart.checkoutUrl);
             set(stateFromCart(cart, result.warnings));
             return checkoutUrl;

@@ -13,11 +13,15 @@ import { Loader2, ShoppingCart, ArrowLeft, Minus, Plus, PackageOpen } from 'luci
 import { toast } from 'sonner';
 import { NutritionLabel } from '@/components/products/NutritionLabel';
 import { HeatingInstructions } from '@/components/products/HeatingInstructions';
+import { getHiddenStorefrontProductRedirect } from '@/lib/productVisibility';
 
 const ProductDetail = () => {
   const { handle } = useParams<{ handle: string }>();
   const safeHandle = /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(handle || '') ? handle || '' : '';
-  const { data: product, isLoading, isError, refetch } = useProductByHandle(safeHandle);
+  const hiddenProductRedirect = getHiddenStorefrontProductRedirect(safeHandle);
+  const { data: product, isLoading, isError, refetch } = useProductByHandle(
+    hiddenProductRedirect ? '' : safeHandle,
+  );
   const addItem = useCartStore(state => state.addItem);
   const cartLoading = useCartStore(state => state.isLoading);
   const [quantity, setQuantity] = useState(1);
@@ -104,6 +108,10 @@ const ProductDetail = () => {
 
     return () => schema.remove();
   }, [product, seoVariant]);
+
+  if (hiddenProductRedirect) {
+    return <Navigate to={hiddenProductRedirect} replace />;
+  }
 
   if (isLoading) {
     return (
@@ -246,7 +254,7 @@ const ProductDetail = () => {
                 srcSet={getShopifyImageSrcSet(mainImage.url, [480, 720, 960, 1200])}
                 sizes="(min-width: 1024px) 50vw, 100vw"
                 alt={mainImage.altText || node.title}
-                fetchPriority="high"
+                loading="eager"
                 decoding="async"
                 className="h-full w-full object-cover"
               />
