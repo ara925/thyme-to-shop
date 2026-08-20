@@ -1,33 +1,66 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Layout } from '@/components/layout/Layout';
+import { SubscriptionProductSkeletons } from '@/components/subscriptions/SubscriptionProductSkeletons';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Leaf, Minus, Plus, ShoppingCart, Loader2, Check, AlertCircle } from 'lucide-react';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   normalizeSellingPlanGroupName,
   useProducts,
   useSellingPlans,
 } from '@/hooks/useProducts';
-import { type ShopifyProduct, formatPrice } from '@/lib/shopify';
-import { type CartItemInput, useCartStore } from '@/stores/cartStore';
 import { getShopifyImageUrl } from '@/lib/images';
+import {
+  HIBISCUS_ADD_ON_TITLE,
+  hasExpectedHibiscusAddOnPrice,
+} from '@/lib/hibiscusAddOn';
+import { type SellingPlan, type ShopifyProduct, formatPrice } from '@/lib/shopify';
 import { parsePositiveMoneyCents } from '@/lib/subscriptionMinimum';
-import { SubscriptionProductSkeletons } from '@/components/subscriptions/SubscriptionProductSkeletons';
-import { toast } from 'sonner';
+import {
+  AlertCircle,
+  Check,
+  Leaf,
+  Loader2,
+  Mail,
+  Minus,
+  Plus,
+} from 'lucide-react';
 
 const JUICE_PRODUCT_QUERY = 'product_type:Juice AND NOT product_type:"Juice Bundle"';
 const JUICE_BUNDLE_PRODUCT_QUERY = 'product_type:"Juice Bundle"';
 const PICK_AND_CHOOSE_PRODUCT_TITLE = "Pick n' Choose Bundle";
-const JUICE_SELLING_PLAN_GROUP = 'Juice Subscription Bundels';
-const WEEKS = [
-  { id: 'week-a', label: 'Week 1', tag: 'week-a' },
-  { id: 'week-b', label: 'Week 2', tag: 'week-b' },
-  { id: 'week-c', label: 'Week 3', tag: 'week-c' },
-];
+const JUICE_SELLING_PLAN_GROUP = 'Pick n\u2019 Choose Bundle';
+const REQUEST_EMAIL = 'info@placeinthyme.com';
+const CONFIRMED_DISCOUNT_PERCENT = 10;
 
-type WeekSelections = Record<string, Record<string, number>>;
+type Selections = Record<string, number>;
+type BillingPreference = 'weekly' | 'prepaid';
+
+const BILLING_PREFERENCE_COPY: Record<BillingPreference, string> = {
+  weekly: 'Pay weekly for four weeks',
+  prepaid: 'Prepay all four weeks',
+};
+
+function hasExactTenPercentAdjustment(plan: SellingPlan | undefined): boolean {
+  if (!plan || plan.priceAdjustments.length !== 1) return false;
+
+  const priceAdjustment = plan.priceAdjustments[0];
+  const adjustment = priceAdjustment.adjustmentValue;
+  return (
+    // Shopify uses null to mean the adjustment always applies. The approved
+    // subscription can renew after its four-week minimum, so a finite cap is
+    // not sufficient even when it covers the first four orders.
+    priceAdjustment.orderCount === null
+    && adjustment.__typename === 'SellingPlanPercentagePriceAdjustment'
+    && adjustment.percentage === CONFIRMED_DISCOUNT_PERCENT
+  );
+}
+
+function formatCents(cents: number, currencyCode = 'USD'): string {
+  return formatPrice((cents / 100).toFixed(2), currencyCode);
+}
 
 const JuiceSubscription = () => {
   const {
@@ -45,15 +78,9 @@ const JuiceSubscription = () => {
     isLoading: sellingPlansLoading,
     isError: sellingPlansError,
   } = useSellingPlans(JUICE_PRODUCT_QUERY, JUICE_SELLING_PLAN_GROUP);
-  const addItems = useCartStore(state => state.addItems);
-  const isLoading = useCartStore(state => state.isLoading);
-  const [activeTab, setActiveTab] = useState('week-a');
-  const [selections, setSelections] = useState<WeekSelections>({
-    'week-a': {},
-    'week-b': {},
-    'week-c': {},
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selections, setSelections] = useState<Selections>({});
+  const [billingPreference, setBillingPreference] = useState<BillingPreference | null>(null);
+  const [hibiscusAddOnQuantity, setHibiscusAddOnQuantity] = useState(0);
 
   const pickAndChooseMatches = useMemo(() => {
     const normalizedTitle = normalizeSellingPlanGroupName(PICK_AND_CHOOSE_PRODUCT_TITLE);
@@ -69,480 +96,621 @@ const JuiceSubscription = () => {
   const minimumCents = minimumMoney
     ? parsePositiveMoneyCents(minimumMoney.amount)
     : null;
-  const minimumPerWeek = minimumCents === null ? null : minimumCents / 100;
   const minimumDisplay = minimumMoney && minimumCents !== null
     ? formatPrice(minimumMoney.amount, minimumMoney.currencyCode)
     : null;
 
-  // Keep only exact Juice products that can participate in the selected subscription plan.
+  const standaloneJuices = useMemo(() => allProducts.filter(product => {
+    if (product.node.productType !== 'Juice') return false;
+    const variant = product.node.variants.edges[0]?.node;
+    return Boolean(variant && !variant.requiresComponents);
+  }), [allProducts]);
+  const hibiscusAddOnMatches = useMemo(() => {
+    const normalizedTitle = normalizeSellingPlanGroupName(HIBISCUS_ADD_ON_TITLE);
+    return standaloneJuices.filter(product => (
+      normalizeSellingPlanGroupName(product.node.title) === normalizedTitle
+    ));
+  }, [standaloneJuices]);
+  const hibiscusAddOnProduct = hibiscusAddOnMatches.length === 1
+    ? hibiscusAddOnMatches[0]
+    : null;
+  const hibiscusAddOnVariant = hibiscusAddOnProduct?.node.variants.edges[0]?.node;
+  const hibiscusAddOnHasExpectedPrice = Boolean(
+    hibiscusAddOnVariant
+    && hasExpectedHibiscusAddOnPrice(hibiscusAddOnVariant.price),
+  );
+  const hibiscusAddOnPriceCents = hibiscusAddOnVariant && hibiscusAddOnHasExpectedPrice
+    ? parsePositiveMoneyCents(hibiscusAddOnVariant.price.amount)
+    : null;
+  const hibiscusAddOnTotalCents = hibiscusAddOnPriceCents === null
+    ? 0
+    : hibiscusAddOnPriceCents * hibiscusAddOnQuantity;
   const individualJuices = useMemo(() => {
-    const exactJuices = allProducts.filter(product => {
-      if (product.node.productType !== 'Juice') return false;
-      const variant = product.node.variants.edges[0]?.node;
-      return Boolean(variant && !variant.requiresComponents);
-    });
+    const normalizedTitle = normalizeSellingPlanGroupName(HIBISCUS_ADD_ON_TITLE);
+    return standaloneJuices.filter(product => (
+      normalizeSellingPlanGroupName(product.node.title) !== normalizedTitle
+    ));
+  }, [standaloneJuices]);
 
-    if (sellingPlansLoading || sellingPlansError || !sellingPlansByProduct) return exactJuices;
-    return exactJuices.filter(product => Boolean(sellingPlansByProduct[product.node.id]));
-  }, [allProducts, sellingPlansByProduct, sellingPlansError, sellingPlansLoading]);
+  const selectedItems = useMemo(() => {
+    const items: Array<{
+      product: ShopifyProduct;
+      quantity: number;
+      priceCents: number;
+      sellingPlan: SellingPlan | undefined;
+    }> = [];
 
-  const productsByWeek = useMemo(() => {
-    const grouped: Record<string, ShopifyProduct[]> = {};
-    WEEKS.forEach(week => {
-      grouped[week.id] = individualJuices;
-    });
-    return grouped;
-  }, [individualJuices]);
-
-  const weekTotals = useMemo(() => {
-    const totals: Record<string, number> = {};
-    WEEKS.forEach(week => {
-      const weekSel = selections[week.id] || {};
-      let total = 0;
-      Object.entries(weekSel).forEach(([productId, qty]) => {
-        const product = productsByWeek[week.id]?.find(p => p.node.id === productId);
-        if (product && qty > 0) {
-          const variant = product.node.variants.edges[0]?.node;
-          if (variant) total += parseFloat(variant.price.amount) * qty;
-        }
-      });
-      totals[week.id] = total;
-    });
-    return totals;
-  }, [selections, productsByWeek]);
-
-  const weeksWithSelections = WEEKS.filter(w => weekTotals[w.id] > 0);
-  const selectedWeek = weeksWithSelections.length === 1 ? weeksWithSelections[0] : null;
-  const hasExactlyOneSelectedWeek = selectedWeek !== null;
-  const selectedWeekMeetsMinimum = Boolean(
-    selectedWeek
-    && minimumPerWeek !== null
-    && weekTotals[selectedWeek.id] >= minimumPerWeek,
-  );
-  const anySelections = weeksWithSelections.length > 0;
-  const hasSellingPlanConfiguration = Boolean(
-    sellingPlansByProduct && Object.keys(sellingPlansByProduct).length > 0,
-  );
-  const configurationLoading = sellingPlansLoading || juiceBundleLoading;
-  const hasPlannerConfiguration = Boolean(
-    hasSellingPlanConfiguration
-    && pickAndChooseProduct
-    && minimumMoney
-    && minimumCents !== null,
-  );
-  const configurationUnavailable = Boolean(
-    sellingPlansError
-    || juiceBundleError
-    || !hasPlannerConfiguration,
-  );
-  const selectedItemsAreAvailable = selectedWeek
-    ? Object.entries(selections[selectedWeek.id] || {}).every(([productId, qty]) => {
-      if (qty <= 0) return true;
-      const product = productsByWeek[selectedWeek.id]?.find(
-        item => item.node.id === productId,
-      );
+    Object.entries(selections).forEach(([productId, quantity]) => {
+      if (quantity <= 0) return;
+      const product = individualJuices.find(item => item.node.id === productId);
       const variant = product?.node.variants.edges[0]?.node;
-      return Boolean(variant?.availableForSale && sellingPlansByProduct?.[productId]);
-    })
-    : false;
+      const priceCents = variant ? parsePositiveMoneyCents(variant.price.amount) : null;
+      if (!product || !variant || priceCents === null) return;
 
-  const updateQuantity = (weekId: string, productId: string, delta: number) => {
-    setSelections(prev => {
-      const current = prev[weekId]?.[productId] || 0;
-      const newQty = Math.max(0, current + delta);
-      return {
-        ...prev,
-        [weekId]: { ...prev[weekId], [productId]: newQty },
-      };
-    });
-  };
-
-  const handleAddAllToCart = async () => {
-    if (weeksWithSelections.length === 0) {
-      toast.error('Choose exactly one menu week before continuing.', { position: 'top-center' });
-      return;
-    }
-    if (weeksWithSelections.length > 1) {
-      toast.error('Choose exactly one menu week. Clear the selections from the other menu tabs.', {
-        position: 'top-center',
+      items.push({
+        product,
+        quantity,
+        priceCents,
+        sellingPlan: sellingPlansByProduct?.[productId],
       });
-      return;
-    }
-    if (configurationLoading) {
-      toast.error('Weekly subscription availability is still loading. Please wait a moment.', { position: 'top-center' });
-      return;
-    }
+    });
 
-    if (
-      configurationUnavailable
-      || !sellingPlansByProduct
+    return items;
+  }, [individualJuices, selections, sellingPlansByProduct]);
+
+  const weeklyRetailCents = selectedItems.reduce(
+    (total, item) => total + item.priceCents * item.quantity,
+    0,
+  );
+  const anySelections = selectedItems.length > 0;
+  const meetsMinimum = minimumCents !== null && weeklyRetailCents >= minimumCents;
+  const remainingCents = minimumCents === null
+    ? null
+    : Math.max(0, minimumCents - weeklyRetailCents);
+  const everySelectedItemHasExactWeeklyPlan = Boolean(
+    anySelections
+    && selectedItems.every(item => item.sellingPlan),
+  );
+  const everySelectedPlanHasExactDiscount = Boolean(
+    everySelectedItemHasExactWeeklyPlan
+    && selectedItems.every(item => hasExactTenPercentAdjustment(item.sellingPlan)),
+  );
+  const estimatedDiscountedWeeklyCents = everySelectedPlanHasExactDiscount
+    ? Math.round(weeklyRetailCents * ((100 - CONFIRMED_DISCOUNT_PERCENT) / 100))
+    : null;
+  const estimatedPrepaidCents = estimatedDiscountedWeeklyCents === null
+    ? null
+    : estimatedDiscountedWeeklyCents * 4;
+  const everyCatalogPlanHasExactDiscount = Boolean(
+    individualJuices.length > 0
+    && individualJuices.every(product => (
+      hasExactTenPercentAdjustment(sellingPlansByProduct?.[product.node.id])
+    )),
+  );
+  const selectedItemsRemainAvailable = selectedItems.every(item => {
+    const variant = item.product.node.variants.edges[0]?.node;
+    return Boolean(
+      variant?.availableForSale
+      && minimumMoney
+      && variant.price.currencyCode === minimumMoney.currencyCode,
+    );
+  });
+  const hibiscusAddOnSelectable = Boolean(
+    hibiscusAddOnProduct
+    && hibiscusAddOnVariant?.availableForSale
+    && !hibiscusAddOnVariant.requiresComponents
+    && hibiscusAddOnHasExpectedPrice
+    && hibiscusAddOnPriceCents !== null
+    && minimumMoney
+    && hibiscusAddOnVariant.price.currencyCode === minimumMoney.currencyCode
+  );
+  const hibiscusAddOnSelectionValid = Boolean(
+    hibiscusAddOnQuantity === 0
+    || hibiscusAddOnSelectable
+  );
+
+  const configurationLoading = sellingPlansLoading || juiceBundleLoading;
+  const minimumConfigurationUnavailable = Boolean(
+    !juiceBundleLoading
+    && (
+      juiceBundleError
       || !pickAndChooseProduct
       || !minimumMoney
       || minimumCents === null
-      || minimumDisplay === null
-    ) {
-      toast.error('Weekly juice subscriptions are temporarily unavailable. No one-time order was added.', { position: 'top-center' });
-      return;
-    }
+    ),
+  );
+  const canRequest = Boolean(
+    meetsMinimum
+    && everySelectedItemHasExactWeeklyPlan
+    && selectedItemsRemainAvailable
+    && hibiscusAddOnSelectionValid
+    && !productsError
+    && !sellingPlansError
+    && !minimumConfigurationUnavailable
+    && !configurationLoading,
+  );
 
-    if (!selectedWeek || !selectedWeekMeetsMinimum) {
-      toast.error(`Your weekly selection must meet the ${minimumDisplay} minimum.`, {
-        position: 'top-center',
-      });
-      return;
-    }
+  const requestMailto = useMemo(() => {
+    if (!canRequest || !minimumMoney || minimumCents === null || !billingPreference) return null;
 
-    setIsSubmitting(true);
-    try {
-      const cartItems: CartItemInput[] = [];
-      const weekSel = selections[selectedWeek.id] || {};
-      for (const [productId, qty] of Object.entries(weekSel)) {
-        if (qty <= 0) continue;
-        const product = productsByWeek[selectedWeek.id]?.find(p => p.node.id === productId);
-        if (!product) {
-          throw new Error('A selected juice is no longer available. Please update your weekly selection.');
-        }
-        const variant = product.node.variants.edges[0]?.node;
-        if (!variant) {
-          throw new Error(`${product.node.title} no longer has an available variant.`);
-        }
-        if (!variant.availableForSale) {
-          throw new Error(`${product.node.title} is sold out. Please update ${selectedWeek.label}.`);
-        }
-        const sellingPlan = sellingPlansByProduct[product.node.id];
-        if (!sellingPlan) {
-          throw new Error(`${product.node.title} is not configured for the weekly juice subscription.`);
-        }
+    const itemLines = selectedItems.map(item => {
+      const lineTotalCents = item.priceCents * item.quantity;
+      return `- ${item.quantity} x ${item.product.node.title} = ${formatCents(lineTotalCents, minimumMoney.currencyCode)}`;
+    });
+    const subject = "4-week Pick n' Choose juice subscription request";
+    const body = [
+      'Hello Place in Thyme,',
+      '',
+      "I'd like to request the four-week Pick n' Choose juice subscription with this weekly mix:",
+      '',
+      ...itemLines,
+      ...(hibiscusAddOnQuantity > 0 && hibiscusAddOnProduct
+        ? [
+            '',
+            `Optional one-time add-on: ${hibiscusAddOnQuantity} x ${hibiscusAddOnProduct.node.title} = ${formatCents(hibiscusAddOnTotalCents, minimumMoney.currencyCode)}`,
+            'The Hibiscus add-on is requested once, has no selling plan, and is excluded from the weekly minimum and 10% discount.',
+          ]
+        : []),
+      '',
+      `Weekly retail total: ${formatCents(weeklyRetailCents, minimumMoney.currencyCode)}`,
+      ...(estimatedDiscountedWeeklyCents === null
+        ? []
+        : [`Estimated weekly total after verified 10% plan adjustment: ${formatCents(estimatedDiscountedWeeklyCents, minimumMoney.currencyCode)}`]),
+      ...(billingPreference === 'prepaid' && estimatedPrepaidCents !== null
+        ? [`Estimated four-week prepaid total: ${formatCents(estimatedPrepaidCents, minimumMoney.currencyCode)}`]
+        : []),
+      ...(hibiscusAddOnQuantity > 0
+        ? [`One-time Hibiscus add-on total: ${formatCents(hibiscusAddOnTotalCents, minimumMoney.currencyCode)}`]
+        : []),
+      `Live weekly minimum: ${formatCents(minimumCents, minimumMoney.currencyCode)}`,
+      '',
+      'Confirmed subscription terms: 10% off the selected retail total and a minimum four-week commitment.',
+      `Billing preference: ${BILLING_PREFERENCE_COPY[billingPreference]}.`,
+      '',
+      'Live Shopify configuration check:',
+      `- Exact weekly plan on every selected juice: ${everySelectedItemHasExactWeeklyPlan ? 'Yes' : 'No'}`,
+      `- Exact 10% percentage adjustment on every selected plan: ${everySelectedPlanHasExactDiscount ? 'Yes' : 'No'}`,
+      '- Four-cycle commitment / prepaid option enforceable in online checkout: No; this is not currently exposed by the storefront configuration.',
+      '',
+      'Please send the manual enrollment or payment link, billing schedule, and delivery or pickup details before charging me.',
+    ].join('\n');
 
-        cartItems.push({
-          product,
-          variantId: variant.id,
-          variantTitle: variant.title,
-          price: variant.price,
-          quantity: qty,
-          selectedOptions: variant.selectedOptions || [],
-          sellingPlanId: sellingPlan.id,
-          attributes: [
-            { key: 'Menu Week', value: selectedWeek.label },
-            { key: '_minimum_group', value: `juice-plan:${selectedWeek.id}` },
-            { key: '_minimum_cents', value: String(minimumCents) },
-            { key: '_minimum_currency', value: minimumMoney.currencyCode },
-            { key: '_minimum_label', value: `${selectedWeek.label} juice plan` },
-          ],
-        });
-      }
-      if (cartItems.length === 0) throw new Error('Select at least one available juice before continuing.');
-      await addItems(cartItems);
-      toast.success(`${selectedWeek.label} weekly juice selection added to cart.`, {
-        position: 'top-center',
-      });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Something went wrong. Please try again.', { position: 'top-center' });
-    } finally {
-      setIsSubmitting(false);
-    }
+    return `mailto:${REQUEST_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }, [
+    canRequest,
+    billingPreference,
+    everySelectedItemHasExactWeeklyPlan,
+    everySelectedPlanHasExactDiscount,
+    estimatedDiscountedWeeklyCents,
+    estimatedPrepaidCents,
+    hibiscusAddOnProduct,
+    hibiscusAddOnQuantity,
+    hibiscusAddOnTotalCents,
+    minimumCents,
+    minimumMoney,
+    selectedItems,
+    weeklyRetailCents,
+  ]);
+
+  const updateQuantity = (productId: string, delta: number) => {
+    setSelections(previous => {
+      const nextQuantity = Math.max(0, (previous[productId] || 0) + delta);
+      return { ...previous, [productId]: nextQuantity };
+    });
   };
 
   return (
     <Layout>
-      {/* Hero */}
       <div className="relative overflow-hidden bg-gradient-to-b from-espresso to-primary/90">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,hsl(var(--herb-glow)/0.3),transparent_60%)]" />
         <div className="container relative py-16 md:py-24">
           <div className="max-w-2xl">
-            <Badge className="mb-4 bg-white/10 text-white border-white/20 backdrop-blur-sm">
+            <Badge className="mb-4 border-white/20 bg-white/10 text-white backdrop-blur-sm">
               <Leaf className="mr-1 h-3 w-3" />
-              Juice Subscription
+              Pick n&apos; Choose
             </Badge>
-            <h1 className="font-serif text-4xl font-bold text-white md:text-6xl tracking-tight">
-              Weekly Juice Plan
+            <h1 className="font-serif text-4xl font-bold tracking-tight text-white md:text-6xl">
+              Build One Weekly Juice Mix
             </h1>
-            <p className="mt-4 text-lg text-white/70 max-w-lg">
-              Compare all three menu weeks, then choose exactly one. Your selected juices and quantities repeat every week.
+            <p className="mt-4 max-w-xl text-lg text-white/70">
+              Choose the juices, shots, and teas you want each week. This is one Pick n&apos; Choose mix—not three rotating menus.
             </p>
           </div>
 
           <div className="mt-8 flex flex-wrap gap-3">
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
-              <span>
-                <strong>{minimumDisplay || 'Live minimum unavailable'}</strong>
-                {minimumDisplay ? ' minimum / week' : ''}
-              </span>
+            <div className="inline-flex items-center rounded-full border border-white/10 bg-white/10 px-5 py-2.5 text-sm text-white backdrop-blur-sm">
+              <strong>{minimumDisplay || 'Live minimum unavailable'}</strong>
+              {minimumDisplay ? <span>&nbsp;retail minimum / week</span> : null}
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
-              <span>Selected menu <strong>repeats weekly</strong></span>
+            <div className="inline-flex items-center rounded-full border border-white/10 bg-white/10 px-5 py-2.5 text-sm text-white backdrop-blur-sm">
+              Confirmed term: <strong>&nbsp;10% off</strong>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
-              <span>Four-cycle commitment <strong>not enforced</strong></span>
+            <div className="inline-flex items-center rounded-full border border-white/10 bg-white/10 px-5 py-2.5 text-sm text-white backdrop-blur-sm">
+              Confirmed term: <strong>&nbsp;4-week minimum</strong>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Juice Planner */}
       <section className="py-12 md:py-20">
         <div className="container">
-          <div className="max-w-4xl mx-auto">
-            <h2 className="font-serif text-2xl md:text-3xl font-bold text-foreground mb-2">
-              Build Your Weekly Juice Selection
+          <div className="mx-auto max-w-4xl">
+            <h2 className="mb-2 font-serif text-2xl font-bold text-foreground md:text-3xl">
+              Build Your Pick n&apos; Choose Mix
             </h2>
-            <p className="text-muted-foreground mb-4">
-              Browse all three tabs, but select juices in exactly one menu week before adding the subscription to cart.
+            <p className="mb-4 text-muted-foreground">
+              Product names, sizes, ingredients, and benefits below come directly from the live juice catalog. Choose any quantities until the live weekly retail minimum is met.
             </p>
 
             <div className="mb-8 flex items-start gap-2 rounded-xl border border-accent/30 bg-accent/10 p-4 text-sm text-foreground" role="note">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
-              <p>
-                The one menu you select repeats every week. Automatic menu rotation is not configured, and a four-billing-cycle commitment is not enforced until Shopify/subscription-app setup is completed.
-              </p>
+              <div className="space-y-2">
+                <p>
+                  The confirmed subscription is 10% off with a four-week minimum commitment. Choose weekly billing or four-week prepayment below for manual enrollment.
+                </p>
+                <p>
+                  {sellingPlansLoading
+                    ? 'Checking the live weekly plans and discount configuration…'
+                    : everyCatalogPlanHasExactDiscount
+                      ? 'An exact 10% percentage adjustment is present on every live weekly juice plan. Online subscription checkout still remains unavailable until the four-cycle commitment or prepaid option can be verified and enforced.'
+                      : 'Shopify still needs the confirmed exact 10% percentage adjustment on every live weekly juice plan. The four-cycle commitment and prepaid option also cannot currently be enforced in online checkout, so this page will not add a misleading subscription to the cart.'}
+                </p>
+                <p className="font-medium">
+                  {everyCatalogPlanHasExactDiscount
+                    ? 'The request below shows the live retail total and an estimated weekly total after the verified 10% plan adjustment. Enrollment and four-cycle enforcement remain manual.'
+                    : 'The request below shows retail prices only; the confirmed discount must be configured or applied during manual enrollment.'}
+                </p>
+              </div>
             </div>
 
-            {(configurationLoading || (!configurationLoading && configurationUnavailable)) && (
+            {(configurationLoading || minimumConfigurationUnavailable || sellingPlansError) && (
               <div
-                className={`mb-6 flex items-start gap-2 rounded-xl border p-4 text-sm ${!configurationLoading && configurationUnavailable ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-border bg-muted/50 text-muted-foreground'}`}
+                className={`mb-6 flex items-start gap-2 rounded-xl border p-4 text-sm ${minimumConfigurationUnavailable || sellingPlansError ? 'border-destructive/30 bg-destructive/10 text-destructive' : 'border-border bg-muted/50 text-muted-foreground'}`}
                 role="status"
               >
-                {configurationLoading ? <Loader2 className="mt-0.5 h-4 w-4 animate-spin" /> : <AlertCircle className="mt-0.5 h-4 w-4" />}
+                {configurationLoading && !minimumConfigurationUnavailable && !sellingPlansError
+                  ? <Loader2 className="mt-0.5 h-4 w-4 animate-spin" />
+                  : <AlertCircle className="mt-0.5 h-4 w-4" />}
                 <span>
-                  {configurationLoading
-                    ? 'Confirming weekly juice subscription availability and live minimum…'
-                    : 'The weekly juice subscription or its live Pick n\' Choose minimum is not configured right now. Adding a one-time order is disabled.'}
+                  {configurationLoading && !minimumConfigurationUnavailable && !sellingPlansError
+                    ? 'Confirming the exact live Pick n\' Choose minimum and weekly plan eligibility…'
+                    : 'The exact live Pick n\' Choose minimum or weekly plan configuration is unavailable. Subscription requests are disabled until it can be verified.'}
                 </span>
               </div>
             )}
 
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-3 mb-8">
-                {WEEKS.map(week => {
-                  const total = weekTotals[week.id];
-                  const meetsMin = minimumPerWeek !== null && total >= minimumPerWeek;
-                  const hasSelections = total > 0;
+            <div
+              className={`mb-6 rounded-xl border p-4 ${meetsMinimum ? 'border-primary/20 bg-primary/5' : 'border-border bg-muted/50'}`}
+              role="status"
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {meetsMinimum
+                    ? <Check className="h-5 w-5 text-primary" />
+                    : <AlertCircle className="h-5 w-5 text-muted-foreground" />}
+                  <span className="font-semibold">
+                    Weekly retail total: {formatCents(weeklyRetailCents, minimumMoney?.currencyCode)}
+                  </span>
+                </div>
+                {!meetsMinimum && remainingCents !== null && (
+                  <span className="text-sm text-muted-foreground">
+                    {weeklyRetailCents > 0
+                      ? `${formatCents(remainingCents, minimumMoney?.currencyCode)} more to meet the minimum`
+                      : `${minimumDisplay} minimum`}
+                  </span>
+                )}
+                {minimumDisplay === null && (
+                  <span className="text-sm text-destructive">Live minimum unavailable</span>
+                )}
+              </div>
+              <div className="mt-3 h-2 overflow-hidden rounded-full bg-border">
+                <div
+                  className={`h-full rounded-full transition-all duration-500 ${meetsMinimum ? 'bg-primary' : 'bg-accent'}`}
+                  style={{
+                    width: `${minimumCents === null
+                      ? 0
+                      : Math.min(100, (weeklyRetailCents / minimumCents) * 100)}%`,
+                  }}
+                />
+              </div>
+            </div>
+
+            {productsLoading ? (
+              <SubscriptionProductSkeletons itemLabel="juice" />
+            ) : productsError ? (
+              <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center text-destructive">
+                The live juice catalog could not be loaded. Please refresh and try again.
+              </p>
+            ) : individualJuices.length === 0 ? (
+              <p className="py-12 text-center text-muted-foreground">No live juice products are available.</p>
+            ) : (
+              <div className="space-y-3">
+                {individualJuices.map(product => {
+                  const quantity = selections[product.node.id] || 0;
+                  const variant = product.node.variants.edges[0]?.node;
+                  const price = variant?.price || product.node.priceRange.minVariantPrice;
+                  const image = product.node.images.edges[0]?.node;
+                  const sellingPlan = sellingPlansByProduct?.[product.node.id];
+                  const hasExactDiscount = hasExactTenPercentAdjustment(sellingPlan);
+                  const currencyMatches = Boolean(
+                    minimumMoney && price.currencyCode === minimumMoney.currencyCode,
+                  );
+                  const canSelect = Boolean(
+                    variant?.availableForSale
+                    && sellingPlan
+                    && currencyMatches
+                    && !configurationLoading
+                    && !minimumConfigurationUnavailable
+                    && !sellingPlansError,
+                  );
+
                   return (
-                    <TabsTrigger
-                      key={week.id}
-                      value={week.id}
-                      className="relative flex flex-col gap-0.5 py-3"
-                    >
-                      <span className="font-semibold">{week.label}</span>
-                      {hasSelections && (
-                        <span className={`text-xs ${meetsMin ? 'text-primary' : 'text-destructive'}`}>
-                          {formatPrice(total.toString())}
-                        </span>
-                      )}
-                      {meetsMin && (
-                        <Check className="absolute top-1 right-1 h-3.5 w-3.5 text-primary" />
-                      )}
-                    </TabsTrigger>
+                    <Card key={product.node.id} className="border-0 shadow-sm transition-shadow hover:shadow-md">
+                      <CardContent className="flex flex-wrap items-start gap-4 p-4">
+                        <div className="h-20 w-20 flex-shrink-0 overflow-hidden rounded-lg bg-muted">
+                          {image ? (
+                            <img
+                              src={getShopifyImageUrl(image.url, 160)}
+                              alt={image.altText || product.node.title}
+                              loading="lazy"
+                              decoding="async"
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-herb-light to-muted">
+                              <span className="text-xs text-muted-foreground">No image</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-[12rem] flex-1">
+                          <div className="flex flex-wrap items-baseline justify-between gap-2">
+                            <h3 className="font-serif font-bold text-foreground">{product.node.title}</h3>
+                            <p className="font-bold text-accent">{formatPrice(price.amount, price.currencyCode)}</p>
+                          </div>
+                          <p className="mt-1 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                            {product.node.description || 'Live product description unavailable.'}
+                          </p>
+                          {!variant?.availableForSale && (
+                            <p className="mt-2 text-xs font-medium text-destructive">Sold out</p>
+                          )}
+                          {variant?.availableForSale && !sellingPlansLoading && !sellingPlan && (
+                            <p className="mt-2 text-xs font-medium text-destructive">Exact weekly juice plan missing</p>
+                          )}
+                          {variant?.availableForSale && sellingPlan && !hasExactDiscount && (
+                            <p className="mt-2 text-xs font-medium text-accent">Weekly plan found; exact 10% adjustment missing</p>
+                          )}
+                          {variant?.availableForSale && sellingPlan && hasExactDiscount && (
+                            <p className="mt-2 flex items-center gap-1 text-xs font-medium text-primary">
+                              <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                              Weekly plan and exact 10% adjustment verified
+                            </p>
+                          )}
+                          {variant?.availableForSale && minimumMoney && !currencyMatches && (
+                            <p className="mt-2 text-xs font-medium text-destructive">Currency does not match the Pick n&apos; Choose minimum</p>
+                          )}
+                        </div>
+                        <div className="ml-auto flex flex-shrink-0 items-center gap-2 self-center">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-11 w-11 rounded-full"
+                            onClick={() => updateQuantity(product.node.id, -1)}
+                            disabled={quantity === 0}
+                            aria-label={`Remove one ${product.node.title}`}
+                          >
+                            <Minus className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                          <span
+                            className="w-8 text-center font-semibold"
+                            aria-label={`${product.node.title} quantity`}
+                          >
+                            {quantity}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-11 w-11 rounded-full"
+                            onClick={() => updateQuantity(product.node.id, 1)}
+                            disabled={!canSelect}
+                            aria-label={`Add one ${product.node.title}`}
+                          >
+                            <Plus className="h-4 w-4" aria-hidden="true" />
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
                   );
                 })}
-              </TabsList>
+              </div>
+            )}
 
-              {WEEKS.map(week => {
-                const weekProducts = productsByWeek[week.id] || [];
-                const total = weekTotals[week.id];
-                const meetsMin = minimumPerWeek !== null && total >= minimumPerWeek;
-                const remaining = minimumPerWeek === null
-                  ? null
-                  : Math.max(0, minimumPerWeek - total);
-
-                return (
-                  <TabsContent key={week.id} value={week.id}>
-                    {/* Week status bar */}
-                    <div className={`mb-6 p-4 rounded-xl border ${meetsMin ? 'bg-primary/5 border-primary/20' : 'bg-muted/50 border-border'}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {meetsMin ? (
-                            <Check className="h-5 w-5 text-primary" />
-                          ) : (
-                            <AlertCircle className="h-5 w-5 text-muted-foreground" />
-                          )}
-                          <span className="font-semibold">
-                            {week.label} Total: {formatPrice(total.toString())}
-                          </span>
-                        </div>
-                        {!meetsMin && total > 0 && remaining !== null && (
-                          <span className="text-sm text-muted-foreground">
-                            {formatPrice(remaining.toString())} more to meet minimum
-                          </span>
-                        )}
-                        {!meetsMin && total === 0 && (
-                          <span className="text-sm text-muted-foreground">
-                            {minimumDisplay
-                              ? `${minimumDisplay} minimum`
-                              : 'Live minimum unavailable'}
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-3 h-2 rounded-full bg-border overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${meetsMin ? 'bg-primary' : 'bg-accent'}`}
-                          style={{
-                            width: `${minimumPerWeek === null
-                              ? 0
-                              : Math.min(100, (total / minimumPerWeek) * 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    {productsLoading ? (
-                      <SubscriptionProductSkeletons itemLabel="juice" />
-                    ) : productsError ? (
-                      <p role="alert" className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center text-destructive">
-                        The live juice catalog could not be loaded. Please refresh and try again.
-                      </p>
-                    ) : weekProducts.length === 0 ? (
-                      <p className="text-center text-muted-foreground py-12">No juices found for this week.</p>
-                    ) : (
-                      <div className="space-y-3">
-                        {weekProducts.map(product => {
-                          const qty = selections[week.id]?.[product.node.id] || 0;
-                          const variant = product.node.variants.edges[0]?.node;
-                          const price = variant?.price || product.node.priceRange.minVariantPrice;
-                          const image = product.node.images.edges[0]?.node;
-                          const sellingPlan = sellingPlansByProduct?.[product.node.id];
-                          const canSelect = Boolean(
-                            variant?.availableForSale
-                            && sellingPlan
-                            && !configurationLoading
-                            && !configurationUnavailable,
-                          );
-
-                          return (
-                            <Card key={product.node.id} className="border-0 shadow-sm hover:shadow-md transition-shadow">
-                              <CardContent className="flex flex-wrap items-center gap-4 p-4">
-                                <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0">
-                                  {image ? (
-                                    <img src={getShopifyImageUrl(image.url, 128)} alt={image.altText || product.node.title} loading="lazy" decoding="async" className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-herb-light to-muted">
-                                      <span className="text-xs text-muted-foreground">No img</span>
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="min-w-[9rem] flex-1">
-                                  <h3 className="font-serif font-bold text-foreground truncate">{product.node.title}</h3>
-                                  <p className="text-sm text-muted-foreground line-clamp-1">{product.node.description}</p>
-                                  {!variant?.availableForSale && <p className="text-xs font-medium text-destructive">Sold out</p>}
-                                  {variant?.availableForSale && !configurationLoading && !sellingPlan && (
-                                    <p className="text-xs font-medium text-destructive">Not available for weekly subscription</p>
-                                  )}
-                                </div>
-                                <div className="text-right flex-shrink-0">
-                                  <p className="font-bold text-accent">{formatPrice(price.amount, price.currencyCode)}</p>
-                                </div>
-                                <div className="ml-auto flex flex-shrink-0 items-center gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-11 w-11 rounded-full"
-                                    onClick={() => updateQuantity(week.id, product.node.id, -1)}
-                                    disabled={qty === 0}
-                                    aria-label={`Remove one ${product.node.title} from ${week.label}`}
-                                  >
-                                    <Minus className="h-4 w-4" aria-hidden="true" />
-                                  </Button>
-                                  <span className="w-8 text-center font-semibold">{qty}</span>
-                                  <Button
-                                    variant="outline"
-                                    size="icon"
-                                    className="h-11 w-11 rounded-full"
-                                    onClick={() => updateQuantity(week.id, product.node.id, 1)}
-                                    disabled={!canSelect}
-                                    aria-label={`Add one ${product.node.title} to ${week.label}`}
-                                  >
-                                    <Plus className="h-4 w-4" aria-hidden="true" />
-                                  </Button>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          );
-                        })}
-                      </div>
+            {!productsLoading && !productsError && hibiscusAddOnProduct && hibiscusAddOnVariant && (
+              <Card className="mt-6 border-accent/30 bg-accent/5 shadow-sm">
+                <CardContent className="flex flex-col items-stretch gap-4 p-5 sm:flex-row sm:items-center">
+                  <div className="min-w-[12rem] flex-1">
+                    <h3 className="font-serif font-bold text-foreground">
+                      Optional one-time Hibiscus Tea add-on
+                    </h3>
+                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                      {formatPrice(hibiscusAddOnVariant.price.amount, hibiscusAddOnVariant.price.currencyCode)} each. Requested once with the first order, with no selling plan. It does not count toward the {minimumDisplay || 'weekly'} minimum and does not receive the 10% subscription discount.
+                    </p>
+                    {!hibiscusAddOnVariant.availableForSale && (
+                      <p className="mt-2 text-xs font-medium text-destructive">Currently sold out</p>
                     )}
-                  </TabsContent>
-                );
-              })}
-            </Tabs>
+                    {minimumMoney && hibiscusAddOnVariant.price.currencyCode !== minimumMoney.currencyCode && (
+                      <p className="mt-2 text-xs font-medium text-destructive">Currency does not match the Pick n&apos; Choose request</p>
+                    )}
+                    {!hibiscusAddOnHasExpectedPrice && (
+                      <p className="mt-2 text-xs font-medium text-destructive">
+                        The approved $3.00 USD add-on price could not be verified. Add-on selection is disabled.
+                      </p>
+                    )}
+                  </div>
+                  <div
+                    className="flex flex-shrink-0 items-center gap-2 self-end sm:ml-auto sm:self-auto"
+                    role="group"
+                    aria-label="One-time Hibiscus Tea add-on quantity"
+                  >
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11 rounded-full"
+                      onClick={() => setHibiscusAddOnQuantity((quantity) => Math.max(0, quantity - 1))}
+                      disabled={hibiscusAddOnQuantity === 0}
+                      aria-label="Remove one one-time Hibiscus Tea add-on"
+                    >
+                      <Minus className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                    <span className="w-8 text-center font-semibold" role="status" aria-live="polite" aria-atomic="true">
+                      <span className="sr-only">One-time Hibiscus Tea add-on quantity: </span>
+                      {hibiscusAddOnQuantity}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11 rounded-full"
+                      onClick={() => setHibiscusAddOnQuantity((quantity) => quantity + 1)}
+                      disabled={!hibiscusAddOnSelectable}
+                      aria-label="Add one one-time Hibiscus Tea add-on"
+                    >
+                      <Plus className="h-4 w-4" aria-hidden="true" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-            {/* Summary & Add to Cart */}
+            {!productsLoading && !productsError && hibiscusAddOnMatches.length !== 1 && (
+              <p role="alert" className="mt-6 rounded-xl border border-accent/30 bg-accent/5 p-4 text-sm text-foreground">
+                The optional $3.00 Hibiscus Tea add-on is unavailable because one exact live product could not be verified. It remains excluded from the subscription mix.
+              </p>
+            )}
+
             {anySelections && (
-              <div className="mt-10 p-6 rounded-2xl bg-card border border-border shadow-lg">
-                <h3 className="font-serif text-xl font-bold mb-4">Weekly Subscription Summary</h3>
-                <div className="space-y-3 mb-6">
-                  {WEEKS.map(week => {
-                    const total = weekTotals[week.id];
-                    const meetsMin = minimumPerWeek !== null && total >= minimumPerWeek;
-                    if (total === 0) return null;
-
-                    const weekSel = selections[week.id] || {};
-                    const itemCount = Object.values(weekSel).reduce((sum, q) => sum + q, 0);
-
-                    return (
-                      <div key={week.id} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {meetsMin ? (
-                            <Check className="h-4 w-4 text-primary" />
-                          ) : (
-                            <AlertCircle className="h-4 w-4 text-destructive" />
-                          )}
-                          <span className="font-medium">{week.label}</span>
-                          <span className="text-sm text-muted-foreground">({itemCount} items)</span>
-                        </div>
-                        <span className={`font-bold ${meetsMin ? 'text-primary' : 'text-destructive'}`}>
-                          {formatPrice(total.toString())}
-                        </span>
-                      </div>
-                    );
-                  })}
+              <div className="mt-10 rounded-2xl border border-border bg-card p-6 shadow-lg">
+                <h3 className="mb-4 font-serif text-xl font-bold">Four-Week Subscription Request</h3>
+                <div className="mb-6 space-y-3">
+                  {selectedItems.map(item => (
+                    <div key={item.product.node.id} className="flex items-center justify-between gap-4">
+                      <span className="font-medium">
+                        {item.quantity} × {item.product.node.title}
+                      </span>
+                      <span className="font-bold">
+                        {formatCents(item.priceCents * item.quantity, minimumMoney?.currencyCode)}
+                      </span>
+                    </div>
+                  ))}
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-border mb-6">
-                  <span className="font-serif text-lg font-bold">Weekly recurring total</span>
-                  <span className={`text-xl font-bold ${hasExactlyOneSelectedWeek ? 'text-primary' : 'text-destructive'}`}>
-                    {selectedWeek
-                      ? formatPrice(weekTotals[selectedWeek.id].toString())
-                      : 'Choose one menu'}
+                <div className="mb-6 flex items-center justify-between border-t border-border pt-4">
+                  <span className="font-serif text-lg font-bold">Weekly mix retail total</span>
+                  <span className={`text-xl font-bold ${meetsMinimum ? 'text-primary' : 'text-destructive'}`}>
+                    {formatCents(weeklyRetailCents, minimumMoney?.currencyCode)}
                   </span>
                 </div>
 
-                {weeksWithSelections.length > 1 && (
-                  <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                    <p className="text-sm text-destructive flex items-center gap-2">
+                {hibiscusAddOnQuantity > 0 && hibiscusAddOnProduct && (
+                  <div className="mb-6 flex items-center justify-between rounded-xl border border-accent/30 bg-accent/5 p-4">
+                    <div>
+                      <span className="font-serif text-base font-bold">One-time Hibiscus add-on</span>
+                      <p className="text-xs text-muted-foreground">Excluded from the weekly minimum and discount</p>
+                    </div>
+                    <span className="text-lg font-bold text-accent">
+                      {formatCents(hibiscusAddOnTotalCents, minimumMoney?.currencyCode)}
+                    </span>
+                  </div>
+                )}
+
+                {estimatedDiscountedWeeklyCents !== null && (
+                  <div className="mb-6 flex items-center justify-between rounded-xl border border-primary/20 bg-primary/5 p-4">
+                    <span className="font-serif text-lg font-bold">Estimated weekly total after verified 10%</span>
+                    <span className="text-xl font-bold text-primary">
+                      {formatCents(estimatedDiscountedWeeklyCents, minimumMoney?.currencyCode)}
+                    </span>
+                  </div>
+                )}
+
+                {!meetsMinimum && (
+                  <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+                    <p className="flex items-center gap-2 text-sm text-destructive">
                       <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      Choose exactly one menu week. Clear every selection from the other menu tabs.
+                      {minimumDisplay && remainingCents !== null
+                        ? `Add ${formatCents(remainingCents, minimumMoney?.currencyCode)} more to meet the ${minimumDisplay} live weekly minimum.`
+                        : 'The live weekly minimum is unavailable, so a request cannot be prepared.'}
                     </p>
                   </div>
                 )}
 
-                {selectedWeek && !selectedWeekMeetsMinimum && (
-                  <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                    <p className="text-sm text-destructive flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
-                      {minimumDisplay
-                        ? `Your weekly selection must meet the ${minimumDisplay} minimum to proceed.`
-                        : 'The live weekly minimum is unavailable, so this selection cannot be added.'}
+                {meetsMinimum && !everySelectedPlanHasExactDiscount && (
+                  <div className="mb-4 rounded-lg border border-accent/30 bg-accent/10 p-3">
+                    <p className="flex items-start gap-2 text-sm text-foreground">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
+                      The selected weekly plans do not all contain the confirmed exact 10% percentage adjustment. The enrollment request preserves that term, but this retail total is not presented as discounted pricing.
                     </p>
                   </div>
                 )}
 
-                <Button
-                  onClick={handleAddAllToCart}
-                  disabled={productsError || !hasExactlyOneSelectedWeek || !selectedWeekMeetsMinimum || !selectedItemsAreAvailable || configurationLoading || configurationUnavailable || isLoading || isSubmitting}
-                  className="w-full rounded-full bg-primary hover:bg-primary/90 shadow-md"
-                  size="lg"
-                >
-                  {isSubmitting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <ShoppingCart className="mr-2 h-5 w-5" />
-                      Add Weekly Juice Selection to Cart
-                    </>
+                <div className="mb-5 rounded-xl border border-border bg-muted/30 p-4">
+                  <h3 className="font-serif text-base font-bold text-foreground">Billing preference</h3>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Select how you want the confirmed four-week enrollment billed. This records a manual-enrollment choice; Shopify does not currently expose a four-payment commitment or prepaid plan for online checkout.
+                  </p>
+                  <RadioGroup
+                    className="mt-4 gap-3"
+                    value={billingPreference || ''}
+                    onValueChange={(value) => setBillingPreference(value as BillingPreference)}
+                    aria-label="Billing preference"
+                  >
+                    <Label htmlFor="juice-billing-weekly" className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 leading-relaxed">
+                      <RadioGroupItem value="weekly" id="juice-billing-weekly" className="mt-0.5" />
+                      <span>
+                        <span className="block">Pay weekly for four weeks</span>
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          Four weekly charges for the same mix. The confirmed four-cycle rule must be enforced during manual enrollment.
+                        </span>
+                      </span>
+                    </Label>
+                    <Label htmlFor="juice-billing-prepaid" className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 leading-relaxed">
+                      <RadioGroupItem value="prepaid" id="juice-billing-prepaid" className="mt-0.5" />
+                      <span>
+                        <span className="block">Prepay all four weeks</span>
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          One upfront payment covering four deliveries. No live prepaid selling plan is configured, so enrollment remains manual.
+                        </span>
+                      </span>
+                    </Label>
+                  </RadioGroup>
+                  {billingPreference === 'prepaid' && estimatedPrepaidCents !== null && (
+                    <p className="mt-3 text-sm font-semibold text-primary">
+                      Estimated four-week prepaid total: {formatCents(estimatedPrepaidCents, minimumMoney?.currencyCode)}
+                    </p>
                   )}
-                </Button>
-                <p className="text-xs text-muted-foreground text-center mt-3">
-                  Only the selected menu is added. It repeats weekly at the weekly recurring total shown above. Automatic rotation and a four-billing-cycle commitment are not enforced until Shopify/subscription-app setup is complete.
+                  {!billingPreference && (
+                    <p className="mt-3 text-xs font-medium text-accent" role="status">
+                      Choose a billing preference to prepare the enrollment request.
+                    </p>
+                  )}
+                </div>
+
+                {requestMailto ? (
+                  <Button asChild className="h-auto min-h-11 w-full whitespace-normal rounded-full bg-primary py-3 text-center leading-tight shadow-md hover:bg-primary/90" size="lg">
+                    <a href={requestMailto}>
+                      <Mail className="mr-2 h-5 w-5" />
+                      Request This 4-Week Subscription
+                    </a>
+                  </Button>
+                ) : (
+                  <Button disabled className="h-auto min-h-11 w-full whitespace-normal rounded-full py-3 text-center leading-tight" size="lg">
+                    <Mail className="mr-2 h-5 w-5" />
+                    Request This 4-Week Subscription
+                  </Button>
+                )}
+                <p className="mt-3 text-center text-xs text-muted-foreground">
+                  This opens a prefilled email to {REQUEST_EMAIL}. Nothing is added to the cart and no charge is made. Place in Thyme must manually apply the confirmed discount and four-week commitment, honor the selected billing preference, and provide fulfillment details before enrollment.
                 </p>
               </div>
             )}

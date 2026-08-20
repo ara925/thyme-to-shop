@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SellingPlan, ShopifyProduct } from '@/lib/shopify';
 import JuiceSubscription from './JuiceSubscription';
@@ -30,17 +30,29 @@ vi.mock('@/stores/cartStore', () => ({
     selector({ addItems: mocks.addItems, isLoading: false }),
 }));
 
-vi.mock('sonner', () => ({
-  toast: { error: vi.fn(), success: vi.fn() },
-}));
+const liveDescription = '12oz — celery, spinach, green apple, ginger, cucumber, parsley, lemon, honeydew.\nMay support hydration, digestion, and clean energy.';
 
-function createProduct(availableForSale = true, amount = '134.99'): ShopifyProduct {
+function createProduct({
+  id = 'green-cleanse',
+  title = 'Green Cleanse 12oz',
+  amount = '134.99',
+  description = liveDescription,
+  availableForSale = true,
+  requiresComponents = false,
+}: {
+  id?: string;
+  title?: string;
+  amount?: string;
+  description?: string;
+  availableForSale?: boolean;
+  requiresComponents?: boolean;
+} = {}): ShopifyProduct {
   return {
     node: {
-      id: 'juice-product',
-      title: 'Weekly Juice',
-      description: 'A live juice product.',
-      handle: 'weekly-juice',
+      id,
+      title,
+      description,
+      handle: id,
       productType: 'Juice',
       tags: ['juice'],
       priceRange: { minVariantPrice: { amount, currencyCode: 'USD' } },
@@ -49,11 +61,11 @@ function createProduct(availableForSale = true, amount = '134.99'): ShopifyProdu
       variants: {
         edges: [{
           node: {
-            id: 'juice-variant',
+            id: `${id}-variant`,
             title: 'Default Title',
             price: { amount, currencyCode: 'USD' },
             availableForSale,
-            requiresComponents: false,
+            requiresComponents,
             selectedOptions: [],
           },
         }],
@@ -83,18 +95,27 @@ function createPickAndChooseProduct(
 }
 
 function mockProductQueries(
-  juice = createProduct(),
+  juices: ShopifyProduct[] = [createProduct()],
   bundles: ShopifyProduct[] = [createPickAndChooseProduct()],
-  bundleState: { isLoading?: boolean; isError?: boolean } = {},
+  states: {
+    productsLoading?: boolean;
+    productsError?: boolean;
+    bundleLoading?: boolean;
+    bundleError?: boolean;
+  } = {},
 ) {
   mocks.useProducts.mockImplementation((_first: number, query: string) => (
     query === 'product_type:"Juice Bundle"'
       ? {
           data: bundles,
-          isLoading: bundleState.isLoading || false,
-          isError: bundleState.isError || false,
+          isLoading: states.bundleLoading || false,
+          isError: states.bundleError || false,
         }
-      : { data: [juice], isLoading: false, isError: false }
+      : {
+          data: juices,
+          isLoading: states.productsLoading || false,
+          isError: states.productsError || false,
+        }
   ));
 }
 
@@ -107,123 +128,319 @@ const weeklyPlan: SellingPlan = {
   recurringDeliveries: true,
 };
 
-function getPlusButton(container: HTMLElement): HTMLButtonElement {
-  const button = container.querySelector('svg.lucide-plus')?.closest('button');
-  if (!(button instanceof HTMLButtonElement)) throw new Error('Plus button was not rendered.');
-  return button;
+const weeklyPlanWithTenPercent: SellingPlan = {
+  ...weeklyPlan,
+  id: 'weekly-plan-with-ten-percent',
+  priceAdjustments: [{
+    orderCount: null,
+    adjustmentValue: {
+      __typename: 'SellingPlanPercentagePriceAdjustment',
+      percentage: 10,
+    },
+  }],
+};
+
+function getPlusButton(productTitle = 'Green Cleanse 12oz'): HTMLButtonElement {
+  return screen.getByRole('button', { name: `Add one ${productTitle}` });
+}
+
+function chooseWeeklyBilling(): void {
+  fireEvent.click(screen.getByRole('radio', { name: /pay weekly for four weeks/i }));
+}
+
+function choosePrepaidBilling(): void {
+  fireEvent.click(screen.getByRole('radio', { name: /prepay all four weeks/i }));
 }
 
 describe('JuiceSubscription', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.addItems.mockResolvedValue(undefined);
     mockProductQueries();
     mocks.useSellingPlans.mockReturnValue({
-      data: { 'juice-product': weeklyPlan },
+      data: { 'green-cleanse': weeklyPlan },
       isLoading: false,
       isError: false,
     });
   });
 
-  it('adds the selected week once as a compatible attributed batch at the live base price', async () => {
-    const { container } = render(<JuiceSubscription />);
+  it('renders one Pick n Choose mix with the full live product description and no week tabs', () => {
+    render(<JuiceSubscription />);
 
-    expect(screen.queryByText(/10%/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/cancel anytime/i)).not.toBeInTheDocument();
-    expect(mocks.useProducts).toHaveBeenCalledWith(50, 'product_type:"Juice Bundle"');
+    expect(mocks.useSellingPlans).toHaveBeenCalledWith(
+      'product_type:Juice AND NOT product_type:"Juice Bundle"',
+      'Pick n’ Choose Bundle',
+    );
 
-    fireEvent.click(getPlusButton(container));
-    fireEvent.click(screen.getByRole('button', { name: /add weekly juice selection to cart/i }));
-
-    await waitFor(() => expect(mocks.addItems).toHaveBeenCalledTimes(1));
-    expect(mocks.addItems).toHaveBeenCalledWith([expect.objectContaining({
-      variantId: 'juice-variant',
-      price: { amount: '134.99', currencyCode: 'USD' },
-      quantity: 1,
-      sellingPlanId: 'weekly-plan',
-      attributes: expect.arrayContaining([
-        { key: 'Menu Week', value: 'Week 1' },
-        { key: '_minimum_group', value: 'juice-plan:week-a' },
-        { key: '_minimum_cents', value: '13499' },
-      ]),
-    })]);
+    expect(screen.getByRole('heading', { name: /build one weekly juice mix/i })).toBeInTheDocument();
+    expect(screen.queryAllByRole('tab')).toHaveLength(0);
+    expect(screen.queryByText(/week 1/i)).not.toBeInTheDocument();
+    const description = screen.getByText((_, element) => (
+      element?.tagName === 'P' && element.textContent === liveDescription
+    ));
+    expect(description).toBeInTheDocument();
+    expect(description).not.toHaveClass('line-clamp-1');
   });
 
-  it('derives cart enforcement from the exact live Pick n Choose product price', async () => {
-    mockProductQueries(createProduct(true, '150.01'), [createPickAndChooseProduct('150.01')]);
+  it('requires the exact live Pick n Choose minimum before preparing the email request', () => {
+    mockProductQueries(
+      [createProduct({ amount: '50.00' })],
+      [createPickAndChooseProduct('134.99')],
+    );
+    render(<JuiceSubscription />);
+
+    fireEvent.click(getPlusButton());
+    fireEvent.click(getPlusButton());
+
+    expect(screen.getByRole('button', { name: /request this 4-week subscription/i })).toBeDisabled();
+    expect(screen.getByText(/add \$34\.99 more to meet the \$134\.99 live weekly minimum/i)).toBeInTheDocument();
+
+    fireEvent.click(getPlusButton());
+    expect(screen.getByRole('button', { name: /request this 4-week subscription/i })).toBeDisabled();
+    expect(screen.getByText(/choose a billing preference to prepare the enrollment request/i)).toBeInTheDocument();
+
+    chooseWeeklyBilling();
+    expect(screen.getByRole('link', { name: /request this 4-week subscription/i })).toHaveAttribute(
+      'href',
+      expect.stringContaining('mailto:info@placeinthyme.com'),
+    );
+  });
+
+  it('uses a changed live minimum and includes quantities and the retail total in the request', () => {
+    mockProductQueries(
+      [createProduct({ amount: '150.01' })],
+      [createPickAndChooseProduct('150.01')],
+    );
     render(<JuiceSubscription />);
 
     expect(screen.getAllByText(/\$150\.01/).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByRole('button', { name: /add one weekly juice to week 1/i }));
-    fireEvent.click(screen.getByRole('button', { name: /add weekly juice selection to cart/i }));
+    fireEvent.click(getPlusButton());
+    chooseWeeklyBilling();
 
-    await waitFor(() => expect(mocks.addItems).toHaveBeenCalledTimes(1));
-    expect(mocks.addItems).toHaveBeenCalledWith([expect.objectContaining({
-      attributes: expect.arrayContaining([
-        { key: '_minimum_cents', value: '15001' },
-        { key: '_minimum_currency', value: 'USD' },
-      ]),
-    })]);
-  });
+    const requestLink = screen.getByRole('link', { name: /request this 4-week subscription/i });
+    const href = requestLink.getAttribute('href') || '';
+    const body = decodeURIComponent(href.split('&body=')[1]);
 
-  it('blocks checkout when selections span more than one menu week', () => {
-    render(<JuiceSubscription />);
-
-    fireEvent.click(screen.getByRole('button', { name: /add one weekly juice to week 1/i }));
-    fireEvent.mouseDown(screen.getByRole('tab', { name: /week 2/i }), { button: 0 });
-    fireEvent.click(screen.getByRole('button', { name: /add one weekly juice to week 2/i }));
-
-    expect(screen.getByText(/choose exactly one menu week/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /add weekly juice selection to cart/i })).toBeDisabled();
+    expect(body).toContain('1 x Green Cleanse 12oz = $150.01');
+    expect(body).toContain('Weekly retail total: $150.01');
+    expect(body).toContain('Live weekly minimum: $150.01');
+    expect(body).toContain('10% off the selected retail total and a minimum four-week commitment');
+    expect(body).toContain('Billing preference: Pay weekly for four weeks.');
     expect(mocks.addItems).not.toHaveBeenCalled();
   });
 
-  it('discloses the actual recurrence and unenforced commitment', () => {
+  it('detects the missing exact 10% adjustment without claiming or charging it', () => {
     render(<JuiceSubscription />);
 
-    expect(screen.getByText(/selected juices and quantities repeat every week/i)).toBeInTheDocument();
-    expect(screen.getByText(/four-billing-cycle commitment is not enforced until shopify/i)).toBeInTheDocument();
+    expect(screen.getByText(/weekly plan found; exact 10% adjustment missing/i)).toBeInTheDocument();
+    expect(screen.getByText(/retail prices only; the confirmed discount must be configured or applied during manual enrollment/i)).toBeInTheDocument();
+
+    fireEvent.click(getPlusButton());
+    chooseWeeklyBilling();
+    const requestLink = screen.getByRole('link', { name: /request this 4-week subscription/i });
+    const body = decodeURIComponent((requestLink.getAttribute('href') || '').split('&body=')[1]);
+    expect(body).toContain('Exact 10% percentage adjustment on every selected plan: No');
+    expect(mocks.addItems).not.toHaveBeenCalled();
   });
 
-  it('disables selection when the live variant is sold out', () => {
-    mockProductQueries(createProduct(false));
-    const { container } = render(<JuiceSubscription />);
+  it('recognizes only an exact single 10% percentage adjustment', () => {
+    mocks.useSellingPlans.mockReturnValue({
+      data: { 'green-cleanse': weeklyPlanWithTenPercent },
+      isLoading: false,
+      isError: false,
+    });
+    render(<JuiceSubscription />);
 
-    expect(getPlusButton(container)).toBeDisabled();
-    expect(screen.getByText('Sold out')).toBeInTheDocument();
+    expect(screen.getByText(/weekly plan and exact 10% adjustment verified/i)).toBeInTheDocument();
+    expect(screen.getByText(/exact 10% percentage adjustment is present on every live weekly juice plan/i)).toBeInTheDocument();
+
+    fireEvent.click(getPlusButton());
+    expect(screen.getByText('Estimated weekly total after verified 10%')).toBeInTheDocument();
+    expect(screen.getByText('$121.49')).toBeInTheDocument();
+    choosePrepaidBilling();
+    expect(screen.getByText(/estimated four-week prepaid total: \$485\.96/i)).toBeInTheDocument();
+    const requestLink = screen.getByRole('link', { name: /request this 4-week subscription/i });
+    const body = decodeURIComponent((requestLink.getAttribute('href') || '').split('&body=')[1]);
+    expect(body).toContain('Exact 10% percentage adjustment on every selected plan: Yes');
+    expect(body).toContain('Estimated weekly total after verified 10% plan adjustment: $121.49');
+    expect(body).toContain('Estimated four-week prepaid total: $485.96');
+    expect(body).toContain('Billing preference: Prepay all four weeks.');
+    expect(mocks.addItems).not.toHaveBeenCalled();
   });
 
-  it('shows a blocking configuration state instead of falling back to a one-time order', () => {
+  it.each([3, 4])(
+    'rejects an exact 10%% adjustment capped at %i orders for the ongoing subscription',
+    (orderCount) => {
+      mocks.useSellingPlans.mockReturnValue({
+        data: {
+          'green-cleanse': {
+            ...weeklyPlanWithTenPercent,
+            priceAdjustments: [{
+              orderCount,
+              adjustmentValue: {
+                __typename: 'SellingPlanPercentagePriceAdjustment',
+                percentage: 10,
+              },
+            }],
+          },
+        },
+        isLoading: false,
+        isError: false,
+      });
+
+      render(<JuiceSubscription />);
+
+      expect(screen.getByText(/weekly plan found; exact 10% adjustment missing/i)).toBeInTheDocument();
+      fireEvent.click(getPlusButton());
+      expect(screen.queryByText('Estimated weekly total after verified 10%')).not.toBeInTheDocument();
+    },
+  );
+
+  it('keeps Sweetened Hibiscus outside the minimum and discount as a one-time add-on', () => {
+    const green = createProduct({ amount: '134.99' });
+    const hibiscus = createProduct({
+      id: 'hibiscus',
+      title: 'Hibiscus Tea (Sweetened)',
+      amount: '3.00',
+      description: '12oz Hibiscus Tea.',
+    });
+    const componentOnly = createProduct({
+      id: 'hibiscus-component',
+      title: 'Hibiscus Tea Add-On',
+      amount: '3.00',
+      requiresComponents: true,
+    });
+    mockProductQueries([green, hibiscus, componentOnly]);
+    mocks.useSellingPlans.mockReturnValue({
+      data: { 'green-cleanse': weeklyPlanWithTenPercent },
+      isLoading: false,
+      isError: false,
+    });
+    render(<JuiceSubscription />);
+
+    expect(screen.queryByRole('button', { name: 'Add one Hibiscus Tea (Sweetened)' }))
+      .not.toBeInTheDocument();
+    const addOnButton = screen.getByRole('button', {
+      name: /add one one-time hibiscus tea add-on/i,
+    });
+    fireEvent.click(addOnButton);
+    fireEvent.click(addOnButton);
+    expect(screen.getByText(/does not count toward the \$134\.99 minimum/i)).toBeInTheDocument();
+
+    fireEvent.click(getPlusButton());
+    choosePrepaidBilling();
+    expect(screen.getByText('Weekly mix retail total')).toBeInTheDocument();
+    expect(screen.getByText(/excluded from the weekly minimum and discount/i)).toBeInTheDocument();
+    expect(screen.getByText(/estimated four-week prepaid total: \$485\.96/i)).toBeInTheDocument();
+
+    const requestLink = screen.getByRole('link', { name: /request this 4-week subscription/i });
+    const body = decodeURIComponent((requestLink.getAttribute('href') || '').split('&body=')[1]);
+    expect(body).toContain('Weekly retail total: $134.99');
+    expect(body).toContain('Estimated weekly total after verified 10% plan adjustment: $121.49');
+    expect(body).toContain('Estimated four-week prepaid total: $485.96');
+    expect(body).toContain('Optional one-time add-on: 2 x Hibiscus Tea (Sweetened) = $6.00');
+    expect(body).toContain('One-time Hibiscus add-on total: $6.00');
+    expect(body).toContain('excluded from the weekly minimum and 10% discount');
+    expect(body).toContain('Billing preference: Prepay all four weeks.');
+    expect(mocks.addItems).not.toHaveBeenCalled();
+  });
+
+  it('excludes every exact Hibiscus title from the mix when the live add-on match is ambiguous', () => {
+    const green = createProduct({ amount: '134.99' });
+    const firstHibiscus = createProduct({
+      id: 'hibiscus-one',
+      title: 'Hibiscus Tea (Sweetened)',
+      amount: '3.00',
+    });
+    const secondHibiscus = createProduct({
+      id: 'hibiscus-two',
+      title: 'Hibiscus Tea (Sweetened)',
+      amount: '3.00',
+    });
+    mockProductQueries([green, firstHibiscus, secondHibiscus]);
+    mocks.useSellingPlans.mockReturnValue({
+      data: { 'green-cleanse': weeklyPlanWithTenPercent },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<JuiceSubscription />);
+
+    expect(screen.queryByRole('button', { name: 'Add one Hibiscus Tea (Sweetened)' }))
+      .not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add one one-time hibiscus tea add-on/i }))
+      .not.toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/one exact live product could not be verified/i);
+
+    fireEvent.click(getPlusButton());
+    chooseWeeklyBilling();
+    expect(screen.getByRole('link', { name: /request this 4-week subscription/i })).toBeInTheDocument();
+  });
+
+  it('fails closed for the add-on when its live price is not exactly $3.00 USD', () => {
+    const green = createProduct({ amount: '134.99' });
+    const changedPriceHibiscus = createProduct({
+      id: 'hibiscus',
+      title: 'Hibiscus Tea (Sweetened)',
+      amount: '4.00',
+    });
+    mockProductQueries([green, changedPriceHibiscus]);
+    mocks.useSellingPlans.mockReturnValue({
+      data: { 'green-cleanse': weeklyPlanWithTenPercent },
+      isLoading: false,
+      isError: false,
+    });
+
+    render(<JuiceSubscription />);
+
+    expect(screen.getByText(/approved \$3\.00 USD add-on price could not be verified/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /add one one-time hibiscus tea add-on/i })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Add one Hibiscus Tea (Sweetened)' }))
+      .not.toBeInTheDocument();
+  });
+
+  it('validates that each selectable product has the exact live weekly plan', () => {
     mocks.useSellingPlans.mockReturnValue({ data: {}, isLoading: false, isError: false });
     render(<JuiceSubscription />);
 
-    expect(screen.getByText(/adding a one-time order is disabled/i)).toBeInTheDocument();
+    expect(getPlusButton()).toBeDisabled();
+    expect(screen.getByText(/exact weekly juice plan missing/i)).toBeInTheDocument();
     expect(mocks.addItems).not.toHaveBeenCalled();
   });
 
-  it('fails closed when the exact live Pick n Choose product is absent', () => {
-    mockProductQueries(createProduct(), [createPickAndChooseProduct('134.99', 'Similar Bundle')]);
+  it('disables a sold-out live product', () => {
+    mockProductQueries([createProduct({ availableForSale: false })]);
     render(<JuiceSubscription />);
 
-    expect(screen.getByText(/live pick n' choose minimum is not configured/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /add one weekly juice to week 1/i })).toBeDisabled();
+    expect(getPlusButton()).toBeDisabled();
+    expect(screen.getByText('Sold out')).toBeInTheDocument();
+  });
+
+  it('fails closed when the exact live Pick n Choose parent product is absent', () => {
+    mockProductQueries(
+      [createProduct()],
+      [createPickAndChooseProduct('134.99', 'Similar Bundle')],
+    );
+    render(<JuiceSubscription />);
+
+    expect(screen.getByText(/exact live Pick n' Choose minimum or weekly plan configuration is unavailable/i)).toBeInTheDocument();
+    expect(getPlusButton()).toBeDisabled();
     expect(mocks.addItems).not.toHaveBeenCalled();
   });
 
-  it('includes the live bundle query in loading and error states', () => {
-    mockProductQueries(createProduct(), [], { isError: true });
+  it('shows a neutral verification state while the live minimum is still loading', () => {
+    mockProductQueries(
+      [createProduct()],
+      [],
+      { bundleLoading: true },
+    );
     render(<JuiceSubscription />);
 
-    expect(screen.getByText(/live pick n' choose minimum is not configured/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /add one weekly juice to week 1/i })).toBeDisabled();
+    expect(screen.getByText(/confirming the exact live Pick n' Choose minimum/i)).toBeInTheDocument();
+    expect(screen.queryByText(/configuration is unavailable/i)).not.toBeInTheDocument();
   });
 
-  it('uses accessible layout-preserving skeletons while juice products load', () => {
-    mocks.useProducts.mockImplementation((_first: number, query: string) => (
-      query === 'product_type:"Juice Bundle"'
-        ? { data: [createPickAndChooseProduct()], isLoading: false, isError: false }
-        : { data: [], isLoading: true, isError: false }
-    ));
+  it('uses accessible layout-preserving skeletons while the live catalog loads', () => {
+    mockProductQueries([], [createPickAndChooseProduct()], { productsLoading: true });
     render(<JuiceSubscription />);
 
     expect(screen.getAllByText(/loading live juice options/i)).toHaveLength(1);

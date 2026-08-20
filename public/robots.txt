@@ -1,3 +1,5 @@
+# Generated at build time from VITE_SITE_URL.
+
 User-agent: Googlebot
 Allow: /
 

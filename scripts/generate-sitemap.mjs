@@ -1,11 +1,29 @@
 import { writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { loadEnv } from 'vite';
+
+const projectRoot = fileURLToPath(new URL('../', import.meta.url));
+const env = loadEnv(process.env.NODE_ENV || 'production', projectRoot, 'VITE_');
+const defaultSiteUrl = 'https://thyme-to-shop.lovable.app';
+
+const resolveSiteUrl = (value) => {
+  const candidate = (value || defaultSiteUrl).trim();
+  const url = new URL(candidate);
+
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+    throw new Error('VITE_SITE_URL must be an absolute HTTP(S) URL without credentials, a query, or a hash.');
+  }
+
+  url.pathname = url.pathname.replace(/\/+$/, '');
+  return url.toString().replace(/\/$/, '');
+};
 
 const apiVersion = '2026-07';
 const storeDomain =
-  process.env.VITE_SHOPIFY_STORE_DOMAIN || 'thyme-time-store-brreo.myshopify.com';
+  env.VITE_SHOPIFY_STORE_DOMAIN || 'thyme-time-store-brreo.myshopify.com';
 const storefrontToken =
-  process.env.VITE_SHOPIFY_STOREFRONT_TOKEN || '5f7c48d7ed775a943e87a6308e72948f';
-const siteUrl = (process.env.VITE_SITE_URL || 'https://thyme-to-shop.lovable.app').replace(/\/$/, '');
+  env.VITE_SHOPIFY_STOREFRONT_TOKEN || '5f7c48d7ed775a943e87a6308e72948f';
+const siteUrl = resolveSiteUrl(env.VITE_SITE_URL);
 const staticRoutes = [
   '/',
   '/weekly-meals',
@@ -16,6 +34,15 @@ const staticRoutes = [
   '/about',
   '/how-it-works',
 ];
+const excludedProductHandles = new Set([
+  // These products are routed to an approved category or planner instead of
+  // having a customer-facing product-detail page.
+  'weekly-meal-package-rotating-3-menu-cycle',
+  'hibiscus-tea-sweetened',
+  'hibiscus-tea-add-on',
+  // Pick n' Choose has a dedicated builder route.
+  'pick-n-choose-bundle',
+]);
 
 const response = await fetch(`https://${storeDomain}/api/${apiVersion}/graphql.json`, {
   method: 'POST',
@@ -52,7 +79,7 @@ const productRoutes = (payload.data?.products?.edges || [])
   .map(({ node }) => node)
   .filter((node) => {
     if (!node || typeof node.handle !== 'string' || node.handle.length === 0) return false;
-    if (node.handle === 'pick-n-choose-bundle') return false;
+    if (excludedProductHandles.has(node.handle.trim().toLowerCase())) return false;
     return (node.variants?.edges || []).some(({ node: variant }) => !variant.requiresComponents);
   })
   .map((node) => node.handle)
@@ -74,6 +101,30 @@ const sitemap = [
   '</urlset>',
   '',
 ].join('\n');
+const robots = [
+  '# Generated at build time from VITE_SITE_URL.',
+  '',
+  'User-agent: Googlebot',
+  'Allow: /',
+  '',
+  'User-agent: Bingbot',
+  'Allow: /',
+  '',
+  'User-agent: Twitterbot',
+  'Allow: /',
+  '',
+  'User-agent: facebookexternalhit',
+  'Allow: /',
+  '',
+  'User-agent: *',
+  'Allow: /',
+  '',
+  `Sitemap: ${siteUrl}/sitemap.xml`,
+  '',
+].join('\n');
 
-await writeFile(new URL('../public/sitemap.xml', import.meta.url), sitemap, 'utf8');
-console.log(`Generated sitemap with ${routes.length} published routes.`);
+await Promise.all([
+  writeFile(new URL('../public/sitemap.xml', import.meta.url), sitemap, 'utf8'),
+  writeFile(new URL('../public/robots.txt', import.meta.url), robots, 'utf8'),
+]);
+console.log(`Generated sitemap and robots.txt for ${siteUrl} with ${routes.length} published routes.`);

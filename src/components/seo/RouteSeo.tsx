@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 
-const SITE_URL = (import.meta.env.VITE_SITE_URL || 'https://thyme-to-shop.lovable.app').replace(/\/$/, '');
+const SITE_URL = (import.meta.env.VITE_SITE_URL || 'https://thyme-to-shop.lovable.app').replace(/\/+$/, '');
 const DEFAULT_IMAGE = `${SITE_URL}/favicon.png`;
 
 interface RouteMetadata {
@@ -25,7 +25,7 @@ const ROUTE_METADATA: Record<string, RouteMetadata> = {
   },
   '/juices/pick-and-choose': {
     title: 'Pick n’ Choose | Place in Thyme',
-    description: 'Build a custom recurring juice bundle from eligible live Place in Thyme products and prices.',
+    description: 'Build a one-time custom juice bundle from eligible live Place in Thyme products and prices.',
   },
   '/subscribe/meals': {
     title: 'Weekly Meal Plan | Place in Thyme',

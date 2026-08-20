@@ -61,6 +61,7 @@ export interface SellingPlan {
   description: string | null;
   options: Array<{ name: string; value: string }>;
   priceAdjustments: Array<{
+    orderCount: number | null;
     adjustmentValue: {
       __typename: string;
       percentage?: number;
@@ -448,6 +449,7 @@ export const SELLING_PLANS_QUERY = `
                         value
                       }
                       priceAdjustments {
+                        orderCount
                         adjustmentValue {
                           __typename
                           ... on SellingPlanPercentagePriceAdjustment {

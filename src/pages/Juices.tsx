@@ -21,7 +21,13 @@ const Juices = () => {
     () =>
       allJuices.filter((product) => {
         const tags = product.node.tags || [];
-        return product.node.productType === 'Juice' && tags.includes(currentWeek);
+        const isComponentOnly = product.node.variants.edges.length > 0
+          && product.node.variants.edges.every(({ node: variant }) => variant.requiresComponents);
+        return (
+          product.node.productType === 'Juice'
+          && tags.includes(currentWeek)
+          && !isComponentOnly
+        );
       }),
     [allJuices, currentWeek],
   );
@@ -76,7 +82,7 @@ const Juices = () => {
               Individual juices, shots, and teas
             </h2>
             <p className="mt-3 text-muted-foreground">
-              Add any available item on its own, or open Pick n&apos; Choose to create a recurring custom bundle.
+              Add any available item on its own, or open Pick n&apos; Choose to build a one-time custom bundle.
             </p>
           </div>
           <ProductGrid
