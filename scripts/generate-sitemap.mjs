@@ -1,11 +1,29 @@
 import { writeFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { loadEnv } from 'vite';
+
+const projectRoot = fileURLToPath(new URL('../', import.meta.url));
+const env = loadEnv(process.env.NODE_ENV || 'production', projectRoot, 'VITE_');
+const defaultSiteUrl = 'https://thyme-to-shop.lovable.app';
+
+const resolveSiteUrl = (value) => {
+  const candidate = (value || defaultSiteUrl).trim();
+  const url = new URL(candidate);
+
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+    throw new Error('VITE_SITE_URL must be an absolute HTTP(S) URL without credentials, a query, or a hash.');
+  }
+
+  url.pathname = url.pathname.replace(/\/+$/, '');
+  return url.toString().replace(/\/$/, '');
+};
 
 const apiVersion = '2026-07';
 const storeDomain =
-  process.env.VITE_SHOPIFY_STORE_DOMAIN || 'thyme-time-store-brreo.myshopify.com';
+  env.VITE_SHOPIFY_STORE_DOMAIN || 'thyme-time-store-brreo.myshopify.com';
 const storefrontToken =
-  process.env.VITE_SHOPIFY_STOREFRONT_TOKEN || '5f7c48d7ed775a943e87a6308e72948f';
-const siteUrl = (process.env.VITE_SITE_URL || 'https://thyme-to-shop.lovable.app').replace(/\/$/, '');
+  env.VITE_SHOPIFY_STOREFRONT_TOKEN || '5f7c48d7ed775a943e87a6308e72948f';
+const siteUrl = resolveSiteUrl(env.VITE_SITE_URL);
 const staticRoutes = [
   '/',
   '/weekly-meals',
@@ -83,6 +101,30 @@ const sitemap = [
   '</urlset>',
   '',
 ].join('\n');
+const robots = [
+  '# Generated at build time from VITE_SITE_URL.',
+  '',
+  'User-agent: Googlebot',
+  'Allow: /',
+  '',
+  'User-agent: Bingbot',
+  'Allow: /',
+  '',
+  'User-agent: Twitterbot',
+  'Allow: /',
+  '',
+  'User-agent: facebookexternalhit',
+  'Allow: /',
+  '',
+  'User-agent: *',
+  'Allow: /',
+  '',
+  `Sitemap: ${siteUrl}/sitemap.xml`,
+  '',
+].join('\n');
 
-await writeFile(new URL('../public/sitemap.xml', import.meta.url), sitemap, 'utf8');
-console.log(`Generated sitemap with ${routes.length} published routes.`);
+await Promise.all([
+  writeFile(new URL('../public/sitemap.xml', import.meta.url), sitemap, 'utf8'),
+  writeFile(new URL('../public/robots.txt', import.meta.url), robots, 'utf8'),
+]);
+console.log(`Generated sitemap and robots.txt for ${siteUrl} with ${routes.length} published routes.`);

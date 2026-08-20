@@ -34,12 +34,12 @@ The blocking owner items are:
 
 | Check | Result |
 | --- | --- |
-| `npm run build` | Pass on the current working tree at review time: Vite 7.3.6; 33 published sitemap routes; main JS 335.94 kB / 108.76 kB gzip. Repeat after any later edits before merge. |
-| `npx tsc --noEmit --pretty false` | Pass on the final integrated working tree. |
+| `npm run build` | Pass on the combined release tree: Vite 7.3.6; 33 published sitemap routes; main JS 352.92 kB / 114.46 kB gzip. |
+| `npm run typecheck` | Pass on the combined release tree. |
 | `npm test` | Pass: 16 files, 143/143 tests. |
 | `npm run lint` | Pass: 0 errors, 15 Fast Refresh warnings. |
-| `npm audit` | 2 moderate React Router findings; 0 high/critical. |
-| `npm audit --omit=dev` | 2 moderate React Router findings; 0 high/critical. |
+| `npm audit` | Pass: 0 vulnerabilities after the Nano ID and React Router upgrades. |
+| `npm audit --omit=dev` | Pass: 0 vulnerabilities. |
 | `npm ci --dry-run --ignore-scripts` | Pass. |
 | `git diff --check` | Pass. |
 | Secret scan | No Shopify Admin token, private key, or matching credential pattern in the worktree or Git history. |
@@ -188,9 +188,9 @@ No dedicated privacy, terms, shipping, refund, cancellation, or subscription-pol
 
 Only the public Shopify Storefront token is client-side. `.env`, `.env.*`, and TypeScript build-info artifacts are ignored while `.env.example` is allowed (`.gitignore:14-17`). Checkout accepts only this exact store's HTTPS MyShopify hostname (`src/lib/shopify.ts:3-9`, `src/lib/shopify.ts:651-668`). No Admin credential/private-key pattern was found in source or Git history.
 
-### SHOULD-FIX WHEN UPSTREAM IS CLEAN — 2 moderate React Router advisories
+### RESOLVED IN CODE — dependency advisories and automated release checks
 
-`npm audit` and production-only audit both report two moderate nodes (`react-router`, `react-router-dom`) and zero high/critical findings. The advisories concern crafted backslash navigation/open redirect and SSR hydration deserialization. Practical exposure is reduced because this is a BrowserRouter SPA without SSR/RSC hydration; application destinations are fixed, while product handles are encoded and validated (`src/pages/ProductDetail.tsx:17-20`). Retest and upgrade when a release resolves the relevant advisories without introducing a higher-severity advisory.
+The vulnerable transitive Nano ID release and the affected React Router 6 releases were upgraded without forced dependency resolution. `npm audit` and the production-only audit now report zero vulnerabilities; all 143 tests, typechecking, the production build, and lint still pass. `.github/workflows/ci.yml` now repeats install, tests, typechecking, build, and lint on every pull request and push to `main`.
 
 ### NEEDS OWNER ACTION — app ownership and access review
 
