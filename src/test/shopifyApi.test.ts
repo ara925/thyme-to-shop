@@ -122,11 +122,19 @@ describe('storefrontApiRequest', () => {
 });
 
 describe('formatCheckoutUrl', () => {
-  it('accepts only secure Shopify checkout hosts and adds the online-store channel', () => {
+  it('accepts the permanent Shopify host and adds the online-store channel', () => {
     expect(
       formatCheckoutUrl('https://thyme-time-store-brreo.myshopify.com/checkouts/test?locale=en'),
     ).toBe(
       'https://thyme-time-store-brreo.myshopify.com/checkouts/test?locale=en&channel=online_store',
+    );
+  });
+
+  it('accepts the exact Shopify-connected custom checkout domain', () => {
+    expect(
+      formatCheckoutUrl('https://shop.placeinthyme.com/cart/c/test-key?locale=en'),
+    ).toBe(
+      'https://shop.placeinthyme.com/cart/c/test-key?locale=en&channel=online_store',
     );
   });
 
@@ -135,6 +143,10 @@ describe('formatCheckoutUrl', () => {
     'http://thyme-time-store-brreo.myshopify.com/checkouts/test',
     'https://evil.myshopify.com/checkouts/test',
     'https://example.com/checkouts/test',
+    'https://evil.shop.placeinthyme.com/cart/c/test-key',
+    'https://shop.placeinthyme.com.evil.example/cart/c/test-key',
+    'https://shop.placeinthyme.com:444/cart/c/test-key',
+    'https://user:password@shop.placeinthyme.com/cart/c/test-key',
   ])('rejects an unsafe checkout URL: %s', (checkoutUrl) => {
     expect(() => formatCheckoutUrl(checkoutUrl)).toThrow('invalid checkout URL');
   });

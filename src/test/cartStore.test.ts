@@ -127,18 +127,20 @@ function line({
 
 function cart({
   id = 'gid://shopify/Cart/current',
+  checkoutUrl = 'https://thyme-time-store-brreo.myshopify.com/checkouts/test',
   lines = [line()],
   attributes = [],
   subtotal = '16.20',
 }: {
   id?: string;
+  checkoutUrl?: string;
   lines?: ShopifyCartLine[];
   attributes?: CartAttribute[];
   subtotal?: string;
 } = {}): ShopifyCart {
   return {
     id,
-    checkoutUrl: 'https://thyme-time-store-brreo.myshopify.com/checkouts/test',
+    checkoutUrl,
     totalQuantity: lines.reduce((total, item) => total + item.quantity, 0),
     attributes,
     cost: {
@@ -418,6 +420,21 @@ describe('useCartStore Shopify synchronization', () => {
       ],
     });
     expect(useCartStore.getState().getTotalPrice()).toBe(16.2);
+  });
+
+  it('accepts the checkout URL returned on the Shopify-connected custom domain', async () => {
+    const serverCart = cart({
+      checkoutUrl: 'https://shop.placeinthyme.com/cart/c/test-key?locale=en',
+    });
+    storefrontMocks.request.mockResolvedValueOnce({
+      data: { cartCreate: { cart: serverCart, userErrors: [], warnings: [] } },
+    } satisfies { data: CartCreateData });
+
+    await useCartStore.getState().addItem(input);
+
+    expect(useCartStore.getState().checkoutUrl).toBe(
+      'https://shop.placeinthyme.com/cart/c/test-key?locale=en&channel=online_store',
+    );
   });
 
   it('rejects a variant that Shopify marks as requiring bundle components', async () => {

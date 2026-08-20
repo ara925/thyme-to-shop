@@ -6,9 +6,20 @@ export const SHOPIFY_STORE_PERMANENT_DOMAIN =
     .replace(/^https?:\/\//i, '')
     .replace(/\/.*$/, '')
     .toLowerCase();
+export const SHOPIFY_CHECKOUT_DOMAIN =
+  (import.meta.env.VITE_SHOPIFY_CHECKOUT_DOMAIN || 'shop.placeinthyme.com')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .toLowerCase();
 export const SHOPIFY_STOREFRONT_URL = `https://${SHOPIFY_STORE_PERMANENT_DOMAIN}/api/${SHOPIFY_API_VERSION}/graphql.json`;
 export const SHOPIFY_STOREFRONT_TOKEN =
   import.meta.env.VITE_SHOPIFY_STOREFRONT_TOKEN || '5f7c48d7ed775a943e87a6308e72948f';
+
+const SHOPIFY_CHECKOUT_HOSTS = new Set([
+  SHOPIFY_STORE_PERMANENT_DOMAIN,
+  SHOPIFY_CHECKOUT_DOMAIN,
+]);
 
 // TypeScript Types
 export interface MoneyV2 {
@@ -660,7 +671,10 @@ export function formatCheckoutUrl(checkoutUrl: string): string {
 
   if (
     url.protocol !== 'https:' ||
-    url.hostname.toLowerCase() !== SHOPIFY_STORE_PERMANENT_DOMAIN
+    url.username !== '' ||
+    url.password !== '' ||
+    url.port !== '' ||
+    !SHOPIFY_CHECKOUT_HOSTS.has(url.hostname.toLowerCase())
   ) {
     throw new StorefrontApiError('Shopify returned an invalid checkout URL', 'invalid-response');
   }
