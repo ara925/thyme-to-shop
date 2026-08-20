@@ -1,12 +1,12 @@
 # Place in Thyme pre-launch audit
 
-Audit date: 2026-08-19
-Branch: `agent/implement-pdf-plans`
+Audit date: 2026-08-20
+Branch: `main` (through merge commit `85c6625`)
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
 
-**GO for preview and client review. NO-GO for accepting real customer payments.**
+**GO for the published frontend and client review. NO-GO for accepting real customer payments.**
 
 The storefront features are preserved and the supplied meal/juice flows are implemented as far as the current subscription system can truthfully support. Meal customers configure all three rotating weeks up front; juice customers configure one repeated mix; and each fixed juice bundle offers both one-time and weekly-subscription actions. The remaining payment no-go is caused by Shopify owner/Admin and subscription-contract configuration, not by deleted or hidden features.
 
@@ -34,9 +34,9 @@ The blocking owner items are:
 
 | Check | Result |
 | --- | --- |
-| `npm run build` | Pass on the combined release tree: Vite 7.3.6; 33 published sitemap routes; main JS 352.92 kB / 114.46 kB gzip. |
+| `npm run build` | Pass on the combined release tree: Vite 7.3.6; 33 published sitemap routes; main JS 353.08 kB / 114.51 kB gzip. |
 | `npm run typecheck` | Pass on the combined release tree. |
-| `npm test` | Pass: 16 files, 143/143 tests. |
+| `npm test` | Pass: 16 files, 149/149 tests. |
 | `npm run lint` | Pass: 0 errors, 15 Fast Refresh warnings. |
 | `npm audit` | Pass: 0 vulnerabilities after the Nano ID and React Router upgrades. |
 | `npm audit --omit=dev` | Pass: 0 vulnerabilities. |
@@ -44,10 +44,11 @@ The blocking owner items are:
 | `git diff --check` | Pass. |
 | Secret scan | No Shopify Admin token, private key, or matching credential pattern in the worktree or Git history. |
 | Production console scan | No `console.log`, `console.warn`, or `console.error` calls in non-test `src` code. |
-| Official Chrome visual/interaction QA | Pass in the official ChatGPT Chrome extension against the local final tree. Meal selections persisted at $132/$160/$144 across all three weeks and produced the exact-total handoff. The custom weekly juice mix showed $136 retail, $122.40 after the verified ongoing 10%, $489.60 prepaid for four weeks, and a separate $6 one-time Hibiscus add-on. Exactly the five approved fixed bundles exposed one-time and weekly actions plus the $3 add-on. The one-time builder reached its $134.99 minimum at $136 while excluding its separate $6 add-on. Final strict-catalog and discount-duration spot checks had no visible configuration alerts or console errors. |
+| Official Chrome visual/interaction QA | Pass in the official ChatGPT Chrome extension against the final published release. Meal, juice-subscription, fixed-bundle, and Pick n' Choose pages all showed the approved structures with no horizontal overflow or Lovable badge. A real Shopify cart smoke test added Chimichurri Steak, updated quantity and subtotal from $20 to $40 and back, and removed it to an empty cart. The exact Shopify custom-domain checkout URL was accepted; no checkout or order was submitted. Earlier planner acceptance also verified preserved three-week meal selections and the exact juice minimum/discount/prepaid calculations. |
 | Exact 375/768/1280/1920 matrix | Pass for `/subscribe/meals`, `/subscribe/juices`, `/juices`, and `/juices/pick-and-choose`, with no horizontal overflow. The 768px header breakpoint defect found during QA was fixed and rechecked. Redirect-only meal/Hibiscus product URLs also landed on their approved planner/category routes. |
 | Authenticated Shopify Admin acceptance | Pass for the approved catalog cleanup: the `$95` product remains Active but is unpublished from all five sales channels and Agentic; its Storefront handle is absent. Pick n' Choose has exactly four products at 10% off; each fixed plan contains only its matching parent; Hibiscus has zero plans; Meal 1/2/3 each contain six products; the two obsolete juice plans are preserved, renamed `DISABLED`, and have no products. |
-| Lighthouse | Still required on the final public deployment; no score is invented here. |
+| Public deployment | Pass at `https://thyme-to-shop.lovable.app`: all five launch routes, `robots.txt`, and `sitemap.xml` return 200 on one deployment; the new release chunks and metadata are present. `shop.placeinthyme.com` is connected only to Shopify and remains password-protected. |
+| Lighthouse | Still required; no score is invented here. |
 
 ## 1. Commerce correctness
 
@@ -59,7 +60,7 @@ Cart mutation warnings are requested from all five mutations (`src/lib/shopify.t
 
 ### RESOLVED IN CODE — fulfillment attributes survive to checkout
 
-The cart writes `Fulfillment Method` plus the matching `Preferred Dropoff Window` or `Preferred Pickup Window`, reads Shopify's returned attributes, and verifies them again immediately before checkout (`src/stores/cartStore.ts:198-220`, `src/stores/cartStore.ts:517-548`). Checkout redirects must be HTTPS and match this store's exact permanent MyShopify hostname; `channel=online_store` is added only after validation (`src/lib/shopify.ts:651-668`).
+The cart writes `Fulfillment Method` plus the matching `Preferred Dropoff Window` or `Preferred Pickup Window`, reads Shopify's returned attributes, and verifies them again immediately before checkout (`src/stores/cartStore.ts:198-220`, `src/stores/cartStore.ts:517-548`). Checkout redirects must be HTTPS and match either this store's exact permanent MyShopify hostname or the exact configured Shopify-connected checkout hostname; credentials, ports, subdomains, and lookalikes are rejected. `channel=online_store` is added only after validation (`src/lib/shopify.ts`).
 
 ### RESOLVED IN CODE — exact weekly selling plans, no silent fallback
 
@@ -127,7 +128,7 @@ All primary asynchronous commerce surfaces now use accessible, layout-preserving
 
 ### RESOLVED IN CODE — build, types, tests, and lint
 
-The final integrated tree passes build, types, all 143 tests, and lint with zero errors. API boundaries and Shopify response types are explicit (`src/lib/shopify.ts`). Routes are lazy-loaded (`src/App.tsx:11-20`). Product-card actions are no longer interactive buttons nested inside links (`src/components/products/ProductCard.tsx:61-161`). No deleted-file or route scan found removed storefront functionality.
+The final integrated tree passes build, types, all 149 tests, and lint with zero errors. API boundaries and Shopify response types are explicit (`src/lib/shopify.ts`). Routes are lazy-loaded (`src/App.tsx:11-20`). Product-card actions are no longer interactive buttons nested inside links (`src/components/products/ProductCard.tsx:61-161`). No deleted-file or route scan found removed storefront functionality.
 
 ### NICE-TO-HAVE — Fast Refresh warnings and token cleanup
 
@@ -143,9 +144,9 @@ Buttons, icon controls, inputs, selects, options, and planner tabs now meet the 
 
 The cart uses Radix Sheet focus containment and Escape behavior; its close target is 44 px (`src/components/ui/sheet.tsx:54-65`). The mobile navigation supports Escape and exposes expanded/current-page state (`src/components/layout/Header.tsx:30-45`, `src/components/layout/Header.tsx:63-124`). Badge forwards refs (`src/components/ui/badge.tsx:23-31`). Global reduced-motion handling is present (`src/index.css:165-173`).
 
-### PARTIAL — local viewport acceptance complete; deployment and assistive-tech checks remain
+### PARTIAL — viewport and public smoke acceptance complete; assistive-tech checks remain
 
-Official Chrome visual QA now passes locally at 375, 768, 1280, and 1920 CSS pixels for all four changed meal/juice flows, with no horizontal overflow or visible configuration alerts. The final homepage and valid six-product bundle catalog were also visually checked, and a clean final Chrome tab reported no page-console errors. Full keyboard-only purchase flow, screen-reader smoke testing, measured WCAG AA contrast, and the same checks on the final public deployment remain required.
+Official Chrome visual QA passes at 375, 768, 1280, and 1920 CSS pixels for all four changed meal/juice flows, with no horizontal overflow or visible configuration alerts. The published homepage and all four live meal/juice routes were then visually rechecked, the badge was absent, and the real add/update/remove cart flow passed. Full keyboard-only purchase flow, screen-reader smoke testing, and measured WCAG AA contrast remain required.
 
 ## 6. SEO and metadata
 
@@ -155,9 +156,9 @@ All routes receive real titles, descriptions, robots directives, canonical URLs,
 
 `robots.txt` points at the sitemap. The deployment-time generator queries published products, excludes component-required-only and redirect-only product handles, and produced 33 routes (`scripts/generate-sitemap.mjs`, `public/sitemap.xml`).
 
-### NEEDS OWNER ACTION — final domain and public identity
+### PARTIAL — Shopify domain connected; final public identity still needs owner acceptance
 
-Canonical, social, and sitemap URLs currently target `https://thyme-to-shop.lovable.app`. Set `VITE_SITE_URL` and regenerate if a different production domain is chosen. Confirm the social-sharing image and organization identity.
+Per the chosen architecture, `shop.placeinthyme.com` is the **Primary / Connected** Shopify domain and was removed from Lovable's custom-domain configuration. Anonymous traffic currently stays on that hostname and lands on Shopify's password page. The headless frontend remains published at `https://thyme-to-shop.lovable.app`, so its canonical, social, robots, and sitemap URLs correctly use the Lovable hostname. Confirm whether this split identity is final before changing `VITE_SITE_URL`; do not point the Shopify-owned hostname at Lovable without a new architecture decision. Confirm the social-sharing image and organization identity.
 
 ## 7. Content and trust
 
@@ -186,11 +187,11 @@ No dedicated privacy, terms, shipping, refund, cancellation, or subscription-pol
 
 ### RESOLVED IN CODE — client-safe configuration and redirect hardening
 
-Only the public Shopify Storefront token is client-side. `.env`, `.env.*`, and TypeScript build-info artifacts are ignored while `.env.example` is allowed (`.gitignore:14-17`). Checkout accepts only this exact store's HTTPS MyShopify hostname (`src/lib/shopify.ts:3-9`, `src/lib/shopify.ts:651-668`). No Admin credential/private-key pattern was found in source or Git history.
+Only the public Shopify Storefront token is client-side. `.env`, `.env.*`, and TypeScript build-info artifacts are ignored while `.env.example` is allowed (`.gitignore:14-17`). Checkout accepts only the exact HTTPS permanent MyShopify hostname and exact configured Shopify checkout hostname, currently `shop.placeinthyme.com`; unsafe schemes, credentials, ports, subdomains, and lookalikes are rejected (`src/lib/shopify.ts`, `src/test/shopifyApi.test.ts`). No Admin credential/private-key pattern was found in source or Git history.
 
 ### RESOLVED IN CODE — dependency advisories and automated release checks
 
-The vulnerable transitive Nano ID release and the affected React Router 6 releases were upgraded without forced dependency resolution. `npm audit` and the production-only audit now report zero vulnerabilities; all 143 tests, typechecking, the production build, and lint still pass. `.github/workflows/ci.yml` now repeats install, tests, typechecking, build, and lint on every pull request and push to `main`.
+The vulnerable transitive Nano ID release and the affected React Router 6 releases were upgraded without forced dependency resolution. `npm audit` and the production-only audit now report zero vulnerabilities; all 149 tests, typechecking, the production build, and lint still pass. `.github/workflows/ci.yml` repeats install, tests, typechecking, build, and lint on every pull request and push to `main`; PR #5 passed that gate before merge.
 
 ### NEEDS OWNER ACTION — app ownership and access review
 
@@ -204,7 +205,7 @@ Routes are split per page (`src/App.tsx:11-20`). Shopify CDN helpers add safe wi
 
 ### SHOULD-FIX — measured Lighthouse acceptance
 
-Run Lighthouse on the final public home, juices/category, and product-detail pages after deployment and owner configuration. Record mobile and desktop Performance, Accessibility, Best Practices, and SEO scores. No score is claimed in this audit.
+Run Lighthouse on the public home, juices/category, and product-detail pages after owner configuration. Record mobile and desktop Performance, Accessibility, Best Practices, and SEO scores. No score is claimed in this audit.
 
 # NEEDS OWNER ACTION
 
@@ -218,6 +219,6 @@ Run Lighthouse on the final public home, juices/category, and product-detail pag
 8. **Approve catalog facts:** product types, week tags, publication, inventory, nutrition/heating, health/ingredient/preservative claims, and the rotating package product's role.
 9. **Supply policies:** privacy, terms, shipping, refund, subscription cancellation/renewal, and any required dietary/allergen disclosures.
 10. **Confirm identity:** contact details, Instagram, Operation Helping Hands statements, final domain/canonicals, social image, analytics/consent, and sender addresses.
-11. **Final acceptance:** repeat the passed 375/768/1280/1920 matrix on the final public deployment, then complete keyboard/screen-reader smoke tests, measured contrast, Lighthouse, public network review, and real one-time/subscription checkout acceptance.
+11. **Final acceptance:** complete keyboard/screen-reader smoke tests, measured contrast, Lighthouse, public network review, and real one-time/subscription checkout acceptance after Shopify is activated. The frontend viewport matrix and live cart add/update/remove smoke already pass.
 
 No missing product facts, reviews, discounts, plan terms, fulfillment details, or legal policies should be invented to close these items.
