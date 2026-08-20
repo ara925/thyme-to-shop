@@ -1,7 +1,7 @@
 # Place in Thyme pre-launch audit
 
 Audit date: 2026-08-20
-Branch: `main` (through merge commit `85c6625`)
+Branch: `main` (including PR #5 merge commit `85c6625` and the final launch-accessibility release)
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
@@ -36,7 +36,7 @@ The blocking owner items are:
 | --- | --- |
 | `npm run build` | Pass on the combined release tree: Vite 7.3.6; 33 published sitemap routes; main JS 353.08 kB / 114.51 kB gzip. |
 | `npm run typecheck` | Pass on the combined release tree. |
-| `npm test` | Pass: 16 files, 149/149 tests. |
+| `npm test` | Pass: 17 files, 152/152 tests. |
 | `npm run lint` | Pass: 0 errors, 15 Fast Refresh warnings. |
 | `npm audit` | Pass: 0 vulnerabilities after the Nano ID and React Router upgrades. |
 | `npm audit --omit=dev` | Pass: 0 vulnerabilities. |
@@ -44,11 +44,11 @@ The blocking owner items are:
 | `git diff --check` | Pass. |
 | Secret scan | No Shopify Admin token, private key, or matching credential pattern in the worktree or Git history. |
 | Production console scan | No `console.log`, `console.warn`, or `console.error` calls in non-test `src` code. |
-| Official Chrome visual/interaction QA | Pass in the official ChatGPT Chrome extension against the final published release. Meal, juice-subscription, fixed-bundle, and Pick n' Choose pages all showed the approved structures with no horizontal overflow or Lovable badge. A real Shopify cart smoke test added Chimichurri Steak, updated quantity and subtotal from $20 to $40 and back, and removed it to an empty cart. The exact Shopify custom-domain checkout URL was accepted; no checkout or order was submitted. Earlier planner acceptance also verified preserved three-week meal selections and the exact juice minimum/discount/prepaid calculations. |
+| Official Chrome visual/interaction QA | Pass in the official ChatGPT Chrome extension against the final published release. Meal, juice-subscription, fixed-bundle, and Pick n' Choose pages all showed the approved structures with no horizontal overflow or Lovable badge. A real Shopify cart smoke test added Chimichurri Steak, updated quantity and subtotal from $20 to $40 and back, and removed it to an empty cart. The cart keyboard smoke kept focus inside the drawer, closed it with Escape, and restored focus to the cart trigger. The exact Shopify custom-domain checkout URL was accepted; no checkout or order was submitted. Earlier planner acceptance also verified preserved three-week meal selections and the exact juice minimum/discount/prepaid calculations. |
 | Exact 375/768/1280/1920 matrix | Pass for `/subscribe/meals`, `/subscribe/juices`, `/juices`, and `/juices/pick-and-choose`, with no horizontal overflow. The 768px header breakpoint defect found during QA was fixed and rechecked. Redirect-only meal/Hibiscus product URLs also landed on their approved planner/category routes. |
 | Authenticated Shopify Admin acceptance | Pass for the approved catalog cleanup: the `$95` product remains Active but is unpublished from all five sales channels and Agentic; its Storefront handle is absent. Pick n' Choose has exactly four products at 10% off; each fixed plan contains only its matching parent; Hibiscus has zero plans; Meal 1/2/3 each contain six products; the two obsolete juice plans are preserved, renamed `DISABLED`, and have no products. |
 | Public deployment | Pass at `https://thyme-to-shop.lovable.app`: all five launch routes, `robots.txt`, and `sitemap.xml` return 200 on one deployment; the new release chunks and metadata are present. `shop.placeinthyme.com` is connected only to Shopify and remains password-protected. |
-| Lighthouse | Still required; no score is invented here. |
+| Lighthouse | Still required. Google PageSpeed Insights was attempted against the public release but returned HTTP 429 `RESOURCE_EXHAUSTED` with a project quota of 0 requests/day; no score is invented here. |
 
 ## 1. Commerce correctness
 
@@ -88,7 +88,7 @@ The Storefront cart and validated checkout URL work, but checkout states that th
 
 ### BLOCKER — OWNER/ADMIN — products do not require shipping
 
-The live Storefront API returned 29 published products. All 28 real customer meal/juice variants report `requiresShipping: false`; only the incompatible legacy `$95` package reports `true`. Official Chrome confirmed the same **Not a physical product** setting on representative individual meals/juices and all six juice-bundle parent products. Enabling physical-product behavior without first approving the service area and rates could expose the current nationwide flat-rate profile, so the product and fulfillment settings must be corrected as one owner-approved launch change.
+The live Storefront API returned 28 published products after the legacy package was unpublished. All 28 real customer meal/juice variants report `requiresShipping: false`; the separately preserved, unpublished legacy `$95` package reports `true`. Official Chrome confirmed the same **Not a physical product** setting on representative individual meals/juices and all six juice-bundle parent products. Enabling physical-product behavior without first approving the service area and rates could expose the current nationwide flat-rate profile, so the product and fulfillment settings must be corrected as one owner-approved launch change.
 
 ### BLOCKER — OWNER/ADMIN — future subscription behavior is not configured
 
@@ -128,7 +128,7 @@ All primary asynchronous commerce surfaces now use accessible, layout-preserving
 
 ### RESOLVED IN CODE — build, types, tests, and lint
 
-The final integrated tree passes build, types, all 149 tests, and lint with zero errors. API boundaries and Shopify response types are explicit (`src/lib/shopify.ts`). Routes are lazy-loaded (`src/App.tsx:11-20`). Product-card actions are no longer interactive buttons nested inside links (`src/components/products/ProductCard.tsx:61-161`). No deleted-file or route scan found removed storefront functionality.
+The final integrated tree passes build, types, all 152 tests, and lint with zero errors. API boundaries and Shopify response types are explicit (`src/lib/shopify.ts`). Routes are lazy-loaded (`src/App.tsx:11-20`). Product-card actions are no longer interactive buttons nested inside links (`src/components/products/ProductCard.tsx:61-161`). No deleted-file or route scan found removed storefront functionality.
 
 ### NICE-TO-HAVE — Fast Refresh warnings and token cleanup
 
@@ -142,11 +142,11 @@ Some intentional contrast layers still use literal `text-white`, translucent whi
 
 Buttons, icon controls, inputs, selects, options, and planner tabs now meet the 44 px target through shared primitives (`src/components/ui/button.tsx:20-24`, `src/components/ui/input.tsx:10`, `src/components/ui/select.tsx:20-108`, `src/components/ui/tabs.tsx:14-35`). Icon-only controls have accessible names. Product images use live alt text with product-title fallbacks.
 
-The cart uses Radix Sheet focus containment and Escape behavior; its close target is 44 px (`src/components/ui/sheet.tsx:54-65`). The mobile navigation supports Escape and exposes expanded/current-page state (`src/components/layout/Header.tsx:30-45`, `src/components/layout/Header.tsx:63-124`). Badge forwards refs (`src/components/ui/badge.tsx:23-31`). Global reduced-motion handling is present (`src/index.css:165-173`).
+The cart uses Radix Sheet focus containment and Escape behavior; its close target is 44 px (`src/components/ui/sheet.tsx:54-65`). Official Chrome acceptance confirmed that Tab stayed inside the live drawer, Escape closed it after the exit animation, and focus returned to the cart trigger. The closed mobile navigation is removed from both the accessibility tree and tab order, re-enters them only while open, and returns focus to its trigger on Escape (`src/components/layout/Header.tsx`). A first-focus skip link targets the programmatically focusable main landmark (`src/components/layout/Layout.tsx`). Badge forwards refs (`src/components/ui/badge.tsx:23-31`). Global reduced-motion handling is present (`src/index.css:165-173`).
 
 ### PARTIAL — viewport and public smoke acceptance complete; assistive-tech checks remain
 
-Official Chrome visual QA passes at 375, 768, 1280, and 1920 CSS pixels for all four changed meal/juice flows, with no horizontal overflow or visible configuration alerts. The published homepage and all four live meal/juice routes were then visually rechecked, the badge was absent, and the real add/update/remove cart flow passed. Full keyboard-only purchase flow, screen-reader smoke testing, and measured WCAG AA contrast remain required.
+Official Chrome visual QA passes at 375, 768, 1280, and 1920 CSS pixels for all four changed meal/juice flows, with no horizontal overflow or visible configuration alerts. The published homepage and all four live meal/juice routes were then visually rechecked, the badge was absent, and the real add/update/remove cart plus drawer focus/Escape smoke passed. Remaining end-to-end keyboard navigation, screen-reader smoke testing, and measured WCAG AA contrast are still required.
 
 ## 6. SEO and metadata
 
@@ -191,7 +191,7 @@ Only the public Shopify Storefront token is client-side. `.env`, `.env.*`, and T
 
 ### RESOLVED IN CODE — dependency advisories and automated release checks
 
-The vulnerable transitive Nano ID release and the affected React Router 6 releases were upgraded without forced dependency resolution. `npm audit` and the production-only audit now report zero vulnerabilities; all 149 tests, typechecking, the production build, and lint still pass. `.github/workflows/ci.yml` repeats install, tests, typechecking, build, and lint on every pull request and push to `main`; PR #5 passed that gate before merge.
+The vulnerable transitive Nano ID release and the affected React Router 6 releases were upgraded without forced dependency resolution. `npm audit` and the production-only audit now report zero vulnerabilities; all 152 tests, typechecking, the production build, and lint still pass. `.github/workflows/ci.yml` repeats install, tests, typechecking, build, and lint on every pull request and push to `main`; PR #5 passed that gate before merge and the post-merge `main` run also passed.
 
 ### NEEDS OWNER ACTION — app ownership and access review
 
@@ -205,7 +205,7 @@ Routes are split per page (`src/App.tsx:11-20`). Shopify CDN helpers add safe wi
 
 ### SHOULD-FIX — measured Lighthouse acceptance
 
-Run Lighthouse on the public home, juices/category, and product-detail pages after owner configuration. Record mobile and desktop Performance, Accessibility, Best Practices, and SEO scores. No score is claimed in this audit.
+Run Lighthouse on the public home, juices/category, and product-detail pages after owner configuration. The PageSpeed Insights attempt on 2026-08-20 returned HTTP 429 `RESOURCE_EXHAUSTED` because the available project has a 0-request daily quota. Record mobile and desktop Performance, Accessibility, Best Practices, and SEO scores when a runnable Lighthouse environment is available; no score is claimed in this audit.
 
 # NEEDS OWNER ACTION
 
@@ -219,6 +219,6 @@ Run Lighthouse on the public home, juices/category, and product-detail pages aft
 8. **Approve catalog facts:** product types, week tags, publication, inventory, nutrition/heating, health/ingredient/preservative claims, and the rotating package product's role.
 9. **Supply policies:** privacy, terms, shipping, refund, subscription cancellation/renewal, and any required dietary/allergen disclosures.
 10. **Confirm identity:** contact details, Instagram, Operation Helping Hands statements, final domain/canonicals, social image, analytics/consent, and sender addresses.
-11. **Final acceptance:** complete keyboard/screen-reader smoke tests, measured contrast, Lighthouse, public network review, and real one-time/subscription checkout acceptance after Shopify is activated. The frontend viewport matrix and live cart add/update/remove smoke already pass.
+11. **Final acceptance:** complete the remaining end-to-end keyboard and screen-reader smoke tests, measured contrast, Lighthouse, public network review, and real one-time/subscription checkout acceptance after Shopify is activated. The frontend viewport matrix, live cart add/update/remove flow, and cart focus/Escape smoke already pass.
 
 No missing product facts, reviews, discounts, plan terms, fulfillment details, or legal policies should be invented to close these items.

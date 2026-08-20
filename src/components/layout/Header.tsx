@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ const navLinks = [
 export function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const location = useLocation();
 
   useEffect(() => {
@@ -30,7 +31,10 @@ export function Header() {
   useEffect(() => {
     if (!mobileMenuOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMobileMenuOpen(false);
+      if (event.key === 'Escape') {
+        setMobileMenuOpen(false);
+        mobileMenuButtonRef.current?.focus();
+      }
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
@@ -82,6 +86,7 @@ export function Header() {
           <CartDrawer />
           
           <Button
+            ref={mobileMenuButtonRef}
             variant="ghost"
             size="icon"
             className="h-11 w-11 xl:hidden"
@@ -102,6 +107,7 @@ export function Header() {
       {/* Mobile Navigation */}
       <div
         id="mobile-navigation"
+        aria-hidden={!mobileMenuOpen}
         className={cn(
           "overflow-hidden bg-background/95 backdrop-blur-lg transition-all duration-300 ease-in-out xl:hidden",
           mobileMenuOpen ? "max-h-96 border-b border-border" : "max-h-0"
@@ -112,6 +118,7 @@ export function Header() {
             <Link
               key={link.href}
               to={link.href}
+              tabIndex={mobileMenuOpen ? undefined : -1}
               className={cn(
                 "py-3 px-4 text-base font-semibold rounded-lg transition-colors",
                 location.pathname === link.href
