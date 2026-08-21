@@ -1,7 +1,7 @@
 # Place in Thyme pre-launch audit
 
 Audit date: 2026-08-21 follow-up launch sweep
-Branch: `codex/final-launch-audit` (based on `origin/main` at `b07177f`)
+Branch: `codex/branded-checkout-prep` (based on merged launch release `d22146c`)
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
@@ -44,10 +44,10 @@ The blocking owner items are:
 | `git diff --check` | Pass. |
 | Secret scan | No Shopify Admin token, private key, or matching credential pattern in the worktree or Git history. |
 | Production console scan | No `console.log`, `console.warn`, or `console.error` calls in non-test `src` code. |
-| Official Chrome visual/interaction QA | The earlier storefront pass verified the meal, juice-subscription, fixed-bundle, and Pick n' Choose layouts, a real cart add/update/remove smoke, and cart focus/Escape behavior. On 2026-08-21 Shopify's primary domain was changed back to the permanent MyShopify hostname. A fresh live cart then opened the genuine MyShopify checkout, which correctly stopped at “This store isn't set up to receive orders yet” because commerce is inactive. No order was submitted. |
-| Exact 375/768/1280/1920 matrix | Pass for `/subscribe/meals`, `/subscribe/juices`, `/juices`, and `/juices/pick-and-choose`, with no horizontal overflow. The 768px header breakpoint defect found during QA was fixed and rechecked. Redirect-only meal/Hibiscus product URLs also landed on their approved planner/category routes. |
+| Official Chrome visual/interaction QA | The published 2026-08-21 release was checked in official Chrome across home, meals, juices, Pick n' Choose, both planners, a live product, cart, and 404. Product add-to-cart worked; the cart showed the correct local-only Monday/Tuesday fail-closed notice; skip-to-content and mobile-menu Escape/focus behavior passed; and the browser console had no errors or warnings. A fresh Shopify cart also opened genuine MyShopify checkout and stopped at “This store isn't set up to receive orders yet” because commerce is inactive. No order was submitted. |
+| Exact 375/768/1280/1920 matrix | Pass across all eight representative routes above, with zero horizontal-overflow failures at every width. The 768px header breakpoint defect found during QA was fixed and rechecked. Redirect-only meal/Hibiscus product URLs also landed on their approved planner/category routes. |
 | Authenticated Shopify Admin acceptance | Pass for the approved catalog cleanup: the `$95` product remains Active but unpublished; its Storefront handle is absent. Pick n' Choose has exactly four products at 10% off; each fixed plan contains only its matching parent; Hibiscus has zero plans; Meal 1/2/3 each contain six products. The 26 actual customer fulfillment products are now physical/requiring shipping. The hidden component-only Hibiscus bundle derives `requiresShipping: true` from its components, while the non-fulfillment Pick n' Choose anchor remains false. |
-| Public deployment | `https://shop.placeinthyme.com` serves the headless storefront and its launch routes. The repository defaults, canonical/Open Graph origin, robots sitemap pointer, and all checked-in sitemap locations now use that public hostname; republish is required for those code-owned metadata changes to reach production. |
+| Public deployment | `https://shop.placeinthyme.com` serves the published headless storefront and its launch routes. Raw HTML canonical/Open Graph tags, the robots sitemap pointer, and all 33 sitemap locations were rechecked after publishing and use the custom hostname; no old hosting hostname remains in those production outputs. |
 | Lighthouse | Still required. Google PageSpeed Insights was attempted against the public release but returned HTTP 429 `RESOURCE_EXHAUSTED` with a project quota of 0 requests/day; no score is invented here. |
 
 ## 1. Commerce correctness
@@ -158,7 +158,9 @@ All routes receive real titles, descriptions, robots directives, canonical URLs,
 
 ### RESOLVED IN CODE — canonical public identity
 
-`https://shop.placeinthyme.com` is the canonical public storefront. The production build default, runtime route metadata, raw HTML canonical/Open Graph placeholders, Organization JSON-LD, robots pointer, and every sitemap location use that origin. The old hosting hostname is no longer advertised. Shopify's primary domain is now the permanent MyShopify hostname, and a fresh cart proves checkout no longer loops through the headless storefront. Republish is still required for the metadata changes.
+`https://shop.placeinthyme.com` is the canonical public storefront. The production build default, runtime route metadata, raw HTML canonical/Open Graph placeholders, Organization JSON-LD, robots pointer, and every sitemap location use that origin. The old hosting hostname is no longer advertised. The release was published and verified on the custom domain on 2026-08-21. Shopify's primary domain is the permanent MyShopify hostname, and a fresh cart proves checkout no longer loops through the headless storefront.
+
+`checkout.placeinthyme.com` has been added in Shopify as the prepared branded checkout hostname. Shopify reports that its existing `checkout` A record must be changed from `35.215.110.249` to `23.227.38.65`. Until Network Solutions DNS is updated and Shopify provisions TLS, the permanent MyShopify hostname remains the working checkout origin; the storefront accepts either exact Shopify-controlled hostname and rejects all others.
 
 ## 7. Content and trust
 

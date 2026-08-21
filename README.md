@@ -10,7 +10,8 @@ This project was built with [Lovable](https://lovable.dev).
 
 The public storefront hostname must not also be configured as the Shopify checkout hostname.
 Use the permanent `*.myshopify.com` hostname or a separate Shopify-controlled checkout hostname
-for `VITE_SHOPIFY_CHECKOUT_DOMAIN`.
+for `VITE_SHOPIFY_CHECKOUT_DOMAIN`. The prepared branded target is
+`checkout.placeinthyme.com`; Shopify's permanent hostname remains accepted as a safe fallback.
 
 Local fulfillment is fail-closed. Production must also provide
 `VITE_DELIVERY_WINDOWS_JSON` as a JSON array of approved combined day/time windows;
