@@ -1,7 +1,7 @@
 # Place in Thyme pre-launch audit
 
 Audit date: 2026-08-21 follow-up launch sweep
-Main release: `6ffb85b` (PR #8 merged; post-merge CI passed)
+Main release: `main` (branded checkout DNS cutover verified; CI release gate enabled)
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
@@ -193,7 +193,7 @@ Only the public Shopify Storefront token is client-side. `.env`, `.env.*`, and T
 
 ### RESOLVED IN CODE — dependency advisories and automated release checks
 
-The vulnerable transitive Nano ID release and the affected React Router 6 releases were upgraded without forced dependency resolution. `npm audit` and the production-only audit now report zero vulnerabilities; all 163 tests, typechecking, the production build, and lint still pass. `.github/workflows/ci.yml` repeats install, tests, typechecking, build, and lint on every pull request and push to `main`; PR #8 and its post-merge `main` run passed that gate.
+The vulnerable transitive Nano ID release and the affected React Router 6 releases were upgraded without forced dependency resolution. `npm audit` and the production-only audit now report zero vulnerabilities; all 163 tests, typechecking, the production build, and lint still pass. `.github/workflows/ci.yml` repeats install, tests, typechecking, build, and lint on every pull request and push to `main`; the current release PR and its post-merge `main` run passed that gate.
 
 ### NEEDS OWNER ACTION — app ownership and access review
 
