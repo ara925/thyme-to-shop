@@ -1,7 +1,7 @@
 # Place in Thyme pre-launch audit
 
 Audit date: 2026-08-21 follow-up launch sweep
-Branch: `codex/branded-checkout-prep` (based on merged launch release `d22146c`)
+Main release: `6ffb85b` (PR #8 merged; post-merge CI passed)
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
@@ -36,7 +36,7 @@ The blocking owner items are:
 | --- | --- |
 | `npm run build` | Pass on the 2026-08-21 combined release tree: Vite 7.3.6; 33 published sitemap routes; main JS 351.17 kB / 113.75 kB gzip. |
 | `npm run typecheck` | Pass on the combined release tree. |
-| `npm test` | Pass: 20 files, 162/162 tests. |
+| `npm test` | Pass: 20 files, 163/163 tests. |
 | `npm run lint` | Pass: 0 errors, 15 Fast Refresh warnings. |
 | `npm audit` | Pass: 0 vulnerabilities after the Nano ID and React Router upgrades. |
 | `npm audit --omit=dev` | Pass: 0 vulnerabilities. |
@@ -128,7 +128,7 @@ All primary asynchronous commerce surfaces now use accessible, layout-preserving
 
 ### RESOLVED IN CODE — build, types, tests, and lint
 
-The final integrated tree passes build, types, all 162 tests, and lint with zero errors. API boundaries and Shopify response types are explicit (`src/lib/shopify.ts`). Routes are lazy-loaded (`src/App.tsx:11-20`). Product-card actions are no longer interactive buttons nested inside links (`src/components/products/ProductCard.tsx:61-161`). No deleted-file or route scan found removed storefront functionality.
+The final integrated tree passes build, types, all 163 tests, and lint with zero errors. API boundaries and Shopify response types are explicit (`src/lib/shopify.ts`). Routes are lazy-loaded (`src/App.tsx:11-20`). Product-card actions are no longer interactive buttons nested inside links (`src/components/products/ProductCard.tsx:61-161`). No deleted-file or route scan found removed storefront functionality.
 
 ### NICE-TO-HAVE — Fast Refresh warnings and token cleanup
 
@@ -193,7 +193,7 @@ Only the public Shopify Storefront token is client-side. `.env`, `.env.*`, and T
 
 ### RESOLVED IN CODE — dependency advisories and automated release checks
 
-The vulnerable transitive Nano ID release and the affected React Router 6 releases were upgraded without forced dependency resolution. `npm audit` and the production-only audit now report zero vulnerabilities; all 162 tests, typechecking, the production build, and lint still pass. `.github/workflows/ci.yml` repeats install, tests, typechecking, build, and lint on every pull request and push to `main`; PR #5 passed that gate before merge and the post-merge `main` run also passed.
+The vulnerable transitive Nano ID release and the affected React Router 6 releases were upgraded without forced dependency resolution. `npm audit` and the production-only audit now report zero vulnerabilities; all 163 tests, typechecking, the production build, and lint still pass. `.github/workflows/ci.yml` repeats install, tests, typechecking, build, and lint on every pull request and push to `main`; PR #8 and its post-merge `main` run passed that gate.
 
 ### NEEDS OWNER ACTION — app ownership and access review
 
