@@ -130,6 +130,14 @@ describe('formatCheckoutUrl', () => {
     );
   });
 
+  it('accepts the separately configured branded Shopify checkout host', () => {
+    expect(
+      formatCheckoutUrl('https://checkout.placeinthyme.com/cart/c/test-key?locale=en'),
+    ).toBe(
+      'https://checkout.placeinthyme.com/cart/c/test-key?locale=en&channel=online_store',
+    );
+  });
+
   it('rejects checkout URLs that point back to the headless storefront', () => {
     expect(() =>
       formatCheckoutUrl('https://shop.placeinthyme.com/cart/c/test-key?locale=en'),

@@ -7,7 +7,7 @@ export const SHOPIFY_STORE_PERMANENT_DOMAIN =
     .replace(/\/.*$/, '')
     .toLowerCase();
 export const SHOPIFY_CHECKOUT_DOMAIN =
-  (import.meta.env.VITE_SHOPIFY_CHECKOUT_DOMAIN || SHOPIFY_STORE_PERMANENT_DOMAIN)
+  (import.meta.env.VITE_SHOPIFY_CHECKOUT_DOMAIN || 'checkout.placeinthyme.com')
     .trim()
     .replace(/^https?:\/\//i, '')
     .replace(/\/.*$/, '')
