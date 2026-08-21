@@ -4,7 +4,7 @@ import { loadEnv } from 'vite';
 
 const projectRoot = fileURLToPath(new URL('../', import.meta.url));
 const env = loadEnv(process.env.NODE_ENV || 'production', projectRoot, 'VITE_');
-const defaultSiteUrl = 'https://thyme-to-shop.lovable.app';
+const defaultSiteUrl = 'https://shop.placeinthyme.com';
 
 const resolveSiteUrl = (value) => {
   const candidate = (value || defaultSiteUrl).trim();

@@ -171,21 +171,3 @@ export function formatCutoffCountdown(now: Date = new Date()): string {
 }
 
 export type FulfillmentMethod = 'delivery' | 'pickup';
-
-export const DROPOFF_WINDOWS = [
-  { value: '9am-11am', label: '9:00 AM – 11:00 AM' },
-  { value: '11am-1pm', label: '11:00 AM – 1:00 PM' },
-  { value: '1pm-3pm', label: '1:00 PM – 3:00 PM' },
-  { value: '3pm-5pm', label: '3:00 PM – 5:00 PM' },
-  { value: '5pm-7pm', label: '5:00 PM – 7:00 PM' },
-] as const;
-
-export const PICKUP_WINDOWS = [
-  { value: 'pickup-10am-12pm', label: '10:00 AM – 12:00 PM' },
-  { value: 'pickup-12pm-2pm', label: '12:00 PM – 2:00 PM' },
-  { value: 'pickup-2pm-4pm', label: '2:00 PM – 4:00 PM' },
-] as const;
-
-export type DropoffWindow = typeof DROPOFF_WINDOWS[number]['value'];
-export type PickupWindow = typeof PICKUP_WINDOWS[number]['value'];
-export type FulfillmentWindow = DropoffWindow | PickupWindow;

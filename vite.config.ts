@@ -3,7 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
-const DEFAULT_SITE_URL = "https://thyme-to-shop.lovable.app";
+const DEFAULT_SITE_URL = "https://shop.placeinthyme.com";
 
 function resolveSiteUrl(value?: string) {
   const candidate = (value || DEFAULT_SITE_URL).trim();

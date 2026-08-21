@@ -30,11 +30,13 @@ import {
   storefrontApiRequest,
 } from '@/lib/shopify';
 import {
+  type FulfillmentMethod,
+} from '@/lib/orderCutoff';
+import {
   DROPOFF_WINDOWS,
   PICKUP_WINDOWS,
-  type FulfillmentMethod,
   type FulfillmentWindow,
-} from '@/lib/orderCutoff';
+} from '@/lib/fulfillmentConfig';
 import {
   HIBISCUS_ADD_ON_ATTRIBUTE_VALUE,
   HIBISCUS_ADD_ON_CURRENCY,

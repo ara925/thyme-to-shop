@@ -7,7 +7,7 @@ export const SHOPIFY_STORE_PERMANENT_DOMAIN =
     .replace(/\/.*$/, '')
     .toLowerCase();
 export const SHOPIFY_CHECKOUT_DOMAIN =
-  (import.meta.env.VITE_SHOPIFY_CHECKOUT_DOMAIN || 'shop.placeinthyme.com')
+  (import.meta.env.VITE_SHOPIFY_CHECKOUT_DOMAIN || SHOPIFY_STORE_PERMANENT_DOMAIN)
     .trim()
     .replace(/^https?:\/\//i, '')
     .replace(/\/.*$/, '')
@@ -20,6 +20,9 @@ const SHOPIFY_CHECKOUT_HOSTS = new Set([
   SHOPIFY_STORE_PERMANENT_DOMAIN,
   SHOPIFY_CHECKOUT_DOMAIN,
 ]);
+const STOREFRONT_HOST = new URL(
+  import.meta.env.VITE_SITE_URL || 'https://shop.placeinthyme.com',
+).hostname.toLowerCase();
 
 // TypeScript Types
 export interface MoneyV2 {
@@ -674,7 +677,10 @@ export function formatCheckoutUrl(checkoutUrl: string): string {
     url.username !== '' ||
     url.password !== '' ||
     url.port !== '' ||
-    !SHOPIFY_CHECKOUT_HOSTS.has(url.hostname.toLowerCase())
+    !SHOPIFY_CHECKOUT_HOSTS.has(url.hostname.toLowerCase()) ||
+    // This hostname serves the headless SPA. Treating it as a Shopify checkout
+    // hostname loops customers back into the storefront instead of checkout.
+    url.hostname.toLowerCase() === STOREFRONT_HOST
   ) {
     throw new StorefrontApiError('Shopify returned an invalid checkout URL', 'invalid-response');
   }

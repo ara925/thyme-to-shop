@@ -21,6 +21,7 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { formatPrice, getStorefrontErrorMessage } from '@/lib/shopify';
+import { PICKUP_ENABLED } from '@/lib/fulfillmentConfig';
 import { useCartStore } from '@/stores/cartStore';
 import { CutoffBanner } from './CutoffBanner';
 import { DeliveryTimeSelect } from './DeliveryTimeSelect';
@@ -280,6 +281,7 @@ export function CartDrawer() {
                     items.length === 0 ||
                     !deliveryWindow ||
                     !fulfillmentAttributesConfirmed ||
+                    (!PICKUP_ENABLED && fulfillmentMethod === 'pickup') ||
                     isLoading ||
                     isSyncing
                   }

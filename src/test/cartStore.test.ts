@@ -422,7 +422,7 @@ describe('useCartStore Shopify synchronization', () => {
     expect(useCartStore.getState().getTotalPrice()).toBe(16.2);
   });
 
-  it('accepts the checkout URL returned on the Shopify-connected custom domain', async () => {
+  it('fails closed when Shopify returns the headless storefront as its checkout host', async () => {
     const serverCart = cart({
       checkoutUrl: 'https://shop.placeinthyme.com/cart/c/test-key?locale=en',
     });
@@ -430,11 +430,16 @@ describe('useCartStore Shopify synchronization', () => {
       data: { cartCreate: { cart: serverCart, userErrors: [], warnings: [] } },
     } satisfies { data: CartCreateData });
 
-    await useCartStore.getState().addItem(input);
-
-    expect(useCartStore.getState().checkoutUrl).toBe(
-      'https://shop.placeinthyme.com/cart/c/test-key?locale=en&channel=online_store',
+    await expect(useCartStore.getState().addItem(input)).rejects.toThrow(
+      'invalid checkout URL',
     );
+
+    expect(useCartStore.getState()).toMatchObject({
+      cartId: null,
+      checkoutUrl: null,
+      items: [],
+      error: 'The store could not complete that request. Please try again.',
+    });
   });
 
   it('rejects a variant that Shopify marks as requiring bundle components', async () => {
@@ -694,7 +699,7 @@ describe('fulfillment confirmation and checkout', () => {
   it('confirms delivery attributes and reconfirms them immediately before checkout', async () => {
     const attributes: CartAttribute[] = [
       { key: 'Fulfillment Method', value: 'Delivery' },
-      { key: 'Preferred Dropoff Window', value: '9:00 AM – 11:00 AM' },
+      { key: 'Preferred Dropoff Window', value: 'Monday, 9:00 AM – 11:00 AM' },
     ];
     const confirmed = cart({ attributes });
     storefrontMocks.request
@@ -719,7 +724,7 @@ describe('fulfillment confirmation and checkout', () => {
   it('blocks checkout when Shopify returns an orphaned bundle add-on', async () => {
     const attributes: CartAttribute[] = [
       { key: 'Fulfillment Method', value: 'Delivery' },
-      { key: 'Preferred Dropoff Window', value: '9:00 AM – 11:00 AM' },
+      { key: 'Preferred Dropoff Window', value: 'Monday, 9:00 AM – 11:00 AM' },
     ];
     const orphanedCart = cart({
       attributes,
@@ -757,7 +762,7 @@ describe('fulfillment confirmation and checkout', () => {
   it('blocks checkout when Shopify returns a changed Hibiscus add-on price', async () => {
     const attributes: CartAttribute[] = [
       { key: 'Fulfillment Method', value: 'Delivery' },
-      { key: 'Preferred Dropoff Window', value: '9:00 AM – 11:00 AM' },
+      { key: 'Preferred Dropoff Window', value: 'Monday, 9:00 AM – 11:00 AM' },
     ];
     const bundleInstance = 'server-price-check';
     const changedPriceCart = cart({

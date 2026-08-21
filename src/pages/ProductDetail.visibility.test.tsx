@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('react-router-dom', () => ({
   useParams: () => ({ handle: mocks.handle }),
-  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+  Link: ({ children, to }: { children: React.ReactNode; to: string }) => <a href={to}>{children}</a>,
   Navigate: ({ to, replace }: { to: string; replace?: boolean }) => (
     <div data-testid="redirect" data-to={to} data-replace={String(Boolean(replace))} />
   ),
@@ -37,6 +37,7 @@ vi.mock('sonner', () => ({
 describe('ProductDetail storefront visibility', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    document.head.innerHTML = '';
     mocks.handle = 'weekly-meal-package-rotating-3-menu-cycle';
     mocks.useProductByHandle.mockReturnValue({
       data: undefined,
@@ -44,6 +45,18 @@ describe('ProductDetail storefront visibility', () => {
       isError: false,
       refetch: vi.fn(),
     });
+  });
+
+  it('marks a missing product as noindex instead of indexing a soft 404', () => {
+    mocks.handle = 'missing-product';
+
+    render(<ProductDetail />);
+
+    expect(screen.getByRole('heading', { name: 'Product not found' })).toBeInTheDocument();
+    expect(document.head.querySelector('meta[name="robots"]')).toHaveAttribute(
+      'content',
+      'noindex,follow',
+    );
   });
 
   it('does not fetch or render the incompatible $95 package and redirects to the approved plan', () => {

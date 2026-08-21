@@ -6,7 +6,18 @@ How do I connect you to do this?
 
 This project was built with [Lovable](https://lovable.dev).
 
-**Live app**: https://thyme-to-shop.lovable.app
+**Live storefront**: https://shop.placeinthyme.com
+
+The public storefront hostname must not also be configured as the Shopify checkout hostname.
+Use the permanent `*.myshopify.com` hostname or a separate Shopify-controlled checkout hostname
+for `VITE_SHOPIFY_CHECKOUT_DOMAIN`.
+
+Local fulfillment is fail-closed. Production must also provide
+`VITE_DELIVERY_WINDOWS_JSON` as a JSON array of approved combined day/time windows;
+delivery labels must begin with `Monday,` or `Tuesday,`.
+Pickup additionally requires approved pickup windows, a configured Shopify pickup
+location and instructions, and `VITE_ENABLE_PICKUP=true`. The storefront does not
+assume schedule windows that the client has not approved.
 
 ## Build with Lovable
 

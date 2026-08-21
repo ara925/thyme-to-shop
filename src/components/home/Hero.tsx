@@ -64,7 +64,7 @@ export function Hero() {
             {[
               { icon: Leaf, title: "Farm Fresh", desc: "Premium whole foods", color: "bg-primary" },
               { icon: Clock, title: "Weekly Menus", desc: "New rotating dishes every week", color: "bg-accent" },
-              { icon: Truck, title: "Local Delivery", desc: "Straight to your door, SoCal", color: "bg-primary" },
+              { icon: Truck, title: "Local Delivery", desc: "Within our approved service area", color: "bg-primary" },
             ].map((item, i) => (
               <div
                 key={item.title}

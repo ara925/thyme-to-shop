@@ -18,8 +18,8 @@ const HowItWorks = () => {
     },
     {
       icon: Clock,
-      title: "3. Order Before Cutoff",
-      description: "Place your order by Thursday at 6PM to be included in the week's delivery. Orders placed after cutoff will be delivered the following week."
+      title: "3. Choose a Local Window",
+      description: "Select an available Monday or Tuesday delivery window in your cart. Your address must be inside the approved local service area."
     },
     {
       icon: UtensilsCrossed,
@@ -28,8 +28,8 @@ const HowItWorks = () => {
     },
     {
       icon: Truck,
-      title: "5. Sunday Delivery",
-      description: "Your meals arrive at your door on Sunday, packaged to stay fresh. Ready to heat and enjoy throughout the week."
+      title: "5. Local Delivery",
+      description: "Your order arrives during the confirmed local delivery window, packaged to stay fresh and ready to enjoy."
     },
   ];
 
@@ -82,15 +82,15 @@ const HowItWorks = () => {
               <Card className="border-primary/20 bg-herb-light/30">
                 <CardContent className="p-6 text-center">
                   <Clock className="h-8 w-8 text-primary mx-auto" />
-                  <h3 className="mt-4 font-serif text-lg font-semibold">Order Cutoff</h3>
-                  <p className="mt-2 text-2xl font-bold text-primary">Thursday 6PM</p>
+                  <h3 className="mt-4 font-serif text-lg font-semibold">Service Area</h3>
+                  <p className="mt-2 text-2xl font-bold text-primary">Local Only</p>
                 </CardContent>
               </Card>
               <Card className="border-accent/20 bg-terracotta-light/30">
                 <CardContent className="p-6 text-center">
                   <CalendarDays className="h-8 w-8 text-accent mx-auto" />
-                  <h3 className="mt-4 font-serif text-lg font-semibold">Delivery Day</h3>
-                  <p className="mt-2 text-2xl font-bold text-accent">Sunday</p>
+                  <h3 className="mt-4 font-serif text-lg font-semibold">Delivery Days</h3>
+                  <p className="mt-2 text-2xl font-bold text-accent">Monday &amp; Tuesday</p>
                 </CardContent>
               </Card>
             </div>

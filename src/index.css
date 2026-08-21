@@ -28,10 +28,10 @@
     
     /* Muted */
     --muted: 40 18% 91%;
-    --muted-foreground: 20 12% 45%;
+    --muted-foreground: 20 12% 40%;
     
     /* Accent - Warm Terracotta */
-    --accent: 16 65% 48%;
+    --accent: 16 65% 44%;
     --accent-foreground: 48 40% 97%;
     
     /* Destructive */
@@ -49,7 +49,7 @@
     --herb: 152 38% 28%;
     --herb-light: 148 28% 90%;
     --herb-glow: 152 45% 40%;
-    --terracotta: 16 65% 48%;
+    --terracotta: 16 65% 44%;
     --terracotta-light: 18 45% 92%;
     --terracotta-dark: 14 60% 38%;
     --wheat: 38 50% 82%;
