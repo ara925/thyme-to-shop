@@ -15,6 +15,23 @@ import { NutritionLabel } from '@/components/products/NutritionLabel';
 import { HeatingInstructions } from '@/components/products/HeatingInstructions';
 import { getHiddenStorefrontProductRedirect } from '@/lib/productVisibility';
 
+function setPageMeta(
+  selector: string,
+  attribute: 'name' | 'property',
+  key: string,
+  value: string,
+) {
+  const element = document.head.querySelector<HTMLMetaElement>(selector);
+  if (element) {
+    element.content = value;
+  } else {
+    const meta = document.createElement('meta');
+    meta.setAttribute(attribute, key);
+    meta.content = value;
+    document.head.appendChild(meta);
+  }
+}
+
 const ProductDetail = () => {
   const { handle } = useParams<{ handle: string }>();
   const safeHandle = /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(handle || '') ? handle || '' : '';
@@ -47,29 +64,17 @@ const ProductDetail = () => {
       .replace(/\s+/g, ' ')
       .trim()
       .slice(0, 157);
-    const setMeta = (selector: string, attribute: 'name' | 'property', key: string, value: string) => {
-      const element = document.head.querySelector<HTMLMetaElement>(selector);
-      if (element) {
-        element.content = value;
-      } else {
-        const meta = document.createElement('meta');
-        meta.setAttribute(attribute, key);
-        meta.content = value;
-        document.head.appendChild(meta);
-      }
-    };
-
     document.title = title;
-    setMeta('meta[name="description"]', 'name', 'description', description);
-    setMeta('meta[property="og:title"]', 'property', 'og:title', title);
-    setMeta('meta[property="og:description"]', 'property', 'og:description', description);
-    setMeta('meta[property="og:type"]', 'property', 'og:type', 'product');
-    setMeta('meta[name="twitter:title"]', 'name', 'twitter:title', title);
-    setMeta('meta[name="twitter:description"]', 'name', 'twitter:description', description);
+    setPageMeta('meta[name="description"]', 'name', 'description', description);
+    setPageMeta('meta[property="og:title"]', 'property', 'og:title', title);
+    setPageMeta('meta[property="og:description"]', 'property', 'og:description', description);
+    setPageMeta('meta[property="og:type"]', 'property', 'og:type', 'product');
+    setPageMeta('meta[name="twitter:title"]', 'name', 'twitter:title', title);
+    setPageMeta('meta[name="twitter:description"]', 'name', 'twitter:description', description);
     const componentOnly = product.node.variants.edges.every(
       ({ node: variant }) => variant.requiresComponents,
     );
-    setMeta(
+    setPageMeta(
       'meta[name="robots"]',
       'name',
       'robots',
@@ -77,9 +82,9 @@ const ProductDetail = () => {
     );
     const primaryImage = product.node.images.edges[0]?.node.url;
     if (primaryImage) {
-      setMeta('meta[property="og:image"]', 'property', 'og:image', primaryImage);
-      setMeta('meta[name="twitter:image"]', 'name', 'twitter:image', primaryImage);
-      setMeta('meta[name="twitter:card"]', 'name', 'twitter:card', 'summary_large_image');
+      setPageMeta('meta[property="og:image"]', 'property', 'og:image', primaryImage);
+      setPageMeta('meta[name="twitter:image"]', 'name', 'twitter:image', primaryImage);
+      setPageMeta('meta[name="twitter:card"]', 'name', 'twitter:card', 'summary_large_image');
     }
 
     const schema = document.createElement('script');
@@ -108,6 +113,11 @@ const ProductDetail = () => {
 
     return () => schema.remove();
   }, [product, seoVariant]);
+
+  useEffect(() => {
+    if (hiddenProductRedirect || isLoading || isError || product) return;
+    setPageMeta('meta[name="robots"]', 'name', 'robots', 'noindex,follow');
+  }, [hiddenProductRedirect, isError, isLoading, product]);
 
   if (hiddenProductRedirect) {
     return <Navigate to={hiddenProductRedirect} replace />;
@@ -207,6 +217,10 @@ const ProductDetail = () => {
   const mainImage = images[0]?.node;
   const nutrition = getMealNutrition(node.handle);
   const heatingInstructions = getMealHeatingInstructions(node.handle);
+  const catalogPath = node.productType.toLowerCase().includes('juice')
+    ? '/juices'
+    : '/weekly-meals';
+  const catalogLabel = catalogPath === '/juices' ? 'Back to Juices' : 'Back to Menu';
 
   if (node.handle === 'pick-n-choose-bundle') {
     return <Navigate to="/juices/pick-and-choose" replace />;
@@ -238,9 +252,9 @@ const ProductDetail = () => {
         {/* Breadcrumb */}
         <div className="mb-6">
           <Button asChild variant="ghost" size="sm">
-            <Link to="/weekly-meals">
+            <Link to={catalogPath}>
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Menu
+              {catalogLabel}
             </Link>
           </Button>
         </div>
@@ -299,8 +313,8 @@ const ProductDetail = () => {
 
             {/* Variant Selection */}
             {variants.length > 1 && (
-              <div className="mt-6">
-                <label className="text-sm font-medium text-foreground">Options</label>
+              <div className="mt-6" role="group" aria-labelledby="product-options-label">
+                <p id="product-options-label" className="text-sm font-medium text-foreground">Options</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {variants.map((variant, index) => (
                     <Button
@@ -309,6 +323,7 @@ const ProductDetail = () => {
                       size="sm"
                       onClick={() => setSelectedVariantIndex(index)}
                       disabled={!variant.node.availableForSale || variant.node.requiresComponents}
+                      aria-pressed={selectedVariantIndex === index}
                     >
                       {variant.node.title}
                     </Button>
@@ -318,8 +333,8 @@ const ProductDetail = () => {
             )}
 
             {/* Quantity */}
-            <div className="mt-6">
-              <label className="text-sm font-medium text-foreground">Quantity</label>
+            <div className="mt-6" role="group" aria-labelledby="product-quantity-label">
+              <p id="product-quantity-label" className="text-sm font-medium text-foreground">Quantity</p>
               <div className="mt-2 flex items-center gap-3">
                 <Button
                   variant="outline"

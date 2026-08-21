@@ -72,7 +72,7 @@ export function Categories() {
               <p className="mt-3 text-muted-foreground leading-relaxed flex-1">
                 Three rotating chef-prepared menus delivered fresh. New dishes every week to keep things exciting while keeping your favorites available.
               </p>
-              <div className="mt-6 flex items-center gap-4">
+              <div className="mt-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
                 <Button asChild className="rounded-full px-6 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/20">
                   <Link to="/weekly-meals">
                     Browse Meals
@@ -101,7 +101,7 @@ export function Categories() {
               <p className="mt-3 text-muted-foreground leading-relaxed flex-1">
                 Cold-pressed, nutrient-rich juices and wellness shots. Bundles available for maximum savings and freshness every day.
               </p>
-              <div className="mt-6 flex items-center gap-4">
+              <div className="mt-6 flex flex-col items-start gap-4 sm:flex-row sm:items-center">
                 <Button asChild className="rounded-full px-6 bg-accent hover:bg-terracotta-dark text-white shadow-lg shadow-accent/20">
                   <Link to="/juices">
                     Browse Juices

@@ -109,8 +109,10 @@ export function Header() {
         id="mobile-navigation"
         aria-hidden={!mobileMenuOpen}
         className={cn(
-          "overflow-hidden bg-background/95 backdrop-blur-lg transition-all duration-300 ease-in-out xl:hidden",
-          mobileMenuOpen ? "max-h-96 border-b border-border" : "max-h-0"
+          "bg-background/95 backdrop-blur-lg transition-all duration-300 ease-in-out xl:hidden",
+          mobileMenuOpen
+            ? "max-h-[calc(100dvh-4.5rem)] overflow-y-auto border-b border-border"
+            : "max-h-0 overflow-hidden"
         )}
       >
         <nav className="container flex flex-col gap-1 py-4">

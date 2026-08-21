@@ -13,7 +13,7 @@ export function HowItWorks() {
     {
       number: "02",
       title: "Place Your Order",
-      description: "Add favorites to cart and checkout before the weekly cutoff.",
+      description: "Add favorites to your cart and choose an available local delivery window.",
       icon: ShoppingBag,
     },
     {

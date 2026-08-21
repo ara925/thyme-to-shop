@@ -2,6 +2,10 @@ import { Link } from 'react-router-dom';
 import { Instagram, Mail, MapPin } from 'lucide-react';
 import logo from '@/assets/logo.png';
 
+const subscriptionManagementUrl =
+  import.meta.env.VITE_SHOPIFY_SUBSCRIPTION_MANAGEMENT_URL
+  || 'https://shopify.com/98028912938/account/pages/6971b1a1-27f6-4c27-b8b0-3009fd3b921d';
+
 export function Footer() {
   return (
     <footer className="relative overflow-hidden bg-espresso text-white/90">
@@ -64,6 +68,14 @@ export function Footer() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <a
+                  href={subscriptionManagementUrl}
+                  className="inline-flex min-h-11 items-center text-sm text-white/60 transition-colors hover:text-white"
+                >
+                  Manage Subscriptions
+                </a>
+              </li>
             </ul>
           </div>
 
@@ -87,17 +99,19 @@ export function Footer() {
             </ul>
             
             <div className="mt-6 p-4 rounded-xl bg-white/5 border border-white/10">
-              <p className="text-sm font-semibold text-white">Order Cutoff</p>
-              <p className="text-sm text-white/60 mt-1">Thursday 6PM · Delivery Sunday</p>
+              <p className="text-sm font-semibold text-white">Local Delivery</p>
+              <p className="text-sm text-white/60 mt-1">
+                Monday &amp; Tuesday · Address eligibility confirmed at checkout
+              </p>
             </div>
           </div>
         </div>
 
         <div className="mt-16 pt-8 border-t border-white/10 flex flex-col sm:flex-row justify-between items-center gap-4">
-          <p className="text-sm text-white/40">
+          <p className="text-sm text-white/50">
             © {new Date().getFullYear()} Place in Thyme. All rights reserved.
           </p>
-          <p className="text-sm text-white/40">
+          <p className="text-sm text-white/50">
             Crafted with ❤️ in Southern California
           </p>
         </div>
