@@ -15,8 +15,11 @@ import { getStorefrontErrorMessage } from '@/lib/shopify';
 import {
   DROPOFF_CONFIGURATION_ERROR,
   DROPOFF_WINDOWS,
+  DELIVERY_SERVICE_AREA,
+  LOCAL_FULFILLMENT_READY,
   PICKUP_ENABLED,
   PICKUP_WINDOWS,
+  PICKUP_ADDRESS,
   type FulfillmentWindow,
 } from '@/lib/fulfillmentConfig';
 
@@ -39,6 +42,8 @@ export function DeliveryTimeSelect({
   const effectiveMethod = PICKUP_ENABLED ? fulfillmentMethod : 'delivery';
   const windows = effectiveMethod === 'pickup' ? PICKUP_WINDOWS : DROPOFF_WINDOWS;
   const controlsDisabled = disabled || isSaving || effectiveMethod !== fulfillmentMethod;
+  const pickupScheduleLabel = PICKUP_WINDOWS.map((window) => window.label).join(' or ')
+    || 'Monday after 9:00 AM';
 
   useEffect(() => {
     if (!PICKUP_ENABLED && fulfillmentMethod === 'pickup') {
@@ -59,7 +64,7 @@ export function DeliveryTimeSelect({
 
   return (
     <div className="space-y-3">
-      {PICKUP_ENABLED ? (
+      {PICKUP_ENABLED && (
         <div className="flex overflow-hidden rounded-lg border border-border" role="group" aria-label="Fulfillment method">
           <button
             type="button"
@@ -90,15 +95,26 @@ export function DeliveryTimeSelect({
             Pickup
           </button>
         </div>
-      ) : (
-        <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">
-          <Truck className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-          <p>
-            <span className="font-semibold">Local delivery only.</span>{' '}
-            Address eligibility is confirmed during checkout.
-          </p>
-        </div>
       )}
+
+      <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm text-foreground">
+        <Truck className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+        {LOCAL_FULFILLMENT_READY ? (
+          <p>
+            <span className="font-semibold">Eligible {DELIVERY_SERVICE_AREA} delivery:</span>{' '}
+            $15 on orders of $99 or more.
+            {PICKUP_ENABLED
+              ? ` Free pickup is available at ${PICKUP_ADDRESS} on ${pickupScheduleLabel}.`
+              : ''}{' '}
+            Shipping is not currently offered.
+          </p>
+        ) : (
+          <p>
+            <span className="font-semibold">Local fulfillment setup is in progress.</span>{' '}
+            Delivery and pickup checkout remain unavailable until the matching Shopify setup is complete.
+          </p>
+        )}
+      </div>
 
       <div className="space-y-2">
         {windows.length > 0 ? (
@@ -109,8 +125,8 @@ export function DeliveryTimeSelect({
             >
               <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
               {effectiveMethod === 'pickup'
-                ? 'Preferred Pickup Window'
-                : 'Preferred Local Delivery Window'}
+                ? 'Preferred Pickup Time'
+                : 'Preferred Local Delivery Day'}
             </label>
             <Select
               value={value}
@@ -119,7 +135,7 @@ export function DeliveryTimeSelect({
             >
               <SelectTrigger className="w-full" aria-labelledby="fulfillment-window-label">
                 <SelectValue
-                  placeholder={`Select a ${effectiveMethod === 'pickup' ? 'pickup' : 'delivery'} window`}
+                  placeholder={`Select a ${effectiveMethod === 'pickup' ? 'pickup time' : 'delivery day'}`}
                 />
               </SelectTrigger>
               <SelectContent>
@@ -138,15 +154,17 @@ export function DeliveryTimeSelect({
             )}
             <p className="text-xs text-muted-foreground">
               {effectiveMethod === 'pickup'
-                ? 'Pickup details are confirmed with your order.'
-                : 'Delivery address eligibility is verified at checkout.'}
+                ? `Pickup is free at ${PICKUP_ADDRESS}.`
+                : `Eligible ${DELIVERY_SERVICE_AREA} addresses are confirmed at checkout.`}
             </p>
           </>
         ) : (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" role="alert">
-            <p className="font-semibold">Online delivery scheduling is not available yet.</p>
+            <p className="font-semibold">Online local fulfillment is not available yet.</p>
             <p className="mt-1">
-              Place in Thyme still needs to publish its approved Monday and Tuesday windows before online checkout can open.
+              {LOCAL_FULFILLMENT_READY
+                ? 'Place in Thyme still needs to publish its approved Monday and Tuesday choices before online checkout can open.'
+                : 'Shopify delivery and pickup setup must be completed before online checkout can open.'}
             </p>
             {DROPOFF_CONFIGURATION_ERROR && (
               <span className="sr-only">{DROPOFF_CONFIGURATION_ERROR}</span>

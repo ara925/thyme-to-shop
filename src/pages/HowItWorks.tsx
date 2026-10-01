@@ -18,8 +18,8 @@ const HowItWorks = () => {
     },
     {
       icon: Clock,
-      title: "3. Choose a Local Window",
-      description: "Select an available Monday or Tuesday delivery window in your cart. Your address must be inside the approved local service area."
+      title: "3. Choose Delivery or Pickup",
+      description: "Choose Monday or Tuesday delivery for an eligible Orange County address (confirmed at checkout), or free Monday pickup after 9:00 AM at 26021 Acero, Mission Viejo, CA 92691."
     },
     {
       icon: UtensilsCrossed,
@@ -28,8 +28,8 @@ const HowItWorks = () => {
     },
     {
       icon: Truck,
-      title: "5. Local Delivery",
-      description: "Your order arrives during the confirmed local delivery window, packaged to stay fresh and ready to enjoy."
+      title: "5. Receive Your Order",
+      description: "Orange County delivery is $15 with a $99 order minimum. Pickup is free. Shipping is not currently offered."
     },
   ];
 
@@ -82,8 +82,9 @@ const HowItWorks = () => {
               <Card className="border-primary/20 bg-herb-light/30">
                 <CardContent className="p-6 text-center">
                   <Clock className="h-8 w-8 text-primary mx-auto" />
-                  <h3 className="mt-4 font-serif text-lg font-semibold">Service Area</h3>
-                  <p className="mt-2 text-2xl font-bold text-primary">Local Only</p>
+                  <h3 className="mt-4 font-serif text-lg font-semibold">Delivery Area</h3>
+                  <p className="mt-2 text-2xl font-bold text-primary">Orange County</p>
+                  <p className="mt-1 text-sm text-muted-foreground">$15 · $99 minimum</p>
                 </CardContent>
               </Card>
               <Card className="border-accent/20 bg-terracotta-light/30">
@@ -91,6 +92,21 @@ const HowItWorks = () => {
                   <CalendarDays className="h-8 w-8 text-accent mx-auto" />
                   <h3 className="mt-4 font-serif text-lg font-semibold">Delivery Days</h3>
                   <p className="mt-2 text-2xl font-bold text-accent">Monday &amp; Tuesday</p>
+                </CardContent>
+              </Card>
+              <Card className="border-primary/20 bg-herb-light/30">
+                <CardContent className="p-6 text-center">
+                  <Clock className="h-8 w-8 text-primary mx-auto" />
+                  <h3 className="mt-4 font-serif text-lg font-semibold">Weekly Order Cutoff</h3>
+                  <p className="mt-2 text-2xl font-bold text-primary">Friday 11:59 PM PT</p>
+                </CardContent>
+              </Card>
+              <Card className="border-accent/20 bg-terracotta-light/30">
+                <CardContent className="p-6 text-center">
+                  <CalendarDays className="h-8 w-8 text-accent mx-auto" />
+                  <h3 className="mt-4 font-serif text-lg font-semibold">Free Pickup</h3>
+                  <p className="mt-2 text-2xl font-bold text-accent">Monday after 9:00 AM</p>
+                  <p className="mt-1 text-sm text-muted-foreground">26021 Acero, Mission Viejo</p>
                 </CardContent>
               </Card>
             </div>

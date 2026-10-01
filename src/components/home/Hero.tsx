@@ -37,7 +37,7 @@ export function Hero() {
             
             <p className="mt-6 text-lg text-white/80 md:text-xl max-w-lg leading-relaxed opacity-0 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
               Weekly rotating menus crafted from scratch by Place in Thyme. 
-              Nutritious, delicious, and delivered fresh to your door.
+              Nutritious, delicious, and prepared fresh for Orange County delivery or pickup.
             </p>
             
             <div className="mt-10 flex flex-col gap-4 sm:flex-row opacity-0 animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
@@ -64,7 +64,7 @@ export function Hero() {
             {[
               { icon: Leaf, title: "Farm Fresh", desc: "Premium whole foods", color: "bg-primary" },
               { icon: Clock, title: "Weekly Menus", desc: "New rotating dishes every week", color: "bg-accent" },
-              { icon: Truck, title: "Local Delivery", desc: "Within our approved service area", color: "bg-primary" },
+              { icon: Truck, title: "Local Fulfillment", desc: "Orange County delivery or pickup", color: "bg-primary" },
             ].map((item, i) => (
               <div
                 key={item.title}

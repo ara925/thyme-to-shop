@@ -22,6 +22,35 @@ describe('fulfillment window configuration', () => {
     });
   });
 
+  it('accepts approved day-only delivery choices without inventing hours', () => {
+    expect(parseFulfillmentWindows(JSON.stringify([
+      { value: 'monday', label: 'Monday' },
+      { value: 'tuesday', label: 'Tuesday' },
+    ]), ['Monday', 'Tuesday'])).toEqual({
+      windows: [
+        { value: 'monday', label: 'Monday' },
+        { value: 'tuesday', label: 'Tuesday' },
+      ],
+      error: null,
+    });
+  });
+
+  it('accepts only the approved Monday-after-9 pickup wording', () => {
+    expect(parseFulfillmentWindows(JSON.stringify([
+      { value: 'monday-after-9am', label: 'Monday after 9:00 AM' },
+    ]), ['Monday'], ['Monday after 9:00 AM']).error).toBeNull();
+
+    expect(parseFulfillmentWindows(JSON.stringify([
+      { value: 'tuesday-after-9am', label: 'Tuesday after 9:00 AM' },
+    ]), ['Monday'], ['Monday after 9:00 AM']).error).toMatch(/outside the approved service days/i);
+
+    for (const label of ['Monday', 'Monday at 8:00 AM']) {
+      expect(parseFulfillmentWindows(JSON.stringify([
+        { value: 'monday-custom', label },
+      ]), ['Monday'], ['Monday after 9:00 AM']).error).toMatch(/outside the approved schedule/i);
+    }
+  });
+
   it.each([
     'not-json',
     '[]',

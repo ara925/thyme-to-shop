@@ -38,7 +38,7 @@ const WeeklyMeals = () => {
           <div className="mt-8 flex flex-wrap gap-3">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
               <Clock className="h-4 w-4 text-gold" />
-              <span><strong>Service:</strong> Local delivery only</span>
+              <span><strong>Service:</strong> Orange County delivery or free pickup</span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
               <CalendarDays className="h-4 w-4 text-gold" />

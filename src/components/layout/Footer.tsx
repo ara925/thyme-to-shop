@@ -26,7 +26,7 @@ export function Footer() {
               </span>
             </Link>
             <p className="mt-4 max-w-sm text-sm text-white/60 leading-relaxed">
-              Fresh, chef-prepared meals and cold-pressed juices delivered to your door. 
+              Fresh, chef-prepared meals and cold-pressed juices available for Orange County delivery or pickup.
               Supporting Operation Helping Hands Southern California.
             </p>
             <div className="mt-6 flex gap-3">
@@ -85,7 +85,9 @@ export function Footer() {
             <ul className="space-y-3">
               <li className="flex items-start gap-3">
                 <MapPin className="h-5 w-5 text-accent mt-0.5 shrink-0" />
-                <span className="text-sm text-white/60">Southern California</span>
+                <span className="text-sm text-white/60">
+                  Pickup: 26021 Acero, Mission Viejo, CA 92691
+                </span>
               </li>
               <li className="flex items-start gap-3">
                 <Mail className="h-5 w-5 text-accent mt-0.5 shrink-0" />
@@ -101,7 +103,10 @@ export function Footer() {
             <div className="mt-6 p-4 rounded-xl bg-white/5 border border-white/10">
               <p className="text-sm font-semibold text-white">Local Delivery</p>
               <p className="text-sm text-white/60 mt-1">
-                Monday &amp; Tuesday · Address eligibility confirmed at checkout
+                Orange County · Monday &amp; Tuesday · $15 on orders of $99+
+              </p>
+              <p className="text-sm text-white/60 mt-1">
+                Free Monday pickup after 9:00 AM · No shipping
               </p>
             </div>
           </div>
