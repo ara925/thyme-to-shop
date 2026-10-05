@@ -2,8 +2,11 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@/lib/fulfillmentConfig', () => ({
+  DELIVERY_SERVICE_AREA: 'Orange County',
   DROPOFF_CONFIGURATION_ERROR: 'No fulfillment windows are configured.',
   DROPOFF_WINDOWS: [],
+  LOCAL_FULFILLMENT_READY: false,
+  PICKUP_ADDRESS: '26021 Acero, Mission Viejo, CA 92691',
   PICKUP_ENABLED: false,
   PICKUP_WINDOWS: [],
 }));
@@ -22,8 +25,9 @@ describe('DeliveryTimeSelect without approved windows', () => {
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent(
-      /still needs to publish its approved Monday and Tuesday windows/i,
+      /shopify delivery and pickup setup must be completed/i,
     );
+    expect(screen.getByText(/local fulfillment setup is in progress/i)).toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 });

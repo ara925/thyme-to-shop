@@ -13,13 +13,13 @@ export function HowItWorks() {
     {
       number: "02",
       title: "Place Your Order",
-      description: "Add favorites to your cart and choose an available local delivery window.",
+      description: "Add favorites to your cart, then choose Orange County delivery or free Monday pickup.",
       icon: ShoppingBag,
     },
     {
       number: "03",
-      title: "We Prepare & Deliver",
-      description: "Our chefs prepare your meals fresh and deliver to your door.",
+      title: "We Prepare & Fulfill",
+      description: "Our chefs prepare everything fresh for Monday or Tuesday delivery, or Monday pickup after 9:00 AM.",
       icon: Truck,
     },
     {

@@ -3,49 +3,37 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { MapPin, CalendarDays, Clock, Check, Truck } from "lucide-react";
+import { MapPin, CalendarDays, Check, Truck } from "lucide-react";
 
 const DELIVERY_DAYS = [
   { value: "monday", label: "Monday" },
   { value: "tuesday", label: "Tuesday" },
 ];
 
-const DEFAULT_TIME_SLOTS = [
-  { value: "10am-12pm", label: "10:00 AM – 12:00 PM" },
-  { value: "12pm-2pm", label: "12:00 PM – 2:00 PM" },
-  { value: "2pm-4pm", label: "2:00 PM – 4:00 PM" },
-  { value: "4pm-6pm", label: "4:00 PM – 6:00 PM" },
-];
-
 interface DeliverySchedulerProps {
-  timeSlots?: Array<{ value: string; label: string }>;
   onSchedule?: (data: {
     address: string;
     city: string;
     zip: string;
     day: string;
-    timeSlot: string;
   }) => void;
 }
 
 export function DeliveryScheduler({
-  timeSlots = DEFAULT_TIME_SLOTS,
   onSchedule,
 }: DeliverySchedulerProps) {
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
   const [zip, setZip] = useState("");
   const [selectedDay, setSelectedDay] = useState("");
-  const [selectedSlot, setSelectedSlot] = useState("");
   const [isScheduled, setIsScheduled] = useState(false);
 
-  const isComplete = address.trim() && city.trim() && zip.trim() && selectedDay && selectedSlot;
+  const isComplete = address.trim() && city.trim() && zip.trim() && selectedDay;
 
   const handleSchedule = () => {
     if (!isComplete) return;
     setIsScheduled(true);
-    onSchedule?.({ address, city, zip, day: selectedDay, timeSlot: selectedSlot });
+    onSchedule?.({ address, city, zip, day: selectedDay });
   };
 
   const handleReset = () => {
@@ -54,12 +42,10 @@ export function DeliveryScheduler({
     setCity("");
     setZip("");
     setSelectedDay("");
-    setSelectedSlot("");
   };
 
   if (isScheduled) {
     const dayLabel = DELIVERY_DAYS.find(d => d.value === selectedDay)?.label;
-    const slotLabel = timeSlots.find(s => s.value === selectedSlot)?.label;
 
     return (
       <section className="py-12 md:py-16">
@@ -74,7 +60,7 @@ export function DeliveryScheduler({
                 {address}, {city} {zip}
               </p>
               <p className="mt-1 font-semibold text-primary">
-                {dayLabel} · {slotLabel}
+                {dayLabel} · Delivery timing confirmed with your order
               </p>
               <Button variant="outline" className="mt-6" onClick={handleReset}>
                 Change delivery details
@@ -95,10 +81,10 @@ export function DeliveryScheduler({
             Schedule Your Delivery
           </div>
           <h2 className="font-serif text-2xl md:text-3xl font-bold text-foreground">
-            Choose Your Delivery Window
+            Choose Your Delivery Day
           </h2>
           <p className="mt-2 text-muted-foreground max-w-md mx-auto">
-            We deliver on Mondays and Tuesdays. Pick a day and time that works best for you.
+            We deliver to eligible Orange County addresses on Mondays and Tuesdays. Eligibility is confirmed at checkout.
           </p>
         </div>
 
@@ -141,7 +127,7 @@ export function DeliveryScheduler({
                     <Label htmlFor="zip" className="text-sm">ZIP Code</Label>
                     <Input
                       id="zip"
-                      placeholder="10001"
+                      placeholder="92691"
                       value={zip}
                       onChange={(e) => setZip(e.target.value)}
                       className="mt-1"
@@ -178,40 +164,6 @@ export function DeliveryScheduler({
                   </button>
                 ))}
               </div>
-            </div>
-
-            {/* Step 3 — Time slot */}
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="flex h-7 w-7 items-center justify-center rounded-full bg-accent text-accent-foreground text-xs font-bold">
-                  3
-                </div>
-                <h3 className="font-serif text-lg font-bold flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-accent" />
-                  Time Window
-                </h3>
-              </div>
-              <RadioGroup
-                value={selectedSlot}
-                onValueChange={setSelectedSlot}
-                className="pl-9 space-y-2"
-              >
-                {timeSlots.map((slot) => (
-                  <label
-                    key={slot.value}
-                    htmlFor={`slot-${slot.value}`}
-                    className={`flex items-center gap-3 p-3.5 rounded-xl border-2 cursor-pointer transition-all ${
-                      selectedSlot === slot.value
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/40"
-                    }`}
-                  >
-                    <RadioGroupItem value={slot.value} id={`slot-${slot.value}`} />
-                    <Clock className={`h-4 w-4 ${selectedSlot === slot.value ? "text-primary" : "text-muted-foreground"}`} />
-                    <span className="font-medium">{slot.label}</span>
-                  </label>
-                ))}
-              </RadioGroup>
             </div>
 
             {/* Schedule button */}

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   CART_ATTRIBUTES_UPDATE_MUTATION,
   CART_CREATE_MUTATION,
@@ -630,7 +630,7 @@ describe('useCartStore Shopify synchronization', () => {
     useCartStore.setState({ warnings: [stockWarning] });
     const pickupAttributes: CartAttribute[] = [
       { key: 'Fulfillment Method', value: 'Pickup' },
-      { key: 'Preferred Pickup Window', value: '10:00 AM – 12:00 PM' },
+      { key: 'Preferred Pickup Window', value: 'Monday after 9:00 AM' },
     ];
     const remote = cart({
       attributes: pickupAttributes,
@@ -653,7 +653,7 @@ describe('useCartStore Shopify synchronization', () => {
     expect(useCartStore.getState()).toMatchObject({
       subtotal: usd('24.30'),
       fulfillmentMethod: 'pickup',
-      deliveryWindow: 'pickup-10am-12pm',
+      deliveryWindow: 'monday-after-9am',
       fulfillmentAttributesConfirmed: true,
       warnings: [stockWarning],
       items: [
@@ -690,18 +690,24 @@ describe('useCartStore Shopify synchronization', () => {
 
 describe('fulfillment confirmation and checkout', () => {
   beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-01T19:00:00.000Z'));
     storefrontMocks.request.mockReset();
     localStorage.clear();
     useCartStore.getState().clearCart();
-    setCartState(cart());
+    setCartState(cart({ subtotal: '99.00' }));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('confirms delivery attributes and reconfirms them immediately before checkout', async () => {
     const attributes: CartAttribute[] = [
       { key: 'Fulfillment Method', value: 'Delivery' },
-      { key: 'Preferred Dropoff Window', value: 'Monday, 9:00 AM – 11:00 AM' },
+      { key: 'Preferred Dropoff Window', value: 'Monday' },
     ];
-    const confirmed = cart({ attributes });
+    const confirmed = cart({ attributes, subtotal: '99.00' });
     storefrontMocks.request
       .mockResolvedValueOnce({
         data: { cartAttributesUpdate: { cart: confirmed, userErrors: [], warnings: [] } },
@@ -710,7 +716,7 @@ describe('fulfillment confirmation and checkout', () => {
         data: { cartAttributesUpdate: { cart: confirmed, userErrors: [], warnings: [] } },
       } satisfies { data: CartAttributesUpdateData });
 
-    await useCartStore.getState().setDeliveryWindow('9am-11am');
+    await useCartStore.getState().setDeliveryWindow('monday');
     expect(useCartStore.getState().fulfillmentAttributesConfirmed).toBe(true);
     await expect(useCartStore.getState().prepareCheckout()).resolves.toBe(
       'https://thyme-time-store-brreo.myshopify.com/checkouts/test?channel=online_store',
@@ -724,7 +730,7 @@ describe('fulfillment confirmation and checkout', () => {
   it('blocks checkout when Shopify returns an orphaned bundle add-on', async () => {
     const attributes: CartAttribute[] = [
       { key: 'Fulfillment Method', value: 'Delivery' },
-      { key: 'Preferred Dropoff Window', value: 'Monday, 9:00 AM – 11:00 AM' },
+      { key: 'Preferred Dropoff Window', value: 'Monday' },
     ];
     const orphanedCart = cart({
       attributes,
@@ -744,7 +750,7 @@ describe('fulfillment confirmation and checkout', () => {
     });
     useCartStore.setState({
       fulfillmentMethod: 'delivery',
-      deliveryWindow: '9am-11am',
+      deliveryWindow: 'monday',
       fulfillmentAttributesConfirmed: true,
     });
     storefrontMocks.request.mockResolvedValueOnce({
@@ -759,10 +765,41 @@ describe('fulfillment confirmation and checkout', () => {
     expect(useCartStore.getState().fulfillmentAttributesConfirmed).toBe(false);
   });
 
+  it('revalidates the delivery minimum after Shopify refreshes the cart', async () => {
+    const attributes: CartAttribute[] = [
+      { key: 'Fulfillment Method', value: 'Delivery' },
+      { key: 'Preferred Dropoff Window', value: 'Monday' },
+    ];
+    useCartStore.setState({
+      subtotal: usd('100.00'),
+      fulfillmentMethod: 'delivery',
+      deliveryWindow: 'monday',
+      fulfillmentAttributesConfirmed: true,
+    });
+    storefrontMocks.request.mockResolvedValueOnce({
+      data: {
+        cartAttributesUpdate: {
+          cart: cart({ attributes, subtotal: '98.00' }),
+          userErrors: [],
+          warnings: [],
+        },
+      },
+    } satisfies { data: CartAttributesUpdateData });
+
+    await expect(useCartStore.getState().prepareCheckout()).rejects.toThrow(
+      'Add $1.00 more or choose free pickup',
+    );
+    expect(useCartStore.getState()).toMatchObject({
+      subtotal: usd('98.00'),
+      fulfillmentAttributesConfirmed: false,
+      error: expect.stringContaining('Add $1.00 more or choose free pickup'),
+    });
+  });
+
   it('blocks checkout when Shopify returns a changed Hibiscus add-on price', async () => {
     const attributes: CartAttribute[] = [
       { key: 'Fulfillment Method', value: 'Delivery' },
-      { key: 'Preferred Dropoff Window', value: 'Monday, 9:00 AM – 11:00 AM' },
+      { key: 'Preferred Dropoff Window', value: 'Monday' },
     ];
     const bundleInstance = 'server-price-check';
     const changedPriceCart = cart({
@@ -796,7 +833,7 @@ describe('fulfillment confirmation and checkout', () => {
     });
     useCartStore.setState({
       fulfillmentMethod: 'delivery',
-      deliveryWindow: '9am-11am',
+      deliveryWindow: 'monday',
       fulfillmentAttributesConfirmed: true,
     });
     storefrontMocks.request.mockResolvedValueOnce({
@@ -814,7 +851,7 @@ describe('fulfillment confirmation and checkout', () => {
   it('preserves pickup and writes only the pickup-specific window key', async () => {
     const attributes: CartAttribute[] = [
       { key: 'Fulfillment Method', value: 'Pickup' },
-      { key: 'Preferred Pickup Window', value: '10:00 AM – 12:00 PM' },
+      { key: 'Preferred Pickup Window', value: 'Monday after 9:00 AM' },
     ];
     const confirmed = cart({ attributes });
     storefrontMocks.request
@@ -826,7 +863,7 @@ describe('fulfillment confirmation and checkout', () => {
       } satisfies { data: CartAttributesUpdateData });
 
     useCartStore.getState().setFulfillmentMethod('pickup');
-    await useCartStore.getState().setDeliveryWindow('pickup-10am-12pm');
+    await useCartStore.getState().setDeliveryWindow('monday-after-9am');
 
     expect(storefrontMocks.request).toHaveBeenNthCalledWith(1, CART_ATTRIBUTES_UPDATE_MUTATION, {
       cartId: confirmed.id,
@@ -834,7 +871,7 @@ describe('fulfillment confirmation and checkout', () => {
     });
     expect(useCartStore.getState()).toMatchObject({
       fulfillmentMethod: 'pickup',
-      deliveryWindow: 'pickup-10am-12pm',
+      deliveryWindow: 'monday-after-9am',
       fulfillmentAttributesConfirmed: true,
     });
     await expect(useCartStore.getState().prepareCheckout()).resolves.toContain('/checkouts/test');
@@ -842,7 +879,7 @@ describe('fulfillment confirmation and checkout', () => {
 
   it('rejects a method/window mismatch before contacting Shopify', async () => {
     useCartStore.getState().setFulfillmentMethod('pickup');
-    await expect(useCartStore.getState().setDeliveryWindow('9am-11am')).rejects.toThrow(
+    await expect(useCartStore.getState().setDeliveryWindow('monday')).rejects.toThrow(
       'valid pickup window',
     );
     expect(storefrontMocks.request).not.toHaveBeenCalled();
@@ -852,18 +889,54 @@ describe('fulfillment confirmation and checkout', () => {
   it('does not return checkout when Shopify fails to echo fulfillment attributes', async () => {
     useCartStore.setState({
       fulfillmentMethod: 'delivery',
-      deliveryWindow: '9am-11am',
+      deliveryWindow: 'monday',
       fulfillmentAttributesConfirmed: false,
     });
     storefrontMocks.request.mockResolvedValueOnce({
       data: {
-        cartAttributesUpdate: { cart: cart({ attributes: [] }), userErrors: [], warnings: [] },
+        cartAttributesUpdate: {
+          cart: cart({ attributes: [], subtotal: '97.00' }),
+          userErrors: [],
+          warnings: [],
+        },
       },
     } satisfies { data: CartAttributesUpdateData });
 
     await expect(useCartStore.getState().prepareCheckout()).rejects.toMatchObject({
       code: 'invalid-response',
     });
-    expect(useCartStore.getState().fulfillmentAttributesConfirmed).toBe(false);
+    expect(useCartStore.getState()).toMatchObject({
+      subtotal: usd('97.00'),
+      fulfillmentAttributesConfirmed: false,
+    });
+  });
+
+  it('shows an authoritative empty cart returned during final checkout preparation', async () => {
+    const attributes: CartAttribute[] = [
+      { key: 'Fulfillment Method', value: 'Delivery' },
+      { key: 'Preferred Dropoff Window', value: 'Monday' },
+    ];
+    useCartStore.setState({
+      fulfillmentMethod: 'delivery',
+      deliveryWindow: 'monday',
+      fulfillmentAttributesConfirmed: true,
+    });
+    storefrontMocks.request.mockResolvedValueOnce({
+      data: {
+        cartAttributesUpdate: {
+          cart: cart({ attributes, lines: [], subtotal: '0.00' }),
+          userErrors: [],
+          warnings: [],
+        },
+      },
+    } satisfies { data: CartAttributesUpdateData });
+
+    await expect(useCartStore.getState().prepareCheckout()).rejects.toThrow('Your cart is empty.');
+    expect(useCartStore.getState()).toMatchObject({
+      items: [],
+      subtotal: null,
+      fulfillmentAttributesConfirmed: false,
+      error: 'Your cart is empty.',
+    });
   });
 });

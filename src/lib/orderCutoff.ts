@@ -1,20 +1,37 @@
 /**
- * Order cutoff logic: Thursday at exactly 6 PM America/New_York.
+ * Order cutoff logic: end of Friday in Pacific time.
  *
- * A fulfillment cycle runs Monday through Sunday. Once the current cycle's
- * Thursday cutoff has passed, getNextCutoff points to the following Thursday
- * while the status API continues to report that this cycle is closed.
+ * The client's phrase "Friday at midnight" is represented unambiguously as
+ * Saturday 12:00 AM America/Los_Angeles (the instant immediately after Friday
+ * 11:59:59 PM). A fulfillment cycle runs Monday through Sunday. Once the
+ * current cycle's cutoff has passed, getNextCutoff points to the next cycle's
+ * cutoff while the status API continues to report this cycle as closed.
  */
 
-export const ORDER_TIME_ZONE = 'America/New_York';
+export const ORDER_TIME_ZONE = 'America/Los_Angeles';
+export const ORDER_CUTOFF_LABEL = 'Friday at 11:59 PM PT';
+export const ORDER_CUTOFF_CLOSED_MESSAGE =
+  'The Friday 11:59 PM PT order cutoff has passed. Online ordering is closed for this delivery cycle.';
+export const FULFILLMENT_SETUP_BANNER_MESSAGE =
+  'Local ordering setup is in progress · Delivery and pickup checkout are not open yet';
 
-const CUTOFF_ISO_DAY = 4; // Thursday (Monday = 1, Sunday = 7)
-const CUTOFF_HOUR = 18;
+export function getCutoffBannerMessage(
+  fulfillmentReady: boolean,
+  cutoffPassed: boolean,
+): string {
+  if (!fulfillmentReady) return FULFILLMENT_SETUP_BANNER_MESSAGE;
+  return cutoffPassed
+    ? ORDER_CUTOFF_CLOSED_MESSAGE
+    : `Order by ${ORDER_CUTOFF_LABEL} · Monday or Tuesday Orange County delivery`;
+}
+
+const CUTOFF_ISO_DAY = 6; // Saturday (Monday = 1, Sunday = 7)
+const CUTOFF_HOUR = 0;
 const MILLISECONDS_PER_MINUTE = 60 * 1000;
 const MILLISECONDS_PER_HOUR = 60 * MILLISECONDS_PER_MINUTE;
 const MILLISECONDS_PER_DAY = 24 * MILLISECONDS_PER_HOUR;
 
-const NEW_YORK_DATE_TIME_FORMATTER = new Intl.DateTimeFormat('en-US-u-ca-gregory-nu-latn', {
+const BUSINESS_DATE_TIME_FORMATTER = new Intl.DateTimeFormat('en-US-u-ca-gregory-nu-latn', {
   timeZone: ORDER_TIME_ZONE,
   year: 'numeric',
   month: '2-digit',
@@ -50,10 +67,10 @@ export interface OrderCutoffStatus {
   timeUntilCurrentCycleCutoff: CutoffTimeRemaining | null;
 }
 
-function getNewYorkDateTimeParts(date: Date): ZonedDateTimeParts {
+function getBusinessDateTimeParts(date: Date): ZonedDateTimeParts {
   const values: Partial<Record<Intl.DateTimeFormatPartTypes, number>> = {};
 
-  for (const part of NEW_YORK_DATE_TIME_FORMATTER.formatToParts(date)) {
+  for (const part of BUSINESS_DATE_TIME_FORMATTER.formatToParts(date)) {
     if (
       part.type === 'year' ||
       part.type === 'month' ||
@@ -77,7 +94,7 @@ function getNewYorkDateTimeParts(date: Date): ZonedDateTimeParts {
 }
 
 function getTimeZoneOffsetMilliseconds(date: Date): number {
-  const parts = getNewYorkDateTimeParts(date);
+  const parts = getBusinessDateTimeParts(date);
   const representedAsUtc = Date.UTC(
     parts.year,
     parts.month - 1,
@@ -90,8 +107,8 @@ function getTimeZoneOffsetMilliseconds(date: Date): number {
   return representedAsUtc - instantWithoutMilliseconds;
 }
 
-/** Converts an unambiguous New York wall-clock time into its UTC instant. */
-function newYorkDateTimeToInstant(date: CalendarDate, hour: number): Date {
+/** Converts an unambiguous business-local wall-clock time into its UTC instant. */
+function businessDateTimeToInstant(date: CalendarDate, hour: number): Date {
   const wallClockAsUtc = Date.UTC(date.year, date.month - 1, date.day, hour, 0, 0, 0);
   let candidate = wallClockAsUtc;
 
@@ -127,13 +144,13 @@ function toTimeRemaining(milliseconds: number): CutoffTimeRemaining {
 }
 
 export function getOrderCutoffStatus(now: Date = new Date()): OrderCutoffStatus {
-  const newYorkNow = getNewYorkDateTimeParts(now);
-  const today = { year: newYorkNow.year, month: newYorkNow.month, day: newYorkNow.day };
-  const currentCycleThursday = addCalendarDays(today, CUTOFF_ISO_DAY - getIsoDay(today));
-  const currentCycleCutoff = newYorkDateTimeToInstant(currentCycleThursday, CUTOFF_HOUR);
+  const businessNow = getBusinessDateTimeParts(now);
+  const today = { year: businessNow.year, month: businessNow.month, day: businessNow.day };
+  const currentCycleCutoffDay = addCalendarDays(today, CUTOFF_ISO_DAY - getIsoDay(today));
+  const currentCycleCutoff = businessDateTimeToInstant(currentCycleCutoffDay, CUTOFF_HOUR);
   const isCurrentCycleCutoffPassed = now.getTime() >= currentCycleCutoff.getTime();
   const nextCutoff = isCurrentCycleCutoffPassed
-    ? newYorkDateTimeToInstant(addCalendarDays(currentCycleThursday, 7), CUTOFF_HOUR)
+    ? businessDateTimeToInstant(addCalendarDays(currentCycleCutoffDay, 7), CUTOFF_HOUR)
     : currentCycleCutoff;
   const timeUntilCurrentCycleCutoff = isCurrentCycleCutoffPassed
     ? null
@@ -155,13 +172,24 @@ export function isBeforeCutoff(now: Date = new Date()): boolean {
   return !getOrderCutoffStatus(now).isCurrentCycleCutoffPassed;
 }
 
+/** The next instant when local ordering changes between open and closed. */
+export function getNextOrderAvailabilityTransition(now: Date = new Date()): Date {
+  const status = getOrderCutoffStatus(now);
+  if (!status.isCurrentCycleCutoffPassed) return status.currentCycleCutoff;
+
+  const businessNow = getBusinessDateTimeParts(now);
+  const today = { year: businessNow.year, month: businessNow.month, day: businessNow.day };
+  const nextMonday = addCalendarDays(today, 8 - getIsoDay(today));
+  return businessDateTimeToInstant(nextMonday, 0);
+}
+
 export function getTimeUntilCutoff(now: Date = new Date()): CutoffTimeRemaining | null {
   return getOrderCutoffStatus(now).timeUntilCurrentCycleCutoff;
 }
 
 export function formatCutoffCountdown(now: Date = new Date()): string {
   const time = getTimeUntilCutoff(now);
-  if (!time) return 'Cutoff passed — orders apply to next week';
+  if (!time) return ORDER_CUTOFF_CLOSED_MESSAGE;
 
   const parts: string[] = [];
   if (time.days > 0) parts.push(`${time.days}d`);

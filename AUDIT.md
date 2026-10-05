@@ -1,7 +1,7 @@
 # Place in Thyme pre-launch audit
 
-Audit date: 2026-08-21 follow-up launch sweep
-Main release: `main` (branded checkout DNS cutover verified; CI release gate enabled)
+Audit date: 2026-10-01 fulfillment follow-up
+Main release: `main` (branded checkout DNS cutover verified; CI release gate enabled); approved fulfillment update staged on `codex/configure-local-fulfillment`
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
@@ -21,22 +21,29 @@ Cory confirmed the complete proposed structure and pricing interpretation on 202
 
 These business decisions are closed. The remaining subscription gaps below are technical implementation and acceptance work, not unresolved questions about the intended offer.
 
+On 2026-10-01 Cory also confirmed the operating rules for launch:
+
+- **Shopify plan:** Basic, billed monthly. The final paid-plan confirmation remains an owner-approved financial action.
+- **Delivery:** anywhere in Orange County on Monday or Tuesday, $15 fee, $99 delivery minimum, with no shipping.
+- **Cutoff:** “Friday at midnight PCT,” implemented unambiguously as the end of Friday (Friday 11:59 PM Pacific Time / Saturday 12:00 AM `America/Los_Angeles`).
+- **Pickup:** free at 26021 Acero, Mission Viejo, CA 92691, on Monday after 9:00 AM.
+
 The blocking owner items are:
 
-1. Authenticated Shopify Admin inspection confirmed the store is on **Pause and Build ($9/month)**, Shopify Payments still shows **Complete setup**, and the primary location has no address.
+1. Authenticated Shopify Admin inspection confirmed the store is on **Pause and Build ($9/month)**, Shopify Payments still shows **Complete setup**, and the primary location has no address. Basic monthly is now selected in principle but has not been purchased; the supplied pickup address has not yet been saved in Shopify.
 2. No live subscription configuration automates the documented A -> B -> C meal rotation after all three weekly menus are selected.
 3. The exact 10% juice adjustment is configured, but the live subscription system does not provide the documented weekly-versus-four-week-prepaid choice or four-cycle commitment enforcement.
-4. Cory requested pickup, but Shopify pickup is off and no pickup address/instructions or complete window list was supplied. The storefront now keeps pickup disabled unless both an approved window configuration and the explicit pickup flag are present.
-5. The 26 actual customer fulfillment products now require shipping, but Shopify still needs the approved local-only origin, service boundary, rates, and complete windows before checkout can offer a valid delivery method.
+4. The storefront implementation now contains the approved delivery/pickup schedule, fee, minimum, address, and cutoff, but Shopify Admin still needs the location address, Orange County postal-code zone, $15/$99 settings, pickup instructions, and removal of every standard shipping rate.
+5. Shopify cannot model a county boundary exactly with native local delivery. The prepared 89-standard-ZIP approximation covers Orange County, but ZIP 90631 also reaches part of Los Angeles County; exact boundary enforcement requires manual review or an address-validation/delivery app.
 6. Shipping, tax, payment, subscription, cancellation, refund, privacy, and other launch policies are not approved/configured end to end.
 
 ## Verification snapshot
 
 | Check | Result |
 | --- | --- |
-| `npm run build` | Pass on the 2026-08-21 combined release tree: Vite 7.3.6; 33 published sitemap routes; main JS 351.17 kB / 113.75 kB gzip. |
+| `npm run build` | Pass on the 2026-10-01 fulfillment update: Vite 7.3.6; 33 published sitemap routes; main JS 353.24 kB / 114.44 kB gzip. |
 | `npm run typecheck` | Pass on the combined release tree. |
-| `npm test` | Pass: 20 files, 163/163 tests. |
+| `npm test` | Pass: 22 files, 175/175 tests. |
 | `npm run lint` | Pass: 0 errors, 15 Fast Refresh warnings. |
 | `npm audit` | Pass: 0 vulnerabilities after the Nano ID and React Router upgrades. |
 | `npm audit --omit=dev` | Pass: 0 vulnerabilities. |
@@ -44,7 +51,7 @@ The blocking owner items are:
 | `git diff --check` | Pass. |
 | Secret scan | No Shopify Admin token, private key, or matching credential pattern in the worktree or Git history. |
 | Production console scan | No `console.log`, `console.warn`, or `console.error` calls in non-test `src` code. |
-| Official Chrome visual/interaction QA | The published 2026-08-21 release was checked in official Chrome across home, meals, juices, Pick n' Choose, both planners, a live product, cart, and 404. Product add-to-cart worked; the cart showed the correct local-only Monday/Tuesday fail-closed notice; skip-to-content and mobile-menu Escape/focus behavior passed; and the browser console had no errors or warnings. After DNS cutover, a fresh Shopify cart opened `checkout.placeinthyme.com` over valid HTTPS and stopped at “This store isn't set up to receive orders yet” because commerce is inactive. No order was submitted. |
+| Official Chrome visual/interaction QA | The published 2026-08-21 release was checked across the full route matrix. The 2026-10-01 local preview was additionally checked in the official Chrome plugin at desktop and 390×844 mobile: the updated banner, Orange County/$15/$99 copy, Monday/Tuesday selector, Monday-after-9 pickup, exact delivery shortfall, pickup-below-minimum path, and responsive layout all passed with no browser console errors or horizontal overflow. No order was submitted. |
 | Exact 375/768/1280/1920 matrix | Pass across all eight representative routes above, with zero horizontal-overflow failures at every width. The 768px header breakpoint defect found during QA was fixed and rechecked. Redirect-only meal/Hibiscus product URLs also landed on their approved planner/category routes. |
 | Authenticated Shopify Admin acceptance | Pass for the approved catalog cleanup: the `$95` product remains Active but unpublished; its Storefront handle is absent. Pick n' Choose has exactly four products at 10% off; each fixed plan contains only its matching parent; Hibiscus has zero plans; Meal 1/2/3 each contain six products. The 26 actual customer fulfillment products are now physical/requiring shipping. The hidden component-only Hibiscus bundle derives `requiresShipping: true` from its components, while the non-fulfillment Pick n' Choose anchor remains false. |
 | Public deployment | `https://shop.placeinthyme.com` serves the published headless storefront and its launch routes. Raw HTML canonical/Open Graph tags, the robots sitemap pointer, and all 33 sitemap locations were rechecked after publishing and use the custom hostname; no old hosting hostname remains in those production outputs. |
@@ -58,9 +65,11 @@ All catalog surfaces query Shopify. Home starting prices now come from available
 
 Cart mutation warnings are requested from all five mutations (`src/lib/shopify.ts:397-514`) and shown to the customer (`src/components/cart/CartDrawer.tsx:124-149`). Component-required variants are blocked centrally before any mutation (`src/stores/cartStore.ts:337-353`).
 
-### RESOLVED IN CODE — fulfillment configuration fails closed and attributes survive to checkout
+### RESOLVED IN STOREFRONT CODE — approved fulfillment rules and attributes survive to checkout
 
-The active storefront no longer publishes the unsupported Sunday schedule or invented default windows. Delivery and pickup windows must be supplied as validated JSON deployment configuration; missing, malformed, duplicate, or empty configuration produces no selectable window and keeps checkout disabled (`src/lib/fulfillmentConfig.ts`, `src/components/cart/DeliveryTimeSelect.tsx`). Pickup additionally defaults off. Once configured, the cart writes `Fulfillment Method` plus the matching `Preferred Dropoff Window` or `Preferred Pickup Window`, reads Shopify's returned attributes, and verifies them again immediately before checkout (`src/stores/cartStore.ts`). Checkout redirects must be HTTPS and match either this store's exact permanent MyShopify hostname or the exact configured Shopify-connected checkout hostname; credentials, ports, subdomains, and lookalikes are rejected. `channel=online_store` is added only after validation (`src/lib/shopify.ts`).
+The storefront contains the confirmed Monday/Tuesday Orange County delivery choices and Monday-after-9 pickup without inventing delivery hours. It displays the $15 delivery fee, enforces the $99 delivery-only minimum with an exact shortfall, leaves pickup eligible below $99, and blocks the storefront's checkout handoff after the end-of-Friday Pacific cutoff until the next cycle (`src/lib/fulfillmentConfig.ts`, `src/lib/orderCutoff.ts`, `src/components/cart/CartDrawer.tsx`, `src/components/cart/DeliveryTimeSelect.tsx`). It remains fail-closed until `VITE_SHOPIFY_LOCAL_FULFILLMENT_READY=true` is set after matching Shopify Admin acceptance. A present malformed or empty deployment-window override also fails closed. The cart writes `Fulfillment Method` plus the matching `Preferred Dropoff Window` or `Preferred Pickup Window`, reads Shopify's returned attributes, and revalidates the Shopify-returned subtotal, cutoff, and fulfillment rules immediately before checkout (`src/stores/cartStore.ts`, `src/lib/fulfillmentRules.ts`). Checkout redirects must be HTTPS and match either this store's exact permanent MyShopify hostname or the exact configured Shopify-connected checkout hostname; credentials, ports, subdomains, and lookalikes are rejected. `channel=online_store` is added only after validation (`src/lib/shopify.ts`).
+
+The cutoff is **not** authoritative at Shopify order placement. A customer who opens a valid Shopify checkout before the deadline may still complete it afterward, and a direct Storefront API client can bypass browser-only timing logic. Until a Shopify-compatible scheduling/validation app or server-side checkout validation is installed, late orders require manual review. The native $99 local-delivery minimum can be authoritative after the matching Shopify Admin zone/rate is configured; the weekly cutoff cannot be guaranteed by this frontend alone.
 
 ### RESOLVED IN CODE — exact weekly selling plans, no silent fallback
 
@@ -84,7 +93,7 @@ The one-time Pick n' Choose builder's minimum metadata is revalidated from Shopi
 
 ### BLOCKER — OWNER/ADMIN — real payment cannot complete
 
-The Storefront cart and validated checkout URL work, but checkout states that the store is not set up to receive orders. Authenticated official-Chrome inspection confirmed **Pause and Build ($9/month)** and an incomplete Shopify Payments setup that still requires business/address/financial information. The store location has no address, the storefront remains password protected, local delivery and pickup are both off, and Shopify will not permit password removal until its address/plan prerequisites are met. Frontend code cannot activate the plan, supply identity or banking information, approve rates, or prove a real refund flow.
+The Storefront cart and validated checkout URL work, but checkout states that the store is not set up to receive orders. Authenticated official-Chrome inspection confirmed **Pause and Build ($9/month)** and an incomplete Shopify Payments setup that still requires business/address/financial information. The client chose Basic monthly and supplied the pickup address, but neither has been committed in Shopify. The store location still has no saved address, the storefront remains password protected, and local delivery/pickup are off. Frontend code cannot purchase the plan, supply identity or banking information, approve Shopify settings, or prove a real refund flow.
 
 ### RESOLVED IN ADMIN — customer fulfillment products require shipping
 
@@ -100,7 +109,7 @@ The verified live plans bill/deliver weekly; the Pick n' Choose component plans 
 
 Meals query `product_type:Meal`; individual juices query `product_type:Juice AND NOT product_type:"Juice Bundle"`; bundles query `product_type:"Juice Bundle"` (`src/pages/WeeklyMeals.tsx:10-16`, `src/pages/Juices.tsx:13-25`, `src/components/juices/JuiceBundleCards.tsx:66-86`). Home featured meals use the same current-week tag before selecting four (`src/components/home/FeaturedProducts.tsx:10-18`).
 
-The three-week cycle is currently anchored to 2026-03-16 and changes at Monday midnight in `America/New_York`, including dates before the anchor (`src/lib/weekRotation.ts`; `src/test/weekRotation.test.ts`). That anchor/timezone still requires client confirmation. The older Thursday 6 PM ET cutoff helper remains tested but is no longer imported by the customer-facing UI because Cory's messages contradict the published Thursday/Sunday schedule and never supply a replacement cutoff/timezone.
+The three-week cycle is currently anchored to 2026-03-16 and changes at Monday midnight in `America/New_York`, including dates before the anchor (`src/lib/weekRotation.ts`; `src/test/weekRotation.test.ts`). That separate menu-rotation anchor/timezone still requires client confirmation. The storefront checkout handoff is now customer-facing and closes at the confirmed end-of-Friday boundary in `America/Los_Angeles`; authoritative Shopify order-placement enforcement still needs the control described above (`src/lib/orderCutoff.ts`, `src/components/cart/CutoffBanner.tsx`, `src/components/cart/CartDrawer.tsx`).
 
 ### RESOLVED IN CODE — broken/missing catalog data has visible states
 
@@ -128,7 +137,7 @@ All primary asynchronous commerce surfaces now use accessible, layout-preserving
 
 ### RESOLVED IN CODE — build, types, tests, and lint
 
-The final integrated tree passes build, types, all 163 tests, and lint with zero errors. API boundaries and Shopify response types are explicit (`src/lib/shopify.ts`). Routes are lazy-loaded (`src/App.tsx:11-20`). Product-card actions are no longer interactive buttons nested inside links (`src/components/products/ProductCard.tsx:61-161`). No deleted-file or route scan found removed storefront functionality.
+The final integrated tree passes build, types, all 175 tests, and lint with zero errors. API boundaries and Shopify response types are explicit (`src/lib/shopify.ts`). Routes are lazy-loaded (`src/App.tsx:11-20`). Product-card actions are no longer interactive buttons nested inside links (`src/components/products/ProductCard.tsx:61-161`). No deleted-file or route scan found removed storefront functionality.
 
 ### NICE-TO-HAVE — Fast Refresh warnings and token cleanup
 
@@ -181,7 +190,7 @@ The supplied PDFs, their embedded menu artwork, and the live Shopify catalog con
 
 No structured bottle-count rule exists for Pick n' Choose, so code safely enforces the live $134.99 spend threshold and does not invent a count. Supply a min/max count if one is intended.
 
-Confirm the public email, phone, exact local service area, delivery fees/minimums, complete Monday/Tuesday delivery windows, weekly cutoff/timezone, pickup location/instructions/windows, ingredient/preservative claims, nutrition/health claims, and statements about Operation Helping Hands (`src/components/layout/Footer.tsx`, `src/pages/HowItWorks.tsx`, `src/pages/About.tsx`). Cory explicitly requested Monday and Tuesday delivery with a customer-selected window and separately requested pickup beginning Monday; only one example window (Monday 10 AM–12 PM) was supplied, so no complete schedule is inferred. The current storefront and the separate public business site expose different contact details.
+The local service area, fee, minimum, day choices, cutoff, pickup location/window, and no-shipping rule are now confirmed and implemented. Still confirm the public phone, ingredient/preservative claims, nutrition/health claims, statements about Operation Helping Hands, and any remaining identity details (`src/components/layout/Footer.tsx`, `src/pages/HowItWorks.tsx`, `src/pages/About.tsx`). The current storefront and the separate public business site expose different contact details.
 
 No dedicated privacy, terms, shipping, refund, cancellation, or subscription-policy routes exist in the current route table (`src/App.tsx:52-61`). These require owner-approved content; frontend code must not draft legal terms as facts.
 
@@ -193,7 +202,7 @@ Only the public Shopify Storefront token is client-side. `.env`, `.env.*`, and T
 
 ### RESOLVED IN CODE — dependency advisories and automated release checks
 
-The vulnerable transitive Nano ID release and the affected React Router 6 releases were upgraded without forced dependency resolution. `npm audit` and the production-only audit now report zero vulnerabilities; all 163 tests, typechecking, the production build, and lint still pass. `.github/workflows/ci.yml` repeats install, tests, typechecking, build, and lint on every pull request and push to `main`; the current release PR and its post-merge `main` run passed that gate.
+The vulnerable transitive Nano ID release and the affected React Router 6 releases were upgraded without forced dependency resolution. `npm audit` and the production-only audit report zero vulnerabilities; all 175 tests, typechecking, the production build, and lint pass on the fulfillment update. `.github/workflows/ci.yml` repeats install, tests, typechecking, build, and lint on every pull request and push to `main`.
 
 ### NEEDS OWNER ACTION — app ownership and access review
 
@@ -211,13 +220,13 @@ Run Lighthouse on the public home, juices/category, and product-detail pages aft
 
 # NEEDS OWNER ACTION
 
-1. **Activate commerce:** replace Pause and Build with an approved selling plan, add the business/location address, configure/verify the payment provider and financial account, then complete a real order, refund, and failure-path test.
+1. **Activate commerce:** purchase the client-selected Basic monthly plan after final owner confirmation, save the supplied location address, configure/verify the payment provider and financial account, then complete a real order, refund, and failure-path test.
 2. **Choose the subscription source of truth:** Shopify Subscriptions currently owns the cleaned plan records but is only 1/7 configured. Decide whether it or another backend owns future contracts and finish that setup; no existing contracts were found.
 3. **Complete meal-plan scheduling:** the storefront now requires separate Week 1, Week 2, and Week 3 selections and calculates each week's actual selected-item total against its $120 minimum; implement and prove the remaining A -> B -> C future-contract rotation without charging all three batches every week.
 4. **Finish the confirmed juice contract:** retain the $134.99 retail-before-discount minimum and exact 10% adjustment, add four-week prepaid and weekly-billed choices, enforce four successful cycles, and publish the confirmed cancellation/renewal behavior.
 5. **Resolve remaining catalog pricing conflicts:** the incompatible `$95` package is now preserved as an Active, unpublished internal record and removed from every menu plan. Reconcile the remaining meal artwork with the typed/live prices. The meal-plan billing rule itself is confirmed: actual selected total with a $120 weekly minimum.
 6. **Resolve remaining bundle-data issues:** preserve the confirmed fixed-bundle behavior (listed price repeated weekly with no extra 10%), fix the Intro Pack price/discount/content mismatch, supply Pick n' Choose count rules if intended, and confirm component/inventory behavior.
-7. **Configure fulfillment:** the 26 actual customer fulfillment products now require shipping. Supply the exact local ZIPs/cities/radius, delivery fees/minimums, complete Monday/Tuesday windows, cutoff/timezone, and pickup address/instructions/windows; configure matching local-only Shopify rates/zones; set the validated storefront window environment values; and enable only the approved local methods. Checkout deliberately remains fail-closed until approved windows exist.
+7. **Configure Shopify fulfillment:** the storefront-side rules are complete. In Shopify, save 26021 Acero, Mission Viejo, CA 92691 as the location, add the prepared Orange County standard-ZIP zone with a $99 minimum and $15 price, enable free pickup with Monday-after-9 instructions, and delete every standard shipping rate while retaining the underlying zones needed for pickup. Native ZIP eligibility is an approximation at county edges; manually review 90631 or add an address-validation/delivery app for exact county-only enforcement.
 8. **Approve catalog facts:** product types, week tags, publication, inventory, nutrition/heating, health/ingredient/preservative claims, and the rotating package product's role.
 9. **Supply policies:** privacy, terms, shipping, refund, subscription cancellation/renewal, and any required dietary/allergen disclosures.
 10. **Confirm identity:** contact details, Instagram, Operation Helping Hands statements, social image, analytics/consent, and sender addresses.

@@ -32,6 +32,7 @@ import {
 import {
   type FulfillmentMethod,
 } from '@/lib/orderCutoff';
+import { validateFulfillmentForCheckout } from '@/lib/fulfillmentRules';
 import {
   DROPOFF_WINDOWS,
   PICKUP_WINDOWS,
@@ -632,6 +633,7 @@ export const useCartStore = create<CartStore>()(
               `Select a ${fulfillmentMethod === 'pickup' ? 'pickup' : 'delivery'} window before checkout.`,
             );
           }
+          validateFulfillmentForCheckout(get().subtotal, fulfillmentMethod);
           set({ isLoading: true, fulfillmentAttributesConfirmed: false, error: null });
           try {
             const attributes = buildFulfillmentAttributes(fulfillmentMethod, deliveryWindow);
@@ -644,6 +646,9 @@ export const useCartStore = create<CartStore>()(
               'Preparing checkout',
             );
             const { cart } = result;
+            // Shopify is authoritative for cart contents even when the refreshed
+            // cart cannot proceed to checkout.
+            set(stateFromCart(cart, result.warnings));
             if (cart.totalQuantity === 0) throw new Error('Your cart is empty.');
             if (!fulfillmentAttributesMatch(cart.attributes, fulfillmentMethod, deliveryWindow)) {
               throw new StorefrontApiError(
@@ -654,8 +659,8 @@ export const useCartStore = create<CartStore>()(
             const cartItems = toCartItems(cart);
             validateCartMinimums(cartItems);
             validateCartBundleDependencies(cartItems);
+            validateFulfillmentForCheckout(cart.cost.subtotalAmount, fulfillmentMethod);
             const checkoutUrl = formatCheckoutUrl(cart.checkoutUrl);
-            set(stateFromCart(cart, result.warnings));
             return checkoutUrl;
           } catch (error) {
             set({

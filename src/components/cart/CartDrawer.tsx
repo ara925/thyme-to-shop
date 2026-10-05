@@ -21,7 +21,15 @@ import {
   SheetTrigger,
 } from '@/components/ui/sheet';
 import { formatPrice, getStorefrontErrorMessage } from '@/lib/shopify';
-import { PICKUP_ENABLED } from '@/lib/fulfillmentConfig';
+import {
+  LOCAL_FULFILLMENT_READY,
+  PICKUP_ENABLED,
+} from '@/lib/fulfillmentConfig';
+import { useOrderCutoffStatus } from '@/hooks/useOrderCutoffStatus';
+import {
+  getDeliveryMinimumStatus,
+  validateFulfillmentForCheckout,
+} from '@/lib/fulfillmentRules';
 import { useCartStore } from '@/stores/cartStore';
 import { CutoffBanner } from './CutoffBanner';
 import { DeliveryTimeSelect } from './DeliveryTimeSelect';
@@ -49,6 +57,9 @@ export function CartDrawer() {
     clearWarnings,
   } = useCartStore();
   const totalItems = getTotalItems();
+  const deliveryMinimum = getDeliveryMinimumStatus(subtotal, fulfillmentMethod);
+  const { isCurrentCycleCutoffPassed } = useOrderCutoffStatus();
+  const orderCutoffOpen = LOCAL_FULFILLMENT_READY && !isCurrentCycleCutoffPassed;
 
   useEffect(() => {
     if (isOpen) void syncCart();
@@ -64,6 +75,7 @@ export function CartDrawer() {
 
   const handleCheckout = async () => {
     try {
+      validateFulfillmentForCheckout(subtotal, fulfillmentMethod);
       const checkoutUrl = await prepareCheckout();
       setIsOpen(false);
       window.location.assign(checkoutUrl);
@@ -273,6 +285,13 @@ export function CartDrawer() {
                     {subtotal ? formatPrice(subtotal.amount, subtotal.currencyCode) : '—'}
                   </span>
                 </div>
+                {LOCAL_FULFILLMENT_READY
+                  && !deliveryMinimum.isMet
+                  && fulfillmentMethod === 'delivery' && (
+                  <p className="text-sm text-destructive" role="alert">
+                    {deliveryMinimum.message}
+                  </p>
+                )}
                 <Button
                   onClick={handleCheckout}
                   className="w-full bg-primary hover:bg-primary/90"
@@ -281,6 +300,8 @@ export function CartDrawer() {
                     items.length === 0 ||
                     !deliveryWindow ||
                     !fulfillmentAttributesConfirmed ||
+                    !deliveryMinimum.isMet ||
+                    !orderCutoffOpen ||
                     (!PICKUP_ENABLED && fulfillmentMethod === 'pickup') ||
                     isLoading ||
                     isSyncing
