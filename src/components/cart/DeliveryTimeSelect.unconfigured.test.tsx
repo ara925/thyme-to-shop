@@ -25,9 +25,9 @@ describe('DeliveryTimeSelect without approved windows', () => {
     );
 
     expect(screen.getByRole('alert')).toHaveTextContent(
-      /shopify delivery and pickup setup must be completed/i,
+      /checkout stays disabled while launch testing is in progress/i,
     );
-    expect(screen.getByText(/local fulfillment setup is in progress/i)).toBeInTheDocument();
+    expect(screen.getByText(/online ordering is in test mode/i)).toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 });

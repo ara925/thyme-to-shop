@@ -110,8 +110,8 @@ export function DeliveryTimeSelect({
           </p>
         ) : (
           <p>
-            <span className="font-semibold">Local fulfillment setup is in progress.</span>{' '}
-            Delivery and pickup checkout remain unavailable until the matching Shopify setup is complete.
+            <span className="font-semibold">Online ordering is in test mode.</span>{' '}
+            Delivery and pickup checkout remain unavailable until launch activation is complete.
           </p>
         )}
       </div>
@@ -164,7 +164,7 @@ export function DeliveryTimeSelect({
             <p className="mt-1">
               {LOCAL_FULFILLMENT_READY
                 ? 'Place in Thyme still needs to publish its approved Monday and Tuesday choices before online checkout can open.'
-                : 'Shopify delivery and pickup setup must be completed before online checkout can open.'}
+                : 'Checkout stays disabled while launch testing is in progress.'}
             </p>
             {DROPOFF_CONFIGURATION_ERROR && (
               <span className="sr-only">{DROPOFF_CONFIGURATION_ERROR}</span>
