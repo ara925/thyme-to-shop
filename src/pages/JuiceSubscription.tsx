@@ -264,7 +264,7 @@ const JuiceSubscription = () => {
         : []),
       `Live weekly minimum: ${formatCents(minimumCents, minimumMoney.currencyCode)}`,
       '',
-      'Confirmed subscription terms: 10% off the selected retail total and a minimum four-week commitment.',
+      'Confirmed subscription terms: 10% off the selected retail total and a minimum four-week commitment. Cancellation is available after each four-week period.',
       `Billing preference: ${BILLING_PREFERENCE_COPY[billingPreference]}.`,
       '',
       'Live Shopify configuration check:',
@@ -347,6 +347,7 @@ const JuiceSubscription = () => {
               <div className="space-y-2">
                 <p>
                   The confirmed subscription is 10% off with a four-week minimum commitment. Choose weekly billing or four-week prepayment below for manual enrollment.
+                  {' '}Cancellation is available after each four-week period.
                 </p>
                 <p>
                   {sellingPlansLoading

@@ -79,7 +79,7 @@ function JuiceBundleLoadingState() {
   );
 }
 
-export const JuiceBundleCards = () => {
+export const JuiceBundleCards = ({ productHandle }: { productHandle?: string } = {}) => {
   const {
     data: bundleProducts = [],
     isLoading: productsLoading,
@@ -212,12 +212,12 @@ export const JuiceBundleCards = () => {
   return (
     <section
       id="juice-bundles"
-      className="scroll-mt-24 bg-gradient-to-b from-background to-muted/30 py-12 md:py-20"
+      className={productHandle ? 'mt-6' : 'scroll-mt-24 bg-gradient-to-b from-background to-muted/30 py-12 md:py-20'}
       aria-busy={productsLoading || plansLoading}
     >
-      <div className="container">
+      <div className={productHandle ? '' : 'container'}>
         <div className="mx-auto max-w-6xl">
-          <div className="mb-8 overflow-hidden rounded-3xl border border-primary/20 bg-primary text-primary-foreground shadow-lg">
+          {!productHandle && <div className="mb-8 overflow-hidden rounded-3xl border border-primary/20 bg-primary text-primary-foreground shadow-lg">
             <div className="grid items-center gap-6 p-6 md:grid-cols-[1fr_auto] md:p-9">
               <div>
                 <Badge className="mb-4 border-white/20 bg-white/10 text-white">
@@ -273,9 +273,9 @@ export const JuiceBundleCards = () => {
                 </Button>
               )}
             </div>
-          </div>
+          </div>}
 
-          <div className="mb-10 text-center">
+          {!productHandle && <div className="mb-10 text-center">
             <Badge className="mb-4 border-primary/20 bg-primary/10 text-primary">
               <PackageOpen className="mr-1 h-3 w-3" aria-hidden="true" />
               Ready-made bundles
@@ -293,7 +293,7 @@ export const JuiceBundleCards = () => {
                   ? `Optional one-time add-on: ${HIBISCUS_ADD_ON_TITLE} for ${formatPrice(hibiscusPrice.amount, hibiscusPrice.currencyCode)} each. Choose a quantity on the bundle you want.`
                   : 'The optional Hibiscus Tea add-on is currently unavailable.'}
             </p>
-          </div>
+          </div>}
 
           {productsLoading ? (
             <JuiceBundleLoadingState />
@@ -320,8 +320,8 @@ export const JuiceBundleCards = () => {
               No ready-made bundles are available right now.
             </p>
           ) : (
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              {fixedBundles.map((product) => {
+            <div className={productHandle ? '' : 'grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3'}>
+              {fixedBundles.filter(product => !productHandle || product.node.handle === productHandle).map((product) => {
                 const image = product.node.images.edges[0]?.node;
                 const variant = getPurchasableVariant(product);
                 const displayPrice = variant?.price || product.node.priceRange.minVariantPrice;
@@ -339,7 +339,7 @@ export const JuiceBundleCards = () => {
                     key={product.node.id}
                     className="group flex h-full flex-col overflow-hidden border-border/70 bg-card shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
                   >
-                    <div className="relative aspect-[4/3] overflow-hidden bg-muted">
+                    {!productHandle && <div className="relative aspect-[4/3] overflow-hidden bg-muted">
                       {image ? (
                         <img
                           src={getShopifyImageUrl(image.url, 720)}
@@ -360,13 +360,16 @@ export const JuiceBundleCards = () => {
                           Sold out
                         </Badge>
                       )}
-                    </div>
+                    </div>}
 
                     <CardContent className="flex flex-1 flex-col p-6">
-                      <h3 className="text-xl font-bold text-foreground">{product.node.title}</h3>
-                      <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
+                      {!productHandle && <h3 className="text-xl font-bold text-foreground">{product.node.title}</h3>}
+                      {!productHandle && <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">
                         {product.node.description || 'Description unavailable from Shopify.'}
-                      </p>
+                      </p>}
+                      {(product.node.handle === 'juice-bundle-2' || product.node.handle === 'juice-bundle-3') && (
+                        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">Photo shows the juice range. Only the quantities listed in the contents are included; Hibiscus Tea is an optional $3 one-time add-on.</p>
+                      )}
 
                       <div className="mt-5 flex flex-col items-start gap-4 sm:flex-row sm:items-end sm:justify-between">
                         <div>
@@ -443,11 +446,11 @@ export const JuiceBundleCards = () => {
                       )}
 
                       <div className="mt-4 grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
-                        <Button asChild variant="outline" className="min-h-11 rounded-full">
+                        {!productHandle && <Button asChild variant="outline" className="min-h-11 rounded-full">
                           <Link to={`/product/${encodeURIComponent(product.node.handle)}`}>
                             Details
                           </Link>
-                        </Button>
+                        </Button>}
                         <Button
                           type="button"
                           onClick={() => handleAddBundle(product, undefined, hibiscusQuantity)}

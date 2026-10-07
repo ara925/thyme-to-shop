@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { NutritionLabel } from '@/components/products/NutritionLabel';
 import { HeatingInstructions } from '@/components/products/HeatingInstructions';
 import { getHiddenStorefrontProductRedirect } from '@/lib/productVisibility';
+import { JuiceBundleCards } from '@/components/juices/JuiceBundleCards';
 
 function setPageMeta(
   selector: string,
@@ -221,6 +222,8 @@ const ProductDetail = () => {
     ? '/juices'
     : '/weekly-meals';
   const catalogLabel = catalogPath === '/juices' ? 'Back to Juices' : 'Back to Menu';
+  const isFixedBundle = node.productType === 'Juice Bundle' && node.handle !== 'pick-n-choose-bundle';
+  const customerTags = (node.tags || []).filter(tag => !/^week-[abc]$/i.test(tag));
 
   if (node.handle === 'pick-n-choose-bundle') {
     return <Navigate to="/juices/pick-and-choose" replace />;
@@ -301,6 +304,9 @@ const ProductDetail = () => {
             <p className="mt-6 leading-relaxed text-muted-foreground">
               {node.description || 'Description unavailable from Shopify.'}
             </p>
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+              Questions about allergens, ingredients or storage? <a href="mailto:info@placeinthyme.com" className="text-primary underline underline-offset-4">Ask Place in Thyme before ordering</a>.
+            </p>
 
             {isComponentOnly && (
               <div
@@ -333,6 +339,7 @@ const ProductDetail = () => {
             )}
 
             {/* Quantity */}
+            {isFixedBundle ? <JuiceBundleCards productHandle={node.handle} /> : <>
             <div className="mt-6" role="group" aria-labelledby="product-quantity-label">
               <p id="product-quantity-label" className="text-sm font-medium text-foreground">Quantity</p>
               <div className="mt-2 flex items-center gap-3">
@@ -388,11 +395,12 @@ const ProductDetail = () => {
                 </>
               )}
             </Button>
+            </>}
 
             {/* Tags */}
-            {node.tags && node.tags.length > 0 && (
+            {customerTags.length > 0 && (
               <div className="mt-8 flex flex-wrap gap-2">
-                {node.tags.map((tag) => (
+                {customerTags.map((tag) => (
                   <Badge key={tag} variant="outline" className="text-xs">
                     {tag}
                   </Badge>

@@ -167,6 +167,20 @@ describe('JuiceBundleCards', () => {
     });
   });
 
+  it('offers the same weekly and one-time choices with optional tea on a detail page', async () => {
+    render(<MemoryRouter><JuiceBundleCards productHandle="intro" /></MemoryRouter>);
+    expect(screen.queryByRole('heading', { name: 'Grab a bundle and go' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Details' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /subscribe weekly/i })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Add one Hibiscus Tea add-on to Intro Pack Bundle' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Subscribe weekly to Intro Pack Bundle' }));
+    await waitFor(() => expect(mocks.addItems).toHaveBeenCalledOnce());
+    const items = mocks.addItems.mock.calls[0][0];
+    expect(items[0].sellingPlanId).toBe('intro-weekly');
+    expect(items[1].sellingPlanId).toBeUndefined();
+    expect(items[1].quantity).toBe(1);
+  });
+
   it('keeps live bundle content and offers distinct one-time, details, and weekly actions', () => {
     renderCards();
 

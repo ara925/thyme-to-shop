@@ -81,6 +81,7 @@ describe('parseMoneyAmountToCents', () => {
 
 describe('MealSubscription', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.clearAllMocks();
     mocks.useProducts.mockReturnValue({
       data: [createProduct()],
@@ -92,6 +93,22 @@ describe('MealSubscription', () => {
       isLoading: false,
       isError: false,
     });
+  });
+
+  it('restores all three weeks after remount and uses singular item labels', () => {
+    const view = render(<MealSubscription />);
+    addOneMealToWeek(1);
+    addOneMealToWeek(2);
+    addOneMealToWeek(3);
+    view.unmount();
+    render(<MealSubscription />);
+    const summary = screen.getByRole('region', { name: /three-week rotation summary/i });
+    expect(within(summary).getAllByText('$120.00')).toHaveLength(3);
+    expect(within(summary).getAllByText('(1 item)')).toHaveLength(3);
+    expect(within(summary).getByRole('link', { name: /send plan for manual setup/i })).toBeInTheDocument();
+    const descriptions = document.querySelectorAll('details');
+    expect(descriptions[0].querySelector('summary')).toHaveTextContent('Ingredients & meal details');
+    expect(descriptions[0].querySelector('p')).toHaveTextContent('A live meal product.');
   });
 
   it('collects all three independent weeks and produces a complete manual-enrollment handoff', () => {

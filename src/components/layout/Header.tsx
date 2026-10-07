@@ -24,6 +24,7 @@ export function Header() {
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
+    handleScroll();
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -46,7 +47,7 @@ export function Header() {
         "sticky top-0 z-50 w-full transition-all duration-300",
         scrolled
           ? "bg-background/95 backdrop-blur-lg shadow-md border-b border-border/50"
-          : "bg-transparent"
+          : "bg-background border-b border-border/50"
       )}
     >
       <div className="container flex h-18 items-center justify-between md:h-20">
