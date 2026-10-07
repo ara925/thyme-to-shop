@@ -154,6 +154,7 @@ function choosePrepaidBilling(): void {
 
 describe('JuiceSubscription', () => {
   beforeEach(() => {
+    localStorage.clear();
     vi.clearAllMocks();
     mockProductQueries();
     mocks.useSellingPlans.mockReturnValue({
@@ -445,5 +446,40 @@ describe('JuiceSubscription', () => {
 
     expect(screen.getAllByText(/loading live juice options/i)).toHaveLength(1);
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
+  });
+
+  it('restores the mix, one-time tea and prepaid billing after remount', () => {
+    const hibiscus = createProduct({ id: 'hibiscus', title: 'Hibiscus Tea (Sweetened)', amount: '3.00' });
+    mockProductQueries([createProduct(), hibiscus]);
+    mocks.useSellingPlans.mockReturnValue({ data: { 'green-cleanse': weeklyPlanWithTenPercent }, isLoading: false, isError: false });
+    const view = render(<JuiceSubscription />);
+    fireEvent.click(getPlusButton());
+    fireEvent.click(screen.getByRole('button', { name: /add one one-time hibiscus tea add-on/i }));
+    choosePrepaidBilling();
+    view.unmount();
+    const restored = render(<JuiceSubscription />);
+    expect(screen.getByRole('radio', { name: /prepay all four weeks/i })).toBeChecked();
+    const body = decodeURIComponent((screen.getByRole('link', { name: /request this 4-week subscription/i }).getAttribute('href') || '').split('&body=')[1]);
+    expect(body).toContain('1 x Green Cleanse 12oz = $134.99');
+    expect(body).toContain('Optional one-time add-on: 1 x Hibiscus Tea (Sweetened) = $3.00');
+    expect(body).toContain('Estimated four-week prepaid total: $485.96');
+    fireEvent.click(screen.getByRole('button', { name: 'Reset juice draft' }));
+    restored.unmount();
+    render(<JuiceSubscription />);
+    expect(screen.queryByRole('button', { name: 'Reset juice draft' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /prepay all four weeks/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /request this 4-week subscription/i })).not.toBeInTheDocument();
+  });
+
+  it('does not silently omit a deleted product from a restored request', () => {
+    localStorage.setItem('place-in-thyme-juice-mix-v1', JSON.stringify({ savedAt: Date.now(), value: { 'green-cleanse': 1, 'removed-juice': 2 } }));
+    localStorage.setItem('place-in-thyme-juice-billing-v1', JSON.stringify({ savedAt: Date.now(), value: 'weekly' }));
+    render(<JuiceSubscription />);
+    expect(screen.getByRole('button', { name: /request this 4-week subscription/i })).toBeDisabled();
+    expect(screen.getByText(/some saved juice choices are no longer/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove unavailable choices' }));
+    const body = decodeURIComponent((screen.getByRole('link', { name: /request this 4-week subscription/i }).getAttribute('href') || '').split('&body=')[1]);
+    expect(body).toContain('1 x Green Cleanse 12oz = $134.99');
+    expect(body).not.toContain('removed-juice');
   });
 });
