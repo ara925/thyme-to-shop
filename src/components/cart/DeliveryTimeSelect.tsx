@@ -62,6 +62,14 @@ export function DeliveryTimeSelect({
     }
   };
 
+  if (!LOCAL_FULFILLMENT_READY) {
+    return <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-sm" role="alert">
+      <p className="font-semibold">Online ordering is in test mode.</p>
+      <p className="mt-1 text-muted-foreground">Checkout stays disabled while launch testing is in progress.</p>
+      {DROPOFF_CONFIGURATION_ERROR && <span className="sr-only">{DROPOFF_CONFIGURATION_ERROR}</span>}
+    </div>;
+  }
+
   return (
     <div className="space-y-3">
       {PICKUP_ENABLED && (

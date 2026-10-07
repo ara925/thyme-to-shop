@@ -33,6 +33,7 @@ const staticRoutes = [
   '/subscribe/juices',
   '/about',
   '/how-it-works',
+  '/policies',
 ];
 const excludedProductHandles = new Set([
   // These products are routed to an approved category or planner instead of

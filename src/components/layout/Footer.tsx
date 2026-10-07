@@ -53,11 +53,17 @@ export function Footer() {
           <div className="md:col-span-3">
             <h3 className="font-serif text-lg font-bold text-white mb-4">Menu</h3>
             <ul className="space-y-3">
+              <li>
+                <a href="https://placeinthyme.com/" className="inline-flex min-h-11 items-center text-sm text-white/60 transition-colors hover:text-white">
+                  Main Website &amp; Catering
+                </a>
+              </li>
               {[
                 { to: '/weekly-meals', label: 'Weekly Meals' },
                 { to: '/juices', label: 'Juices & Shots' },
                 { to: '/how-it-works', label: 'How It Works' },
                 { to: '/about', label: 'About Us' },
+                { to: '/policies', label: 'Store Information & Policies' },
               ].map(link => (
                 <li key={link.to}>
                   <Link

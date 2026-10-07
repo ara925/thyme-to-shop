@@ -186,6 +186,16 @@ export function validateCartMinimums(items: CartItem[]): void {
   }
 }
 
+export function getCartValidationMessage(items: CartItem[]): string | null {
+  try {
+    validateCartMinimums(items);
+    validateCartBundleDependencies(items);
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : 'Please review your bundle before checkout.';
+  }
+}
+
 interface CartBundleDependencyGroup {
   hasPrimary: boolean;
   hasAddOn: boolean;

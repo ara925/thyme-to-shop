@@ -12,6 +12,7 @@ import { parseMoneyAmountToCents } from '@/lib/mealRotation';
 import { parseMealMinimumCents } from '@/lib/subscriptionMinimum';
 import { SubscriptionProductSkeletons } from '@/components/subscriptions/SubscriptionProductSkeletons';
 import { isCustomerFacingProduct } from '@/lib/productVisibility';
+import { isQuantityMap, usePersistentDraft } from '@/hooks/usePersistentDraft';
 
 const MEAL_PRODUCT_QUERY = 'product_type:Meal';
 const MEAL_SELLING_PLAN_GROUP = 'Weekly Meal Subscription - $120 Minimum';
@@ -28,6 +29,10 @@ const WEEKS = [
 
 type WeekId = typeof WEEKS[number]['id'];
 type WeekSelections = Record<WeekId, Record<string, number>>;
+function isWeekSelections(value: unknown): value is WeekSelections {
+  return Boolean(value && typeof value === 'object'
+    && WEEKS.every(week => isQuantityMap((value as WeekSelections)[week.id])));
+}
 
 const formatCents = (cents: number, currencyCode = 'USD') => (
   formatPrice((cents / 100).toFixed(2), currencyCode)
@@ -45,11 +50,11 @@ const MealSubscription = () => {
     isError: sellingPlansError,
   } = useSellingPlans(MEAL_PRODUCT_QUERY, MEAL_SELLING_PLAN_GROUP);
   const [activeTab, setActiveTab] = useState<WeekId>('week-a');
-  const [selections, setSelections] = useState<WeekSelections>({
+  const [selections, setSelections, storageUnavailable] = usePersistentDraft<WeekSelections>('place-in-thyme-meal-draft-v1', {
     'week-a': {},
     'week-b': {},
     'week-c': {},
-  });
+  }, isWeekSelections);
 
   const productsByWeek = useMemo(() => {
     const grouped: Record<WeekId, ShopifyProduct[]> = {
@@ -212,6 +217,9 @@ const MealSubscription = () => {
             <p className="text-muted-foreground mb-4">
               Fill every menu tab. Your choices stay in place while you move between weeks, and each week must meet the {MEAL_MINIMUM_DISPLAY || 'live'} minimum.
             </p>
+            <p className="mb-4 text-sm text-muted-foreground" aria-live={storageUnavailable ? 'polite' : undefined}>
+              {storageUnavailable ? 'Your browser cannot save this draft. Keep this page open until you send your plan.' : 'Your meal selections are saved on this device for 30 days. Prices and availability are checked again when you return.'}
+            </p>
 
             <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-foreground" role="note">
               <p className="font-semibold">Confirmed plan terms</p>
@@ -250,7 +258,7 @@ const MealSubscription = () => {
                     >
                       <span className="font-semibold">{week.label}</span>
                       <span className={`text-xs ${meetsMinimum ? 'text-primary' : 'text-muted-foreground'}`}>
-                        {formatCents(totalCents)}
+                        {productsLoading ? 'Checking…' : formatCents(totalCents)}
                       </span>
                       {meetsMinimum && <Check className="absolute top-1 right-1 h-3.5 w-3.5 text-primary" />}
                     </TabsTrigger>
@@ -336,8 +344,11 @@ const MealSubscription = () => {
                                   )}
                                 </div>
                                 <div className="min-w-[9rem] flex-1">
-                                  <h3 className="font-serif font-bold text-foreground truncate">{product.node.title}</h3>
-                                  <p className="text-sm text-muted-foreground line-clamp-1">{product.node.description}</p>
+                                  <h3 className="font-serif font-bold text-foreground">{product.node.title}</h3>
+                                  <details className="mt-1 text-sm text-muted-foreground">
+                                    <summary className="min-h-11 cursor-pointer py-3 font-medium text-primary">Ingredients &amp; meal details</summary>
+                                    <p className="whitespace-pre-line leading-relaxed">{product.node.description || 'Please contact us for ingredient details.'}</p>
+                                  </details>
                                   {!variant?.availableForSale && <p className="text-xs font-medium text-destructive">Sold out</p>}
                                 </div>
                                 <div className="text-right flex-shrink-0">
@@ -409,17 +420,17 @@ const MealSubscription = () => {
                             ? <Check className="h-4 w-4 text-primary" aria-hidden="true" />
                             : <AlertCircle className="h-4 w-4 text-destructive" aria-hidden="true" />}
                           <span className="font-medium">{week.label}</span>
-                          <span className="text-sm text-muted-foreground">({itemCount} items)</span>
+                          <span className="text-sm text-muted-foreground">({itemCount} {itemCount === 1 ? 'item' : 'items'})</span>
                         </div>
                         <span className={`font-bold ${meetsMinimum ? 'text-primary' : 'text-destructive'}`}>
-                          {formatCents(totalCents)}
+                          {productsLoading ? 'Checking…' : formatCents(totalCents)}
                         </span>
                       </div>
                       {chosenItems.length > 0 ? (
                         <ul className="mt-3 space-y-1 pl-6 text-sm text-muted-foreground">
                           {chosenItems.map(([productId, quantity]) => {
                             const product = productsByWeek[week.id].find(item => item.node.id === productId);
-                            return <li key={productId}>{quantity} × {product?.node.title || 'Unavailable meal'}</li>;
+                            return <li key={productId}>{quantity} × {product?.node.title || (productsLoading ? 'Loading meal…' : 'Unavailable meal')}</li>;
                           })}
                         </ul>
                       ) : (
@@ -430,7 +441,7 @@ const MealSubscription = () => {
                 })}
               </div>
 
-              {!allWeeksMeetMinimum && MEAL_MINIMUM_DISPLAY && (
+              {!productsLoading && !allWeeksMeetMinimum && MEAL_MINIMUM_DISPLAY && (
                 <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                   <p className="text-sm text-destructive flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -439,7 +450,7 @@ const MealSubscription = () => {
                 </div>
               )}
 
-              {anySelections && !selectedItemsAreAvailable && (
+              {!productsLoading && !productsError && anySelections && !selectedItemsAreAvailable && (
                 <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                   <p className="text-sm text-destructive flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />

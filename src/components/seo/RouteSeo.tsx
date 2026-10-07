@@ -39,6 +39,10 @@ const ROUTE_METADATA: Record<string, RouteMetadata> = {
     title: 'About | Place in Thyme',
     description: 'Learn about Place in Thyme and its approach to convenient chef-prepared meals and fresh juices.',
   },
+  '/policies': {
+    title: 'Store Information & Policies | Place in Thyme',
+    description: 'Local delivery, pickup, plan terms, and published Place in Thyme store policies.',
+  },
   '/how-it-works': {
     title: 'How It Works | Place in Thyme',
     description: 'See how to choose products, select fulfillment, and check out with Place in Thyme.',

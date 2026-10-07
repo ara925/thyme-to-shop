@@ -18,6 +18,7 @@ const ProductDetail = lazy(() => import("./pages/ProductDetail"));
 const About = lazy(() => import("./pages/About"));
 const HowItWorks = lazy(() => import("./pages/HowItWorks"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const Policies = lazy(() => import("./pages/Policies"));
 
 const queryClient = new QueryClient();
 
@@ -59,6 +60,7 @@ function AppContent() {
           <Route path="/product/:handle" element={<ProductDetail />} />
           <Route path="/about" element={<About />} />
           <Route path="/how-it-works" element={<HowItWorks />} />
+          <Route path="/policies" element={<Policies />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>

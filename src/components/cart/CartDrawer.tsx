@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowRight,
@@ -30,8 +31,7 @@ import {
   getDeliveryMinimumStatus,
   validateFulfillmentForCheckout,
 } from '@/lib/fulfillmentRules';
-import { useCartStore } from '@/stores/cartStore';
-import { CutoffBanner } from './CutoffBanner';
+import { getCartValidationMessage, useCartStore } from '@/stores/cartStore';
 import { DeliveryTimeSelect } from './DeliveryTimeSelect';
 
 export function CartDrawer() {
@@ -57,6 +57,7 @@ export function CartDrawer() {
     clearWarnings,
   } = useCartStore();
   const totalItems = getTotalItems();
+  const cartValidationMessage = getCartValidationMessage(items);
   const deliveryMinimum = getDeliveryMinimumStatus(subtotal, fulfillmentMethod);
   const { isCurrentCycleCutoffPassed } = useOrderCutoffStatus();
   const orderCutoffOpen = LOCAL_FULFILLMENT_READY && !isCurrentCycleCutoffPassed;
@@ -101,7 +102,7 @@ export function CartDrawer() {
           )}
         </Button>
       </SheetTrigger>
-      <SheetContent className="flex h-full w-full flex-col sm:max-w-lg">
+      <SheetContent className="flex h-[100dvh] w-full flex-col gap-0 p-4 sm:max-w-lg sm:p-6">
         <SheetHeader className="flex-shrink-0">
           <SheetTitle className="font-serif">Shopping Cart</SheetTitle>
           <SheetDescription>
@@ -109,12 +110,9 @@ export function CartDrawer() {
               ? 'Your cart is empty'
               : `${totalItems} item${totalItems === 1 ? '' : 's'} in your cart`}
           </SheetDescription>
-          {totalItems > 0 && (
-            <div className="pt-1">
-              <CutoffBanner />
-            </div>
-          )}
         </SheetHeader>
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-4 pr-1">
 
         {error && (
           <div
@@ -161,7 +159,7 @@ export function CartDrawer() {
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1 flex-col pt-6">
+        <div className="flex flex-col pt-2">
           {items.length === 0 ? (
             <div className="flex flex-1 items-center justify-center">
               <div className="text-center">
@@ -177,7 +175,7 @@ export function CartDrawer() {
             </div>
           ) : (
             <>
-              <div className="min-h-0 flex-1 overflow-y-auto pr-2">
+              <div aria-label="Cart items">
                 <div className="space-y-4">
                   {items.map((item) => {
                     const image = item.product.node.images.edges[0]?.node;
@@ -188,8 +186,8 @@ export function CartDrawer() {
                       (attribute) => attribute.key === 'Menu Week',
                     )?.value;
                     return (
-                      <div key={item.lineId} className="flex gap-3 rounded-lg bg-secondary/30 p-3">
-                        <div className="h-16 w-16 flex-shrink-0 overflow-hidden rounded-md bg-muted">
+                      <div key={item.lineId} className="grid grid-cols-[3rem_minmax(0,1fr)] gap-3 rounded-lg bg-secondary/30 p-3">
+                        <div className="h-12 w-12 overflow-hidden rounded-md bg-muted">
                           {image && (
                             <img
                               src={image.url}
@@ -203,12 +201,14 @@ export function CartDrawer() {
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <h3 className="truncate text-sm font-medium">{item.product.node.title}</h3>
+                          <h3 className="break-words text-sm font-medium leading-snug">
+                            <Link to={`/product/${item.product.node.handle}`} onClick={() => setIsOpen(false)} className="underline-offset-4 hover:underline">{item.product.node.title}</Link>
+                          </h3>
                           {item.variantTitle !== 'Default Title' && (
                             <p className="text-xs text-muted-foreground">{item.variantTitle}</p>
                           )}
                           {item.sellingPlanId && (
-                            <p className="text-xs text-muted-foreground">Subscription</p>
+                            <p className="mt-1 text-xs text-muted-foreground">Weekly subscription · billed and delivered every week</p>
                           )}
                           {(bundleLabel || menuWeek) && (
                             <p className="text-xs text-muted-foreground">
@@ -217,9 +217,10 @@ export function CartDrawer() {
                           )}
                           <p className="mt-1 font-semibold text-primary">
                             {formatPrice(item.lineSubtotal.amount, item.lineSubtotal.currencyCode)}
+                            {item.sellingPlanId && <span className="text-xs font-normal"> / week</span>}
                           </p>
                         </div>
-                        <div className="flex flex-shrink-0 flex-col items-end gap-2">
+                        <div className="col-span-2 flex items-center justify-between gap-2">
                           <Button
                             variant="ghost"
                             size="icon"
@@ -271,7 +272,7 @@ export function CartDrawer() {
                 </div>
               </div>
 
-              <div className="flex-shrink-0 space-y-4 border-t border-border bg-background pt-4">
+              <div className="mt-4 space-y-4 border-t border-border bg-background pt-4 pb-2">
                 <DeliveryTimeSelect
                   fulfillmentMethod={fulfillmentMethod}
                   value={deliveryWindow}
@@ -285,6 +286,7 @@ export function CartDrawer() {
                     {subtotal ? formatPrice(subtotal.amount, subtotal.currencyCode) : '—'}
                   </span>
                 </div>
+                {cartValidationMessage && <p className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive" role="alert">{cartValidationMessage}</p>}
                 {LOCAL_FULFILLMENT_READY
                   && !deliveryMinimum.isMet
                   && fulfillmentMethod === 'delivery' && (
@@ -298,6 +300,7 @@ export function CartDrawer() {
                   size="lg"
                   disabled={
                     items.length === 0 ||
+                    Boolean(cartValidationMessage) ||
                     !deliveryWindow ||
                     !fulfillmentAttributesConfirmed ||
                     !deliveryMinimum.isMet ||
@@ -319,6 +322,7 @@ export function CartDrawer() {
               </div>
             </>
           )}
+        </div>
         </div>
       </SheetContent>
     </Sheet>
