@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { Layout } from '@/components/layout/Layout';
 import { SubscriptionProductSkeletons } from '@/components/subscriptions/SubscriptionProductSkeletons';
 import { Badge } from '@/components/ui/badge';
@@ -18,6 +18,7 @@ import {
 } from '@/lib/hibiscusAddOn';
 import { type SellingPlan, type ShopifyProduct, formatPrice } from '@/lib/shopify';
 import { parsePositiveMoneyCents } from '@/lib/subscriptionMinimum';
+import { isQuantityMap, usePersistentDraft } from '@/hooks/usePersistentDraft';
 import {
   AlertCircle,
   Check,
@@ -78,9 +79,17 @@ const JuiceSubscription = () => {
     isLoading: sellingPlansLoading,
     isError: sellingPlansError,
   } = useSellingPlans(JUICE_PRODUCT_QUERY, JUICE_SELLING_PLAN_GROUP);
-  const [selections, setSelections] = useState<Selections>({});
-  const [billingPreference, setBillingPreference] = useState<BillingPreference | null>(null);
-  const [hibiscusAddOnQuantity, setHibiscusAddOnQuantity] = useState(0);
+  const [selections, setSelections, mixStorageUnavailable] = usePersistentDraft<Selections>(
+    'place-in-thyme-juice-mix-v1', {}, isQuantityMap,
+  );
+  const [billingPreference, setBillingPreference, billingStorageUnavailable] = usePersistentDraft<BillingPreference | null>(
+    'place-in-thyme-juice-billing-v1', null,
+    (value: unknown): value is BillingPreference | null => value === null || value === 'weekly' || value === 'prepaid',
+  );
+  const [hibiscusAddOnQuantity, setHibiscusAddOnQuantity, teaStorageUnavailable] = usePersistentDraft<number>(
+    'place-in-thyme-juice-tea-v1', 0,
+    (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0,
+  );
 
   const pickAndChooseMatches = useMemo(() => {
     const normalizedTitle = normalizeSellingPlanGroupName(PICK_AND_CHOOSE_PRODUCT_TITLE);
@@ -162,6 +171,9 @@ const JuiceSubscription = () => {
     (total, item) => total + item.priceCents * item.quantity,
     0,
   );
+  const missingSelectionIds = !productsLoading && !productsError
+    ? Object.keys(selections).filter(id => selections[id] > 0 && !individualJuices.some(product => product.node.id === id))
+    : [];
   const anySelections = selectedItems.length > 0;
   const meetsMinimum = minimumCents !== null && weeklyRetailCents >= minimumCents;
   const remainingCents = minimumCents === null
@@ -227,7 +239,8 @@ const JuiceSubscription = () => {
     && !productsError
     && !sellingPlansError
     && !minimumConfigurationUnavailable
-    && !configurationLoading,
+    && !configurationLoading
+    && missingSelectionIds.length === 0,
   );
 
   const requestMailto = useMemo(() => {
@@ -341,6 +354,26 @@ const JuiceSubscription = () => {
             <p className="mb-4 text-muted-foreground">
               Product names, sizes, ingredients, and benefits below come directly from the live juice catalog. Choose any quantities until the live weekly retail minimum is met.
             </p>
+            <p className="mb-4 text-sm text-muted-foreground">
+              {mixStorageUnavailable || billingStorageUnavailable || teaStorageUnavailable
+                ? 'This browser cannot save your juice draft. Keep this page open to retain your choices.'
+                : 'Your juice mix, tea add-on and billing preference are saved on this device for 30 days. Prices and availability are checked again when you return.'}
+            </p>
+            {(Object.values(selections).some(quantity => quantity > 0) || billingPreference || hibiscusAddOnQuantity > 0) && (
+              <Button variant="outline" className="mb-4" onClick={() => {
+                setSelections({});
+                setBillingPreference(null);
+                setHibiscusAddOnQuantity(0);
+              }}>Reset juice draft</Button>
+            )}
+            {missingSelectionIds.length > 0 && (
+              <div role="alert" className="mb-4 rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                <p>Some saved juice choices are no longer in the current catalog. Remove those unavailable choices before sending your plan; your other selections will stay in place.</p>
+                <Button variant="outline" className="mt-3 whitespace-normal" onClick={() => setSelections(previous => Object.fromEntries(
+                  Object.entries(previous).filter(([id]) => !missingSelectionIds.includes(id)),
+                ))}>Remove unavailable choices</Button>
+              </div>
+            )}
 
             <div className="mb-8 flex items-start gap-2 rounded-xl border border-accent/30 bg-accent/10 p-4 text-sm text-foreground" role="note">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
