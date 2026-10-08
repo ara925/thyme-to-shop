@@ -3,7 +3,7 @@
  * Anchored to a known Week A start date. Cycles every 3 weeks.
  */
 
-const BUSINESS_TIME_ZONE = 'America/New_York';
+const BUSINESS_TIME_ZONE = 'America/Los_Angeles';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_A_START_DAY = Date.UTC(2026, 2, 16); // Monday of a known Week A
 const WEEKS = ['week-a', 'week-b', 'week-c'] as const;
