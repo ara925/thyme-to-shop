@@ -11,7 +11,8 @@ export const PICKUP_ADDRESS = '26021 Acero, Mission Viejo, CA 92691';
 /**
  * Keep customer checkout fail-closed until the matching Shopify location,
  * local-delivery zone/rate, pickup instructions, and zero-shipping-rate setup
- * have been accepted in Admin.
+ * have been accepted in Admin and customer checkout has passed launch acceptance.
+ * The flag is a release gate, not a live probe of Shopify's saved settings.
  */
 export const LOCAL_FULFILLMENT_READY = parseBooleanFlag(
   import.meta.env.VITE_SHOPIFY_LOCAL_FULFILLMENT_READY,
@@ -115,13 +116,13 @@ export const DROPOFF_WINDOWS = LOCAL_FULFILLMENT_READY
   : [];
 export const DROPOFF_CONFIGURATION_ERROR = LOCAL_FULFILLMENT_READY
   ? dropoffConfiguration.error
-  : 'Shopify local fulfillment is not ready.';
+  : 'Delivery checkout is awaiting launch approval.';
 export const PICKUP_WINDOWS = LOCAL_FULFILLMENT_READY
   ? pickupConfiguration.windows
   : [];
 export const PICKUP_CONFIGURATION_ERROR = LOCAL_FULFILLMENT_READY
   ? pickupConfiguration.error
-  : 'Shopify pickup is not ready.';
+  : 'Pickup checkout is awaiting launch approval.';
 
 /**
  * Pickup is client-approved. A non-empty deployment override still takes
