@@ -1,12 +1,30 @@
 # Place in Thyme pre-launch audit
 
-Audit date: 2026-10-01 fulfillment follow-up
-Main release: `main` (branded checkout DNS cutover verified; CI release gate enabled); approved fulfillment update staged on `codex/configure-local-fulfillment`
+Audit date: 2026-10-08 private meal-rotation backend follow-up
+Main release: `main`; private backend work on `codex/meal-rotation-backend`. Earlier dated verification below is historical unless explicitly updated here.
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
 
 **GO for the published frontend and client review. NO-GO for accepting real customer payments.**
+
+### 2026-10-08 backend progress and remaining gates
+
+The owner-approved custom Shopify app is now connected to a private WordPress/SiteGround backend. The additional `write_products` permission was explicitly approved and applied; it was used for this app's meal selling-plan setup, not catalog edits. Version 0.1.2 of the plugin is installed. An app-owned weekly selling plan and signed create/update/uninstall webhook subscriptions are configured. The plan is **unpublished to products**, and automatic billing and customer enrollment remain **OFF** (`wordpress/place-in-thyme-meal-rotation/includes/Plugin.php`, `Worker.php`). The existing meal planner and manual-request fallback are preserved, not removed.
+
+Official Chrome interaction testing against live Shopify prices verified a four-week **no-charge preview**: $132 / $140 / $126 / $132. A $110 menu was rejected while the other independent menus met their minimum; after repair, invalid submissions preserve the draft and hide stale success previews. The real owned-contract field selection, USD currency, and Pacific store timezone passed the live read-only connection check. No order, customer payment, or real renewal was created.
+
+Code verification: 194 storefront tests and 57 PHP safety tests passed; TypeScript and PHP syntax checks passed; the production build passed using Node's system certificate trust store (certificate verification remained enabled); lint has 0 errors and the same 15 existing Fast Refresh warnings. PHP tests include four complete fixture calculate/commit/bill/finalize cycles, failed/ambiguous payments, cancellation, edited lines, launch gates, delivery identity, webhook/OAuth HMAC, private encryption, and Pacific DST cutoffs. These are **not** proof of real Shopify checkout, payment, webhook replay, or recurring-order acceptance.
+
+Remaining implementation/acceptance work is still on our side as well as the owner's; it must not all be called “owner configuration”:
+
+- **Blocker / our implementation:** connect the customer planner to the private quote endpoint, an isolated first-week checkout, and customer management/cancellation UI. Enforce minimum/selected quantities **before initial payment**; post-payment reconciliation is not equivalent to checkout validation. Do not attach this plan publicly until that workflow is accepted (`src/pages/MealSubscription.tsx`, `wordpress/README.md`).
+- **Blocker / acceptance:** native local fulfillment, actual initial checkout, A → B → C → A paid renewals, taxes/totals, cancellation, payment challenge/failure, concurrency, webhook replay, and expiring authorization need real acceptance. Fixture previews do not close these findings.
+- **Scheduler setup verified:** the native once-per-minute SiteGround job is saved, and a server-process heartbeat at 2026-10-08 16:22:03 UTC was observed after leaving WordPress idle. The plugin requires a recent server heartbeat before billing can be enabled. Extended reliability/downtime acceptance is still required (`Worker.php`).
+- **Blocker / owner:** Pause and Build keeps customer checkout disabled. The owner must activate an eligible paid plan/payment gateway and finish approved policy/tax details; no plan purchase or payment was performed.
+- **Blocker / separate subscription work:** juice four-cycle commitment/prepayment remains outside this meal-rotation plugin and still needs implementation/acceptance.
+
+See `wordpress/README.md` for the private deployment and explicit launch checklist. Do not report the customer-facing automatic meal rotation or the store launch as complete yet.
 
 The storefront features are preserved and the supplied meal/juice flows are implemented as far as the current subscription system can truthfully support. Meal customers configure all three rotating weeks up front; juice customers configure one repeated mix; and each fixed juice bundle offers both one-time and weekly-subscription actions. The remaining payment no-go is caused by Shopify owner/Admin, checkout-domain, fulfillment, and subscription-contract configuration, not by deleted or hidden features.
 
@@ -31,7 +49,7 @@ On 2026-10-01 Cory also confirmed the operating rules for launch:
 The blocking owner items are:
 
 1. Authenticated Shopify Admin inspection confirmed the store is on **Pause and Build ($9/month)**, Shopify Payments still shows **Complete setup**, and the primary location has no address. Basic monthly is now selected in principle but has not been purchased; the supplied pickup address has not yet been saved in Shopify.
-2. No live subscription configuration automates the documented A -> B -> C meal rotation after all three weekly menus are selected.
+2. The private, app-owned meal-rotation backend is installed and authorized, with an unpublished selling plan and no-charge live-price preview. Customer enrollment, initial checkout enforcement/integration, management UI, and real recurring-order acceptance are not complete; billing remains off.
 3. The exact 10% juice adjustment is configured, but the live subscription system does not provide the documented weekly-versus-four-week-prepaid choice or four-cycle commitment enforcement.
 4. The storefront implementation now contains the approved delivery/pickup schedule, fee, minimum, address, and cutoff, but Shopify Admin still needs the location address, Orange County postal-code zone, $15/$99 settings, pickup instructions, and removal of every standard shipping rate.
 5. Shopify cannot model a county boundary exactly with native local delivery. The prepared 89-standard-ZIP approximation covers Orange County, but ZIP 90631 also reaches part of Los Angeles County; exact boundary enforcement requires manual review or an address-validation/delivery app.

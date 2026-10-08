@@ -14,6 +14,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  rotation-backend:
+    name: PHP rotation safety tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check plugin syntax
+        run: find wordpress/place-in-thyme-meal-rotation -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Run no-network safety tests
+        run: php wordpress/tests/run.php
   quality:
     name: Test, typecheck, build, and lint
     runs-on: ubuntu-latest
