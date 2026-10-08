@@ -1,14 +1,26 @@
 # Place in Thyme pre-launch audit
 
-Audit date: 2026-10-01 fulfillment follow-up
-Main release: `main` (branded checkout DNS cutover verified; CI release gate enabled); approved fulfillment update staged on `codex/configure-local-fulfillment`
+Audit date: 2026-10-08 payment-method and live launch recheck
+Release correction: `codex/launch-release-refresh`. Earlier dated findings below are historical unless updated here.
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
 
 **GO for the published frontend and client review. NO-GO for accepting real customer payments.**
 
-The storefront features are preserved and the supplied meal/juice flows are implemented as far as the current subscription system can truthfully support. Meal customers configure all three rotating weeks up front; juice customers configure one repeated mix; and each fixed juice bundle offers both one-time and weekly-subscription actions. The remaining payment no-go is caused by Shopify owner/Admin, checkout-domain, fulfillment, and subscription-contract configuration, not by deleted or hidden features.
+### 2026-10-08 live recheck
+
+Official Chrome inspection confirmed the client's card is saved for **Shopify bills**. This is not customer-payment activation: **Shopify Payments still shows Complete setup**, and the store remains on **Pause and Build ($9/month)**. The native Basic monthly option shows **$39/month**; approval was requested, but no plan purchase or customer charge was made.
+
+The prior missing-location/fulfillment findings are superseded. The active default location is **26021 Acero, Mission Viejo, CA 92691**. Local delivery and pickup are on; the two named Orange County ZIP zones show **$15 delivery / $99 minimum**. Delivery instructions state Monday–Tuesday with a Friday 11:59 PM Pacific cutoff. Pickup is free and the saved ready-for-pickup message states Mondays after 9:00 AM. Native pickup's generic processing-time display remains 2–4 days, not an exact Monday-date rule. The general profile has **no domestic or international shipping options**. No saved fulfillment configuration was overwritten during this recheck. Exact county-boundary eligibility and all these rules still require native checkout acceptance.
+
+The public cart's live quantity change **6 → 7 → 6** returned **$108 → $126 → $108** for Korean Beef Bowl and preserved the original basket. Checkout correctly remains closed. Its old message incorrectly implies saved Shopify fulfillment is missing; the release correction now says checkout is awaiting launch approval without removing the gate. The separate menu-rotation calendar correction uses Pacific time, with DST-boundary regression coverage.
+
+The current editor preview has working formatted privacy links, while the public page inspected during this recheck still flattened them. Publication of the current reviewed frontend requires a public recheck, not just the publisher's “up to date” label. Shopify publishes privacy and local-delivery policies, but **refund and terms policies are absent**, and the privacy contact still lists the agency email; client review is required. No policy text was invented or changed.
+
+The private meal backend is installed separately on WordPress and remains gated off. Its app-owned selling plan is unpublished to products. **Our implementation still needs customer enrollment/initial checkout enforcement, management/cancellation integration, real meal-renewal acceptance, and the custom juice four-cycle/prepayment workflow.** These are not merely owner configuration. Do not describe the storefront or subscriptions as launch-ready while those requirements remain.
+
+The storefront features are preserved. The remaining no-go includes customer-facing subscription implementation, merchant payment activation, approved policies/taxes, and real native checkout/renewal acceptance—not deleted features.
 
 ### Client-confirmed business rules
 
