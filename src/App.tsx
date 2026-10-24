@@ -13,6 +13,7 @@ const WeeklyMeals = lazy(() => import("./pages/WeeklyMeals"));
 const Juices = lazy(() => import("./pages/Juices"));
 const PickAndChoose = lazy(() => import("./pages/PickAndChoose"));
 const MealSubscription = lazy(() => import("./pages/MealSubscription"));
+const ManageMealRotation = lazy(() => import("./pages/ManageMealRotation"));
 const JuiceSubscription = lazy(() => import("./pages/JuiceSubscription"));
 const ProductDetail = lazy(() => import("./pages/ProductDetail"));
 const About = lazy(() => import("./pages/About"));
@@ -56,6 +57,7 @@ function AppContent() {
           <Route path="/juices" element={<Juices />} />
           <Route path="/juices/pick-and-choose" element={<PickAndChoose />} />
           <Route path="/subscribe/meals" element={<MealSubscription />} />
+          <Route path="/meal-plan/:id" element={<ManageMealRotation />} />
           <Route path="/subscribe/juices" element={<JuiceSubscription />} />
           <Route path="/product/:handle" element={<ProductDetail />} />
           <Route path="/about" element={<About />} />

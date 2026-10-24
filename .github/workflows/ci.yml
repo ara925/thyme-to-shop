@@ -35,6 +35,9 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Test independent Shopify rotation app
+        run: npm test --prefix shopify-app
+
       - name: Run typecheck
         run: npm run typecheck
 
@@ -43,3 +46,8 @@ jobs:
 
       - name: Run lint
         run: npm run lint
+
+      - name: Check PHP syntax and private rotation safety fixtures
+        run: |
+          find wordpress -name '*.php' -print0 | xargs -0 -n1 php -l
+          php wordpress/tests/run.php

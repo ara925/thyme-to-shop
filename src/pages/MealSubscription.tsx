@@ -13,6 +13,8 @@ import { parseMealMinimumCents } from '@/lib/subscriptionMinimum';
 import { SubscriptionProductSkeletons } from '@/components/subscriptions/SubscriptionProductSkeletons';
 import { isCustomerFacingProduct } from '@/lib/productVisibility';
 import { isQuantityMap, usePersistentDraft } from '@/hooks/usePersistentDraft';
+import { MealRotationReview } from '@/components/subscriptions/MealRotationReview';
+import type { RotationSelections } from '@/lib/rotationService';
 
 const MEAL_PRODUCT_QUERY = 'product_type:Meal';
 const MEAL_SELLING_PLAN_GROUP = 'Weekly Meal Subscription - $120 Minimum';
@@ -164,7 +166,7 @@ const MealSubscription = () => {
         ...previous,
         [weekId]: {
           ...previous[weekId],
-          [productId]: Math.max(0, current + delta),
+          [productId]: Math.min(50, Math.max(0, current + delta)),
         },
       };
     });
@@ -378,7 +380,7 @@ const MealSubscription = () => {
                                     size="icon"
                                     className="h-11 w-11 rounded-full"
                                     onClick={() => updateQuantity(week.id, product.node.id, 1)}
-                                    disabled={!variant?.availableForSale}
+                                    disabled={!variant?.availableForSale || quantity >= 50}
                                     aria-label={`Add one ${product.node.title} to ${week.label}`}
                                   >
                                     <Plus className="h-4 w-4" aria-hidden="true" />
@@ -458,6 +460,14 @@ const MealSubscription = () => {
                   </p>
                 </div>
               )}
+
+              <MealRotationReview selections={requestIsReady ? Object.fromEntries(WEEKS.map(week => [
+                week.id,
+                Object.fromEntries(Object.entries(selections[week.id]).filter(([, quantity]) => quantity > 0).map(([productId, quantity]) => [
+                  productsByWeek[week.id].find(product => product.node.id === productId)!.node.variants.edges[0].node.id,
+                  quantity,
+                ])),
+              ])) as RotationSelections : null} />
 
               {requestHref ? (
                 <Button asChild className="h-auto min-h-11 w-full whitespace-normal rounded-full bg-primary py-3 text-center leading-tight shadow-md hover:bg-primary/90" size="lg">

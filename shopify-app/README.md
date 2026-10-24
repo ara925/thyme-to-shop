@@ -1,0 +1,29 @@
+# Independent Place in Thyme Shopify app
+
+This replaces the retired WordPress rotation plugin. The Shopify app owns its server, private authorization, storage and minute worker. No marketing-site code, WordPress option, REST route or WP-Cron process is used. Shopify remains authoritative for products, orders, checkout, payment methods and app-owned subscription contracts.
+
+Node.js 22.18+ is required. There are no third-party runtime dependencies. The backend uses the versioned [Node SQLite API](https://nodejs.org/docs/latest-v22.x/api/sqlite.html). It requires one verified persistent disk/database location with backups; an ephemeral or unverified host must never pass the storage gate. The data directory must not be served as static files or shared with the marketing site.
+
+Run `npm test --prefix shopify-app` from the repository root. Fixtures create no live requests, orders or charges. Package the deployment using `./scripts/package-shopify-app.ps1`; its allow-list excludes credentials, environment files and databases.
+
+Configure the private environment variables documented in `.env.example`, then run `npm start` in this directory. The process listens on the platform's `PORT` and schedules a minute worker independent of browser traffic. Restart/redeploy persistence, background uptime and multi-process locking still require host acceptance. A local database-reopen fixture does not establish the production host's guarantees.
+
+## Reconnect the existing app — do not create another app
+
+Use the existing client ID `7d9a72b3188adb3a745370a1768b751d` in the TLG Marketing Shopify developer organization. Set its app URL to the independent origin and its approved OAuth redirect to `/auth/callback`. Authorization follows Shopify's [standalone-app code-grant flow](https://shopify.dev/docs/apps/build/authentication-authorization/access-tokens/authorization-code-grant), including cookie-bound single-use state, HMAC, exact-shop checks, encrypted offline credentials and locked token refresh.
+
+The private Shopify secret and encryption key belong only in the app host's private settings. Do not copy WordPress salt material or token values into frontend configuration, logs, Git or chat. Reauthorize the same installed app with its existing three approved scopes; do not expand access.
+
+Open the app from Shopify and choose **Verify Connection and Move App Webhooks**. It finds the already-created app-owned plan; it does not create products or attach the plan to products. It creates the three signed webhook endpoints on the app, then retires only this app's exact old WordPress webhook endpoints. Other apps, plans, products and contracts remain untouched.
+
+After the deployment and connection pass acceptance, configure the storefront's public `VITE_SHOPIFY_ROTATION_API_URL` to `<independent-app-origin>/api`. There is deliberately no fallback to the main website. Management links use the storefront `/meal-plan/<opaque-id>#token=<private-token>` route; the fragment is consumed and stripped, and the token is used only as a bearer header. No Admin credential is sent to the browser.
+
+## Not customer-live
+
+Every billing/enrollment gate is OFF by default, including after upload, restart or OAuth. The six private acceptance flags, a fresh scheduler heartbeat, owned plan and signed hooks must all pass. There is no public or admin button that can switch those gates on.
+
+The customer initial-checkout/quantity enforcement design, real native local fulfillment, merchant payment provider, paid A→B→C→A acceptance, and custom juice four-week/prepaid workflow remain required. The quote endpoint stays closed until those checks pass. A successful no-charge preview or simulated renewal is not launch approval. Do not silently buy Plus, install another paid app, change the catalog or repurpose fixed juice plans to bypass those constraints.
+
+## Legacy recovery
+
+The old plugin was removed from the main site on October 24, 2026, after its disabled enrollment/billing and unpublished plan were confirmed. Its deactivation hook unschedules its worker. Its source and safety fixtures are retained in the repository for migration reference, not for installation. Existing encrypted database records were not deleted or exposed. They are not used by this runtime. Reconnect authorization instead of attempting to import secrets encrypted with WordPress salts.

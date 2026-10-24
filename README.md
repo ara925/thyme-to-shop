@@ -44,6 +44,8 @@ Continue developing this project in the [Lovable editor](https://lovable.dev/pro
 
 ## Development
 
+The meal-rotation app backend is now maintained separately in [shopify-app/](shopify-app/README.md). It must have its own runtime, persistent storage and scheduler. The former WordPress plugin was removed from the marketing site on October 24, 2026 and is retained in this repository only as migration/recovery reference. Never deploy the rotation backend into the marketing site or point the storefront at its WordPress REST API.
+
 Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
 
 ```sh

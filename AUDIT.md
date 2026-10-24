@@ -1,22 +1,42 @@
 # Place in Thyme pre-launch audit
 
-Audit date: 2026-10-08 payment-method and live launch recheck
-Release correction: `codex/launch-release-refresh`. Earlier dated findings below are historical unless updated here.
+Audit date: 2026-10-24 independent Shopify-app migration
+Current work: `codex/subscription-enrollment`. Earlier dated findings below are historical unless updated here.
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
 
 **GO for the published frontend and client review. NO-GO for accepting real customer payments.**
 
+### 2026-10-24 main-site separation and implementation
+
+The user explicitly required rotation to stay in the Shopify app, with the marketing site removed from the architecture. The **Place in Thyme Meal Rotation 0.1.2 WordPress plugin was deactivated and deleted** through its native plugin controls. WordPress displayed its successful-deletion receipt. Its deactivation hook clears the plugin's scheduled worker; existing saved data was preserved. A source recovery archive was retained locally. The Shopify app itself, its unpublished selling plan, products, other apps, and subscription features were not deleted.
+
+After removal, official Chrome visually confirmed the main website still renders, its prominent Shop link still opens `https://shop.placeinthyme.com/`, and the original six-item basket remains intact. No domain changed. The obsolete dedicated SiteGround cron entry and app webhook/redirect migration still need their separate cleanup/acceptance; do not claim the migration is finished merely because the plugin is gone.
+
+The replacement `shopify-app/` is an independent Node server with its own encrypted authorization, database, OAuth/session authentication, signed and deduplicated webhook queue, per-record leases, and traffic-independent minute worker. It reuses the same Shopify app and approved scopes, discovers the existing app-owned plan, and never creates customer-priced products or changes the catalog. It has no WordPress runtime dependency. Every billing/enrollment acceptance gate remains off. A distinct SiteGround Node project at `corys32.sg-host.com` has been created and the app archive uploaded; runtime reachability, private configuration, persistent-storage guarantees, reauthorization, and live app acceptance are still in progress. This is not a verified production migration yet.
+
+The storefront candidate adds a live-price/no-charge three-menu review, private menu-management/cancellation UI, session-only bearer access with fragment removal, expired-quote handling, and safe cancellation retries. An uncertain remote cancellation durably stops local renewals, remains retryable, and cannot display confirmed success without a matching cancelled Shopify contract. The API endpoint must be the independent app's configured HTTPS `/api` origin; the main-site and checkout origins are rejected and there is no WordPress fallback. Manual planners and saved selections remain intact.
+
+Verification so far: **229 storefront tests and 51 independent-app tests pass**; type checks, production build and lint pass (0 errors, 15 existing warnings). The retained legacy PHP safety suite has 68 passing fixtures. The standalone tests exercise a real temporary SQLite database/reopen, locks and unique webhook events, HTTP authentication/origin rules, durable cancellation failure/retry, malformed data rejection, Pacific/DST boundaries, rendered admin JavaScript, and four simulated rotation cycles. These do not constitute real Shopify payment, renewal, production persistence or uptime acceptance. Official Chrome checked the actual planner/error states and mobile layouts; successful management/review states were additionally inspected with clearly marked local fixtures, not passed off as live contracts.
+
+Native Shopify checkout contact fields were corrected and saved: email is required for receipts/notices, full first/last name is required, and delivery phone is optional. No marketing opt-ins were enabled. The installed MW Bundle Builder still contains only a disabled invalid old test with a missing product and item-count limits; it was not enabled or repurposed as proof of the required $120 spend enforcement.
+
+Still required on our implementation side: isolated initial-week checkout and authoritative pre-payment enforcement on Basic, real A→B→C→A acceptance, and the separate custom-juice four-cycle/prepaid workflow. Merchant-payment status, approved policies/taxes and native fulfillment acceptance remain launch gates. Do not label these as merely missing owner settings or describe subscriptions as launch-ready.
+
 ### 2026-10-08 live recheck
 
-Official Chrome inspection confirmed the client's card is saved for **Shopify bills**. This is not customer-payment activation: **Shopify Payments still shows Complete setup**, and the store remains on **Pause and Build ($9/month)**. The native Basic monthly option shows **$39/month**; approval was requested, but no plan purchase or customer charge was made.
+Official Chrome inspection confirmed the client's card is saved for **Shopify bills**. After the user authorized the plan purchase, **Basic monthly was activated at $39/month plus applicable tax**. The native review showed **$18 due today after a $21 plan-change credit**, with $39/month renewal beginning October 26, 2026; Shopify then displayed **You're now on Basic plan** and the saved Plan page confirmed the monthly price. This is not customer-payment activation, and no customer order or charge was made.
+
+**Shopify Payments remains unsubmitted.** Its existing onboarding is at **Step 6 of 6** and shows the business, owners, and account representative as **Ready to submit**. No saved identity, tax, or banking details were altered. The final **Submit for verification** button explicitly both agrees to the terms and applies for a **Shopify Balance account and spend card**, so this financial-account application was left for the client to review and submit themselves. The single official-Chrome tab is open at that final review. Ready to submit is not approved, active, or payout-verified. Evidence screenshots: `basic-monthly-activated-2026-10-08.png` and `shopify-payments-final-review-2026-10-08.png` in the session's meal-rotation visual-proof directory.
 
 The prior missing-location/fulfillment findings are superseded. The active default location is **26021 Acero, Mission Viejo, CA 92691**. Local delivery and pickup are on; the two named Orange County ZIP zones show **$15 delivery / $99 minimum**. Delivery instructions state Monday–Tuesday with a Friday 11:59 PM Pacific cutoff. Pickup is free and the saved ready-for-pickup message states Mondays after 9:00 AM. Native pickup's generic processing-time display remains 2–4 days, not an exact Monday-date rule. The general profile has **no domestic or international shipping options**. No saved fulfillment configuration was overwritten during this recheck. Exact county-boundary eligibility and all these rules still require native checkout acceptance.
 
 The public cart's live quantity change **6 → 7 → 6** returned **$108 → $126 → $108** for Korean Beef Bowl and preserved the original basket. Checkout correctly remains closed. Its old message incorrectly implies saved Shopify fulfillment is missing; the release correction now says checkout is awaiting launch approval without removing the gate. The separate menu-rotation calendar correction uses Pacific time, with DST-boundary regression coverage.
 
-The current editor preview has working formatted privacy links, while the public page inspected during this recheck still flattened them. Publication of the current reviewed frontend requires a public recheck, not just the publisher's “up to date” label. Shopify publishes privacy and local-delivery policies, but **refund and terms policies are absent**, and the privacy contact still lists the agency email; client review is required. No policy text was invented or changed.
+The public page initially flattened privacy links even though the editor preview had the repair. Release PR #17 passed CI and was merged at 2026-10-08 17:44 UTC; its native publisher update completed, and a fresh public visit confirmed formatted policy headings and clickable privacy links. The public cart shows the corrected launch-approval wording, still has the original six meals / $108 subtotal, and its checkout button remains disabled. No domain was changed. Shopify publishes privacy and local-delivery policies, but **refund and terms policies are absent**, and the privacy contact still lists the agency email; client review is required. No policy text was invented or changed. The native checkout-host opt-out destination still needs acceptance after merchant activation; an anchor's presence is not proof that the destination works.
+
+Release verification: **195 tests**, type checks, production build, PR CI and merged-main CI pass; lint has 0 errors and 15 existing Fast Refresh warnings. Certificate verification stayed enabled. On the public domain, a one-meal draft survived reload; a juice selection and separate one-time tea add-on also survived reload, with the below-minimum request disabled. Test selections were restored and the original basket preserved. At a 390×844 browser override, the meal/juice planner samples and mobile navigation had no horizontal overflow (375px usable content and scroll widths); the viewport was then reset. This is a focused release recheck, not a replacement for the outstanding paid-checkout, renewal, assistive-technology, and full launch acceptance tests.
 
 The private meal backend is installed separately on WordPress and remains gated off. Its app-owned selling plan is unpublished to products. **Our implementation still needs customer enrollment/initial checkout enforcement, management/cancellation integration, real meal-renewal acceptance, and the custom juice four-cycle/prepayment workflow.** These are not merely owner configuration. Do not describe the storefront or subscriptions as launch-ready while those requirements remain.
 
@@ -35,7 +55,7 @@ These business decisions are closed. The remaining subscription gaps below are t
 
 On 2026-10-01 Cory also confirmed the operating rules for launch:
 
-- **Shopify plan:** Basic, billed monthly. The final paid-plan confirmation remains an owner-approved financial action.
+- **Shopify plan:** Basic, billed monthly. Activated on October 8, 2026 after the user approved the $39/month purchase; merchant-payment onboarding remains a separate client action.
 - **Delivery:** anywhere in Orange County on Monday or Tuesday, $15 fee, $99 delivery minimum, with no shipping.
 - **Cutoff:** “Friday at midnight PCT,” implemented unambiguously as the end of Friday (Friday 11:59 PM Pacific Time / Saturday 12:00 AM `America/Los_Angeles`).
 - **Pickup:** free at 26021 Acero, Mission Viejo, CA 92691, on Monday after 9:00 AM.
@@ -232,7 +252,7 @@ Run Lighthouse on the public home, juices/category, and product-detail pages aft
 
 # NEEDS OWNER ACTION
 
-1. **Activate commerce:** purchase the client-selected Basic monthly plan after final owner confirmation, save the supplied location address, configure/verify the payment provider and financial account, then complete a real order, refund, and failure-path test.
+1. **Activate commerce:** Basic monthly and the location/fulfillment settings are saved (October 8 recheck above supersedes older findings). The client must review and submit the existing Shopify Payments application, which also applies for a Shopify Balance account and spend card; then verify provider approval/payout setup and complete authorized order, refund, and failure-path acceptance. Do not open the frontend checkout gate before acceptance.
 2. **Choose the subscription source of truth:** Shopify Subscriptions currently owns the cleaned plan records but is only 1/7 configured. Decide whether it or another backend owns future contracts and finish that setup; no existing contracts were found.
 3. **Complete meal-plan scheduling:** the storefront now requires separate Week 1, Week 2, and Week 3 selections and calculates each week's actual selected-item total against its $120 minimum; implement and prove the remaining A -> B -> C future-contract rotation without charging all three batches every week.
 4. **Finish the confirmed juice contract:** retain the $134.99 retail-before-discount minimum and exact 10% adjustment, add four-week prepaid and weekly-billed choices, enforce four successful cycles, and publish the confirmed cancellation/renewal behavior.

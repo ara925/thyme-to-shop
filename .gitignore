@@ -10,6 +10,10 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+shopify-app/data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
 *.local
 *.tsbuildinfo
 .env
