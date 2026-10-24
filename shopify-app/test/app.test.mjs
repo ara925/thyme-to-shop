@@ -8,7 +8,7 @@ import { Script } from 'node:vm';
 import { SHOP, CLIENT_ID, ORIGIN, WEEKS, cents, amount, firstServiceDate, nextServiceDate, nextBillingDate, serviceCutoff, weekAt, validateSelections, validateUnchanged, fingerprint, matchLines, assertLocal, validWebhook, validOauth, validSessionToken } from '../src/domain.mjs';
 import { Store } from '../src/store.mjs';
 import { Worker } from '../src/worker.mjs';
-import { Shopify } from '../src/shopify.mjs';
+import { Shopify, ShopifyRequestError } from '../src/shopify.mjs';
 import { createApplication, configuration } from '../src/server.mjs';
 
 const key = Buffer.alloc(32, 7).toString('base64');
@@ -93,6 +93,33 @@ test('secrets are encrypted and database rows survive a process-level reopen', (
     assert.equal(store.getSetting('secret_access_token').includes('TEST-ONLY-token'), false); store.close();
     store = new Store(filename, key); assert.equal(store.secret('access_token'), 'TEST-ONLY-token'); assert.deepEqual(store.get(id).data.weeks, approved); store.close();
   } finally { assert.ok(directory.startsWith(join(tmpdir(), 'pit-app-test-'))); rmSync(directory, { recursive: true }); }
+});
+test('consistent private snapshots restore encrypted credentials and records, and failed refresh preserves the last good copy', async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'pit-app-backup-test-'));
+  let store;
+  try {
+    const filename = join(directory, 'rotation.sqlite'); store = new Store(filename, key);
+    store.setSetting('verifiedAt', Date.now()); store.saveSecret('access_token', 'TEST-ONLY-backup-token');
+    const id = store.create({ weeks: approved }, 'a'.repeat(64)); const now = Date.now();
+    assert.equal(await store.backupIfDue(now), true);
+    const snapshot = join(directory, 'backups', 'rotation-latest.sqlite');
+    const previous = readFileSync(snapshot);
+    assert.equal(previous.includes(Buffer.from('TEST-ONLY-backup-token')), false);
+    const restored = new Store(snapshot, key);
+    try { assert.equal(restored.secret('access_token'), 'TEST-ONLY-backup-token'); assert.deepEqual(restored.get(id).data.weeks, approved); }
+    finally { restored.close(); }
+    assert.equal(await store.backupIfDue(now + 1000), false);
+    const lastGood = readFileSync(snapshot);
+    store.filename = join(filename, 'invalid.sqlite');
+    await assert.rejects(store.backupIfDue(now + 86400001));
+    assert.deepEqual(readFileSync(snapshot), lastGood);
+    assert.equal(store.getSetting('backupLastCompleted'), now); assert.equal(store.getSetting('backupReviewNeeded'), true);
+  } finally {
+    store?.close(); assert.ok(directory.startsWith(join(tmpdir(), 'pit-app-backup-test-'))); rmSync(directory, { recursive: true });
+  }
+});
+test('unverified and in-memory stores do not create persistent recovery snapshots', async () => {
+  const store = memory(); assert.equal(await store.backupIfDue(), false); store.close();
 });
 test('leases, ownership-safe unlocks, unique events and rate limits are durable', () => {
   const store = memory(); const id = store.create({}, 'a'.repeat(64));
@@ -213,5 +240,42 @@ test('webhook replay is deduplicated and raw customer payloads are never persist
 test('private credentials never appear in failed Shopify request messages', async () => {
   const store = memory(); store.saveSecret('access_token', 'TEST-ONLY-private-token');
   const api = new Shopify(store, { clientSecret: 'TEST-ONLY-private-secret', baseUrl: 'https://rotation.example.test', fetchImpl: async () => ({ ok: false, status: 403 }) });
-  await assert.rejects(api.request('query Test { shop { name } }'), /^Error: Shopify request failed \(403\)\.$/); store.close();
+  await assert.rejects(api.request('query Test { shop { name } }'), error => error instanceof ShopifyRequestError && error.code === 'HTTP_403' && !error.message.includes('TEST-ONLY')); store.close();
+});
+test('Shopify diagnostics expose only allow-listed codes, never remote messages or arbitrary codes', async () => {
+  const store = memory(); store.saveSecret('access_token', 'TEST-ONLY-private-token');
+  for (const [code, expected] of [['MAX_COST_EXCEEDED', 'MAX_COST_EXCEEDED'], ['TEST-ONLY-private-token', 'SHOPIFY_REQUEST_REJECTED']]) {
+    const api = new Shopify(store, { fetchImpl: async () => ({ ok: true, text: async () => JSON.stringify({ errors: [{ message: 'TEST-ONLY-private-secret', extensions: { code } }] }) }) });
+    await assert.rejects(api.request('query Test { shop { name } }'), error => error instanceof ShopifyRequestError && error.code === expected && !error.message.includes('TEST-ONLY'));
+  }
+  store.close();
+});
+test('authenticated setup failure identifies a safe stage while keeping billing off', async () => withServer(async ({ base, store, config }) => {
+  const session = store.ticket('admin', 1800);
+  const response = await fetch(base + '/admin/setup', { method: 'POST', headers: { Cookie: `pit_app_session=${session}`, Origin: config.baseUrl } });
+  assert.equal(response.status, 422);
+  assert.match((await response.json()).message, /connection and owned-plan verification \(MAX_COST_EXCEEDED\)/);
+}, { verify: async () => { throw new ShopifyRequestError('MAX_COST_EXCEEDED'); } }));
+test('owned-plan verification uses the app-scoped query, not the unrelated Liquid appId identifier', async () => {
+  const store = memory(); const api = new Shopify(store, {}); api.catalog = async () => catalog;
+  api.request = async query => {
+    assert.match(query, /sellingPlanGroups/); assert.doesNotMatch(query, /currentAppInstallation/);
+    return { subscriptionContracts: { nodes: [] }, sellingPlanGroups: { pageInfo: { hasNextPage: false }, nodes: [{ appId: CLIENT_ID, merchantCode: 'pit-three-week-rotation-v1', name: 'Existing fixture plan', sellingPlans: { nodes: [{ id: 'gid://shopify/SellingPlan/1' }] } }] } };
+  };
+  assert.equal((await api.verify()).hasExistingContracts, false);
+  assert.equal(store.getSetting('planId'), 'gid://shopify/SellingPlan/1'); store.close();
+});
+test('webhook migration verifies the final routing and retires only the three exact legacy app topics', async () => {
+  const store = memory(); const api = new Shopify(store, { baseUrl: 'https://rotation.example.test' });
+  const topics = ['SUBSCRIPTION_CONTRACTS_CREATE', 'SUBSCRIPTION_CONTRACTS_UPDATE', 'APP_UNINSTALLED'];
+  const current = topics.map((topic, index) => ({ id: `new-${index}`, topic, uri: 'https://rotation.example.test/api/webhook' }));
+  const legacy = topics.map((topic, index) => ({ id: `old-${index}`, topic, uri: 'https://placeinthyme.com/wp-json/pit-rotation/v1/webhook' }));
+  const unrelated = { id: 'leave-alone', topic: 'ORDERS_CREATE', uri: legacy[0].uri };
+  let calls = 0; const deleted = [];
+  api.request = async () => ({ webhookSubscriptions: { nodes: calls++ ? [...current, unrelated] : [...current, ...legacy, unrelated], pageInfo: { hasNextPage: false } } });
+  api.mutation = async (_query, variables) => { deleted.push(variables.id); return { deletedWebhookSubscriptionId: variables.id }; };
+  await api.migrateWebhooks(); assert.deepEqual(deleted, legacy.map(hook => hook.id));
+  assert.equal(store.getSetting('webhookRouting').legacyRotationEndpoints, 0); assert.deepEqual(store.getSetting('webhooks'), current.map(hook => hook.id));
+  api.request = async () => ({ webhookSubscriptions: { nodes: [...current, legacy[0]], pageInfo: { hasNextPage: false } } });
+  await assert.rejects(api.migrateWebhooks(), error => error.code === 'WEBHOOK_ROUTING_NEEDS_REVIEW'); store.close();
 });

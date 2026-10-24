@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { SHOP, CLIENT_ID, ORIGIN, SCOPES, ZONE, assert, equalSecret, validOauth, validSessionToken, validWebhook, validateSelections, firstServiceDate, pacificTime, weekAt } from './domain.mjs';
 import { Store } from './store.mjs';
-import { Shopify } from './shopify.mjs';
+import { Shopify, ShopifyRequestError } from './shopify.mjs';
 import { Worker } from './worker.mjs';
 
 export function configuration(env = process.env) {
@@ -51,8 +51,12 @@ export function createApplication(config, { store = new Store(config.databasePat
   const status = () => ({ app: 'Place in Thyme Meal Rotation', version: '0.3.0', runtime: 'independent-node-app', mainWebsiteDependency: false,
     configured: configured(), connected: Boolean(store.getSetting('verifiedAt')), enrollmentReady: worker.enabled(), billingEnabled: worker.enabled(),
     ownedPlanConfigured: Boolean(store.getSetting('planId')), signedWebhooks: store.getSetting('webhooks', []).length,
+    webhookRouting: store.getSetting('webhookRouting'),
     schedulerHeartbeat: store.getSetting('heartbeat', 0) ? new Date(store.getSetting('heartbeat')).toISOString() : null,
-    storageAcceptance: config.gates.persistentStorage === true, eventReviewNeeded: store.getSetting('eventReviewNeeded', false) });
+    storageAcceptance: config.gates.persistentStorage === true, storageLocation: config.databasePath || null,
+    backupLastCompleted: store.getSetting('backupLastCompleted', 0) ? new Date(store.getSetting('backupLastCompleted')).toISOString() : null,
+    backupReviewNeeded: store.getSetting('backupReviewNeeded', false),
+    eventReviewNeeded: store.getSetting('eventReviewNeeded', false) });
   const preview = async selections => {
     assert(configured() && store.getSetting('verifiedAt'), 'Connect and verify the existing Shopify app first.');
     const weeks = validateSelections(selections, await api.catalog()); const date = firstServiceDate();
@@ -95,8 +99,18 @@ export function createApplication(config, { store = new Store(config.databasePat
         if (!adminAuthorized(request) || (request.method !== 'GET' && request.headers.origin !== config.baseUrl)) { errorResponse(response, 403, 'pit_admin', 'Open this app from the approved Shopify store or reconnect it.'); return; }
         if (path === '/admin/status' && request.method === 'GET') { json(response, status()); return; }
         if (path === '/admin/setup' && request.method === 'POST') {
-          await readBody(request); const verification = await api.verify();
-          await api.migrateWebhooks(); json(response, { status: { ...status(), ...verification }, catalog: await api.catalog() }); return;
+          await readBody(request); let stage = 'connection and owned-plan verification';
+          try {
+            const verification = await api.verify();
+            stage = 'webhook migration'; await api.migrateWebhooks();
+            stage = 'live meal catalog'; const catalog = await api.catalog();
+            stage = 'private recovery snapshot'; await store.backupIfDue();
+            json(response, { status: { ...status(), ...verification }, catalog });
+          } catch (error) {
+            const diagnostic = error instanceof ShopifyRequestError ? error.code : 'CHECK_FAILED';
+            errorResponse(response, 422, 'pit_setup_failed', `Shopify setup stopped during ${stage} (${diagnostic}). Billing remains disabled.`);
+          }
+          return;
         }
         if (path === '/admin/preview' && request.method === 'POST') { json(response, await preview(JSON.parse((await readBody(request)).toString()).selections)); return; }
       }
@@ -161,8 +175,16 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const application = createApplication(configuration());
   const port = Number(process.env.PORT || 3000);
   application.server.listen(port, '0.0.0.0', () => { console.info(`Place in Thyme app listening on port ${port}. Billing defaults OFF.`); });
-  const tick = () => application.worker.tick().catch(() => application.store.setSetting('workerReviewNeeded', true));
+  let currentTick = null;
+  const tick = () => {
+    if (currentTick) return currentTick;
+    currentTick = (async () => {
+      await application.worker.tick().catch(() => application.store.setSetting('workerReviewNeeded', true));
+      await application.store.backupIfDue().catch(() => application.store.setSetting('backupReviewNeeded', true));
+    })().finally(() => { currentTick = null; });
+    return currentTick;
+  };
   tick(); const timer = setInterval(tick, 60000); timer.unref();
-  const stop = () => { clearInterval(timer); application.server.close(() => { application.store.close(); process.exit(0); }); };
+  const stop = () => { clearInterval(timer); application.server.close(async () => { await currentTick; application.store.close(); process.exit(0); }); };
   process.once('SIGTERM', stop); process.once('SIGINT', stop);
 }

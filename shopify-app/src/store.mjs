@@ -1,16 +1,18 @@
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, backup } from 'node:sqlite';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, chmodSync, renameSync, unlinkSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { assert, equalSecret } from './domain.mjs';
 
 export class Store {
   constructor(filename, encryptionKey) {
     assert(filename === ':memory:' || filename.startsWith('/') || /^[A-Z]:[\\/]/i.test(filename), 'Use an absolute persistent database path.');
     if (filename !== ':memory:') mkdirSync(dirname(filename), { recursive: true, mode: 0o700 });
+    this.filename = filename;
     this.key = encryptionKey ? Buffer.from(encryptionKey, 'base64') : null;
     assert(!this.key || this.key.length === 32, 'Encryption key must be 32 random bytes encoded as base64.');
     this.db = new DatabaseSync(filename);
+    if (filename !== ':memory:') chmodSync(filename, 0o600);
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY,value TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS locks (key TEXT PRIMARY KEY,token TEXT NOT NULL,expires INTEGER NOT NULL);
@@ -22,6 +24,29 @@ export class Store {
   }
   getSetting(key, fallback = null) { const row = this.db.prepare('SELECT value FROM settings WHERE key=?').get(key); return row ? JSON.parse(row.value) : fallback; }
   setSetting(key, value) { this.db.prepare('INSERT INTO settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value)); }
+  async backupIfDue(now = Date.now()) {
+    if (this.filename === ':memory:' || !this.key || !this.getSetting('verifiedAt') || now - this.getSetting('backupLastCompleted', 0) < 86400000) return false;
+    const lease = this.lease('database-backup', 600); if (!lease) return false;
+    const directory = join(dirname(this.filename), 'backups');
+    const temporary = join(directory, `.rotation-${randomBytes(12).toString('hex')}.tmp`);
+    try {
+      mkdirSync(directory, { recursive: true, mode: 0o700 });
+      await backup(this.db, temporary); chmodSync(temporary, 0o600);
+      const inspection = new DatabaseSync(temporary);
+      try {
+        inspection.exec('PRAGMA journal_mode=DELETE');
+        assert(inspection.prepare('PRAGMA quick_check').get().quick_check === 'ok', 'Recovery snapshot integrity check failed.');
+      }
+      finally { inspection.close(); }
+      // Publish only a complete SQLite snapshot. Host backups can copy this non-active file.
+      renameSync(temporary, join(directory, 'rotation-latest.sqlite'));
+      this.setSetting('backupLastCompleted', now); this.setSetting('backupReviewNeeded', false);
+      return true;
+    } catch (error) {
+      try { unlinkSync(temporary); } catch { /* A failed snapshot never replaces the last good copy. */ }
+      this.setSetting('backupReviewNeeded', true); throw error;
+    } finally { this.release('database-backup', lease); }
+  }
   secret(name) {
     const encoded = this.getSetting(`secret_${name}`); if (!encoded) return '';
     assert(this.key, 'Private credential key required.');
