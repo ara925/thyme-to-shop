@@ -19,6 +19,9 @@ import {
 import { type SellingPlan, type ShopifyProduct, formatPrice } from '@/lib/shopify';
 import { parsePositiveMoneyCents } from '@/lib/subscriptionMinimum';
 import { isQuantityMap, usePersistentDraft } from '@/hooks/usePersistentDraft';
+import { JuicePlanReview } from '@/components/subscriptions/JuicePlanReview';
+import { rotationApiUrl } from '@/lib/rotationService';
+import type { JuiceSelections } from '@/lib/juiceSubscriptionService';
 import {
   AlertCircle,
   Check,
@@ -64,6 +67,7 @@ function formatCents(cents: number, currencyCode = 'USD'): string {
 }
 
 const JuiceSubscription = () => {
+  const independentReviewConfigured = Boolean(rotationApiUrl());
   const {
     data: allProducts = [],
     isLoading: productsLoading,
@@ -188,7 +192,7 @@ const JuiceSubscription = () => {
     && selectedItems.every(item => hasExactTenPercentAdjustment(item.sellingPlan)),
   );
   const estimatedDiscountedWeeklyCents = everySelectedPlanHasExactDiscount
-    ? Math.round(weeklyRetailCents * ((100 - CONFIRMED_DISCOUNT_PERCENT) / 100))
+    ? selectedItems.reduce((total, item) => total + Math.floor((item.priceCents * 90 + 50) / 100) * item.quantity, 0)
     : null;
   const estimatedPrepaidCents = estimatedDiscountedWeeklyCents === null
     ? null
@@ -221,7 +225,7 @@ const JuiceSubscription = () => {
     || hibiscusAddOnSelectable
   );
 
-  const configurationLoading = sellingPlansLoading || juiceBundleLoading;
+  const configurationLoading = (!independentReviewConfigured && sellingPlansLoading) || juiceBundleLoading;
   const minimumConfigurationUnavailable = Boolean(
     !juiceBundleLoading
     && (
@@ -233,15 +237,19 @@ const JuiceSubscription = () => {
   );
   const canRequest = Boolean(
     meetsMinimum
-    && everySelectedItemHasExactWeeklyPlan
+    && (independentReviewConfigured || everySelectedItemHasExactWeeklyPlan)
     && selectedItemsRemainAvailable
     && hibiscusAddOnSelectionValid
     && !productsError
-    && !sellingPlansError
+    && (independentReviewConfigured || !sellingPlansError)
     && !minimumConfigurationUnavailable
     && !configurationLoading
     && missingSelectionIds.length === 0,
   );
+  const reviewSelections: JuiceSelections | null = useMemo(() => canRequest && billingPreference ? {
+    selections: Object.fromEntries(selectedItems.map(item => [item.product.node.variants.edges[0].node.id, item.quantity])),
+    billingPreference, teaQuantity: hibiscusAddOnQuantity,
+  } : null, [canRequest, billingPreference, selectedItems, hibiscusAddOnQuantity]);
 
   const requestMailto = useMemo(() => {
     if (!canRequest || !minimumMoney || minimumCents === null || !billingPreference) return null;
@@ -283,7 +291,7 @@ const JuiceSubscription = () => {
       'Live Shopify configuration check:',
       `- Exact weekly plan on every selected juice: ${everySelectedItemHasExactWeeklyPlan ? 'Yes' : 'No'}`,
       `- Exact 10% percentage adjustment on every selected plan: ${everySelectedPlanHasExactDiscount ? 'Yes' : 'No'}`,
-      '- Four-cycle commitment / prepaid option enforceable in online checkout: No; this is not currently exposed by the storefront configuration.',
+      independentReviewConfigured ? '- This manual request does not enroll a subscription. Use the app-verified separate checkout when it is offered.' : '- Four-cycle commitment / prepaid option enforceable in online checkout: No; this is not currently exposed by the storefront configuration.',
       '',
       'Please send the manual enrollment or payment link, billing schedule, and delivery or pickup details before charging me.',
     ].join('\n');
@@ -291,6 +299,7 @@ const JuiceSubscription = () => {
     return `mailto:${REQUEST_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
   }, [
     canRequest,
+    independentReviewConfigured,
     billingPreference,
     everySelectedItemHasExactWeeklyPlan,
     everySelectedPlanHasExactDiscount,
@@ -307,7 +316,7 @@ const JuiceSubscription = () => {
 
   const updateQuantity = (productId: string, delta: number) => {
     setSelections(previous => {
-      const nextQuantity = Math.max(0, (previous[productId] || 0) + delta);
+      const nextQuantity = Math.min(50, Math.max(0, (previous[productId] || 0) + delta));
       return { ...previous, [productId]: nextQuantity };
     });
   };
@@ -379,11 +388,13 @@ const JuiceSubscription = () => {
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
               <div className="space-y-2">
                 <p>
-                  The confirmed subscription is 10% off with a four-week minimum commitment. Choose weekly billing or four-week prepayment below for manual enrollment.
+                  The confirmed subscription is 10% off with a four-week minimum commitment. Choose weekly billing or four-week prepayment below{independentReviewConfigured ? ' and review the plan with the independent Shopify app.' : ' for manual enrollment.'}
                   {' '}Cancellation is available after each four-week period.
                 </p>
                 <p>
-                  {sellingPlansLoading
+                  {independentReviewConfigured
+                    ? 'The live review checks this app’s weekly and prepaid policies separately from the ordinary weekly juice plans. A checkout is offered only after the server confirms launch acceptance.'
+                    : sellingPlansLoading
                     ? 'Checking the live weekly plans and discount configuration…'
                     : everyCatalogPlanHasExactDiscount
                       ? 'An exact 10% percentage adjustment is present on every live weekly juice plan. Online subscription checkout still remains unavailable until the four-cycle commitment or prepaid option can be verified and enforced.'
@@ -473,11 +484,11 @@ const JuiceSubscription = () => {
                   );
                   const canSelect = Boolean(
                     variant?.availableForSale
-                    && sellingPlan
+                    && (independentReviewConfigured || sellingPlan)
                     && currencyMatches
                     && !configurationLoading
                     && !minimumConfigurationUnavailable
-                    && !sellingPlansError,
+                    && (independentReviewConfigured || !sellingPlansError),
                   );
 
                   return (
@@ -547,7 +558,7 @@ const JuiceSubscription = () => {
                             size="icon"
                             className="h-11 w-11 rounded-full"
                             onClick={() => updateQuantity(product.node.id, 1)}
-                            disabled={!canSelect}
+                            disabled={!canSelect || quantity >= 50}
                             aria-label={`Add one ${product.node.title}`}
                           >
                             <Plus className="h-4 w-4" aria-hidden="true" />
@@ -607,8 +618,8 @@ const JuiceSubscription = () => {
                       variant="outline"
                       size="icon"
                       className="h-11 w-11 rounded-full"
-                      onClick={() => setHibiscusAddOnQuantity((quantity) => quantity + 1)}
-                      disabled={!hibiscusAddOnSelectable}
+                      onClick={() => setHibiscusAddOnQuantity((quantity) => Math.min(50, quantity + 1))}
+                      disabled={!hibiscusAddOnSelectable || hibiscusAddOnQuantity >= 50}
                       aria-label="Add one one-time Hibiscus Tea add-on"
                     >
                       <Plus className="h-4 w-4" aria-hidden="true" />
@@ -691,7 +702,7 @@ const JuiceSubscription = () => {
                 <div className="mb-5 rounded-xl border border-border bg-muted/30 p-4">
                   <h3 className="font-serif text-base font-bold text-foreground">Billing preference</h3>
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    Select how you want the confirmed four-week enrollment billed. This records a manual-enrollment choice; Shopify does not currently expose a four-payment commitment or prepaid plan for online checkout.
+                    {independentReviewConfigured ? 'Choose weekly payments or one payment for four weekly deliveries. The review below checks the current policies and tells you whether online enrollment is open.' : 'Select how you want the confirmed four-week enrollment billed. This records a manual-enrollment choice; Shopify does not currently expose a four-payment commitment or prepaid plan for online checkout.'}
                   </p>
                   <RadioGroup
                     className="mt-4 gap-3"
@@ -704,7 +715,7 @@ const JuiceSubscription = () => {
                       <span>
                         <span className="block">Pay weekly for four weeks</span>
                         <span className="block text-xs font-normal text-muted-foreground">
-                          Four weekly charges for the same mix. The confirmed four-cycle rule must be enforced during manual enrollment.
+                          {independentReviewConfigured ? 'Four weekly payments for the same mix, renewing in four-week periods. Cancellation is scheduled at the current period’s boundary.' : 'Four weekly charges for the same mix. The confirmed four-cycle rule must be enforced during manual enrollment.'}
                         </span>
                       </span>
                     </Label>
@@ -713,7 +724,7 @@ const JuiceSubscription = () => {
                       <span>
                         <span className="block">Prepay all four weeks</span>
                         <span className="block text-xs font-normal text-muted-foreground">
-                          One upfront payment covering four deliveries. No live prepaid selling plan is configured, so enrollment remains manual.
+                          {independentReviewConfigured ? 'One payment funds four weekly deliveries. The one-time tea add-on is not repeated.' : 'One upfront payment covering four deliveries. No live prepaid selling plan is configured, so enrollment remains manual.'}
                         </span>
                       </span>
                     </Label>
@@ -729,6 +740,8 @@ const JuiceSubscription = () => {
                     </p>
                   )}
                 </div>
+
+                <JuicePlanReview selections={reviewSelections} />
 
                 {requestMailto ? (
                   <Button asChild className="h-auto min-h-11 w-full whitespace-normal rounded-full bg-primary py-3 text-center leading-tight shadow-md hover:bg-primary/90" size="lg">

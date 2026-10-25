@@ -35,6 +35,16 @@ const ROUTE_METADATA: Record<string, RouteMetadata> = {
     title: 'Weekly Juice Plan | Place in Thyme',
     description: 'Choose a weekly recurring juice selection using live products, availability, and Shopify purchase plans.',
   },
+  '/meal-plan/:id': {
+    title: 'Manage Your Meal Rotation | Place in Thyme',
+    description: 'Private meal-rotation management.',
+    noIndex: true,
+  },
+  '/juice-plan/:id': {
+    title: 'Manage Your Juice Plan | Place in Thyme',
+    description: 'Private four-week juice subscription management.',
+    noIndex: true,
+  },
   '/about': {
     title: 'About | Place in Thyme',
     description: 'Learn about Place in Thyme and its approach to convenient chef-prepared meals and fresh juices.',
@@ -72,7 +82,7 @@ export function RouteSeo() {
   const location = useLocation();
 
   useEffect(() => {
-    const routeKey = location.pathname.startsWith('/product/')
+    const routeKey = location.pathname.startsWith('/meal-plan/') ? '/meal-plan/:id' : location.pathname.startsWith('/juice-plan/') ? '/juice-plan/:id' : location.pathname.startsWith('/product/')
       ? '/product/:handle'
       : location.pathname;
     const metadata = ROUTE_METADATA[routeKey] || ROUTE_METADATA['*'];
