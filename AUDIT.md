@@ -1,12 +1,35 @@
 # Place in Thyme pre-launch audit
 
 Audit date: 2026-10-25 independent checkout and custom-juice implementation
-Current work: `codex/launch-recovery-verification`. Earlier dated findings below are historical unless updated here.
+Current work: `codex/checkout-delivery-acceptance`. Earlier dated findings below are historical unless updated here.
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
 
 **GO for the published frontend and client review. NO-GO for accepting real customer payments.**
+
+### 2026-10-26 non-payment checkout and delivery acceptance
+
+Official Chrome used one working tab and real, isolated one-time Storefront carts, opened from the clearly marked local-only `qa/checkout-delivery.html` tool. No customer basket was read or changed. No email, phone, card details, order submission, subscription enrollment or payment was entered. These are real native checkout/rate observations, **not paid checkout acceptance**. The local tool can run only in development on a loopback hostname, has no public route, and is excluded from the production build. CI now checks the production artifacts for accidental inclusion.
+
+| Native checkout case | Observed result |
+| --- | --- |
+| Six Korean Beef Bowls, $108, 26021 Acero / Mission Viejo / 92691 | Local delivery offered at $15 |
+| Five Korean Beef Bowls, $90, same address | Delivery refused: price/weight requirements not met |
+| Same $90 cart, pickup | Free pickup available at 26021 Acero |
+| Six Chicken Balsamic Salads, exactly $99, same address | Local delivery offered at $15 |
+| $108 cart, Los Angeles / 90012 | Shipping/delivery refused |
+| $99 cart, 1245 N Hacienda Road / La Habra Heights / 90631 | **Failed county boundary: $15 local delivery was offered** |
+
+The county-edge public address was verified on [Los Angeles County's official city-hall listing](https://locator.lacounty.gov/lac/Location/3177271/la-habra-heights-city-hall). The user was asked whether to retain the shared ZIP while preparing address-based validation, or temporarily exclude 90631 and manually review its Orange County addresses. **No zone was silently narrowed.** The four-week prepaid delivery fee also awaits a business choice: $15 per weekly drop-off ($60 per prepaid period) versus $15 total. No unsupported fee was chosen.
+
+Native defects corrected: automated delivery estimates were turned **Off**, retaining the approved Monday–Tuesday/Friday-cutoff description. A fresh real $99 checkout confirmed **“Ships next business day” is gone**, while the $15 fee and approved wording remain. Location `111856681258` was renamed from **Shop location** to **Place in Thyme**; its address, ID, inventory and physical-storefront exposure setting were unchanged. A real checkout confirmed the new name and free pickup. The generic **“Usually ready in 2–4 days”** pickup label remains unresolved: the native selector offers only fixed hour/day buckets, not a Monday schedule. The native theme-language editor stayed visually blank, including its iframe; one reload and its official launch path did not produce an editor. No alternate false readiness promise or browser-security exception was applied.
+
+Code fixes: exact integer-cent parsing rejects partial decimals, exponent notation, negative/malformed prices and excessive precision; delivery and pickup revalidation reject unverified totals/currency and unsupported fulfillment methods; duplicate, partial and malformed minimum-rule attributes are rejected. Invalid totals show a refresh/review message rather than “add $0” or a misleading pickup suggestion. Synthetic, clearly marked local UI checks verified malformed-total rejection, the $98.99 one-cent shortfall and exact $99 success; they are separate from the native results above. The mobile message check had matching 375px content/viewport widths.
+
+Authoritative custom meal/juice minimum and cutoff enforcement is still open, not solved by client-side validation. [Shopify Functions](https://shopify.dev/docs/apps/build/functions) permits App Store function apps on Basic, but custom function apps require Plus. Shopify's [Checkout Blocks order-limit control](https://help.shopify.com/en/manual/checkout-settings/checkout-blocks/order-value-limits) is a global subtotal rule and must not be applied as a blanket $99 limit that would wrongly block free pickup. The existing MW panel remained visually blank. [King Checkout Validation](https://apps.shopify.com/king-checkout-validation) is development-only on its free tier; its advanced tier is $9.99/month, so it was not installed. [Essential Checkout Customizer](https://apps.shopify.com/essential-checkout-extensions) advertises free conditional validation on Basic, but its install entry produced an explicit **“You need permission to install Essential Checkout”** screen, requesting owner installation or access to Dashboards, Reports, Products, Domains, Settings and Discounts. No new app, scopes, paid service or payment-provider change was approved or installed. Its exact minimum/cutoff/county suitability remains unaccepted until an owner-approved installation can be inspected.
+
+Current checks: **301 storefront and 137 backend tests pass**; typecheck and production build pass; lint has 0 errors and the same 15 existing warnings. A production-boundary check inspected 33 output artifacts and found no local inspection tool. Proof is retained in `checkout-delivery-2026-10-25` (UTC date; the work crossed into October 26 in Warsaw). Billing/enrollment gates remain OFF.
 
 ### 2026-10-25 policy publication and production recovery checks
 

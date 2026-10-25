@@ -9,9 +9,12 @@ import {
   isBeforeCutoff,
 } from '@/lib/orderCutoff';
 import { formatPrice, type MoneyV2 } from '@/lib/shopify';
+import { parseMoneyCents } from '@/lib/moneyCents';
 
 export const FULFILLMENT_NOT_READY_MESSAGE =
   'Online delivery and pickup are not available until the Shopify fulfillment setup is complete.';
+export const UNVERIFIED_TOTAL_MESSAGE =
+  'Your order total could not be verified. Refresh the cart before checkout.';
 
 export interface DeliveryMinimumStatus {
   isMet: boolean;
@@ -27,10 +30,13 @@ export function getDeliveryMinimumStatus(
     return { isMet: true, shortfallCents: 0, message: '' };
   }
 
-  const amount = Number.parseFloat(subtotal?.amount || '0');
-  const subtotalCents = Number.isFinite(amount) ? Math.round(amount * 100) : 0;
+  const parsedCents = parseMoneyCents(subtotal?.amount);
+  if (parsedCents === null || subtotal?.currencyCode !== DELIVERY_CURRENCY) {
+    return { isMet: false, shortfallCents: 0, message: UNVERIFIED_TOTAL_MESSAGE };
+  }
+  const subtotalCents = parsedCents ?? 0;
   const shortfallCents = Math.max(0, DELIVERY_MINIMUM_CENTS - subtotalCents);
-  const isMet = subtotal?.currencyCode === DELIVERY_CURRENCY && shortfallCents === 0;
+  const isMet = parsedCents !== null && subtotal?.currencyCode === DELIVERY_CURRENCY && shortfallCents === 0;
 
   return {
     isMet,
@@ -51,7 +57,11 @@ export function validateFulfillmentForCheckout(
   now: Date = new Date(),
 ): void {
   if (!LOCAL_FULFILLMENT_READY) throw new Error(FULFILLMENT_NOT_READY_MESSAGE);
+  if (!['delivery', 'pickup'].includes(method)) throw new Error('Choose local delivery or pickup. Shipping is not offered.');
   if (!isBeforeCutoff(now)) throw new Error(ORDER_CUTOFF_CLOSED_MESSAGE);
+  if (subtotal?.currencyCode !== DELIVERY_CURRENCY || parseMoneyCents(subtotal?.amount) === null) {
+    throw new Error(UNVERIFIED_TOTAL_MESSAGE);
+  }
 
   const minimum = getDeliveryMinimumStatus(subtotal, method);
   if (!minimum.isMet) throw new Error(minimum.message);

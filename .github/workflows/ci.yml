@@ -44,6 +44,9 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+      - name: Keep local checkout inspection tools out of production
+        run: npm run check:production-boundary
+
       - name: Run lint
         run: npm run lint
 
