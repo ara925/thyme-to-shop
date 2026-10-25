@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
@@ -8,6 +9,7 @@ import { fetchStorePolicies, policyParagraphs, safePolicyUrl, type StorePolicies
 const policySections: Array<{ key: keyof StorePolicies; label: string }> = [
   { key: 'privacyPolicy', label: 'Privacy policy' },
   { key: 'refundPolicy', label: 'Return & refund policy' },
+  { key: 'subscriptionPolicy', label: 'Subscription cancellation policy' },
   { key: 'termsOfService', label: 'Terms of service' },
   { key: 'shippingPolicy', label: 'Delivery & shipping policy' },
 ];
@@ -18,10 +20,18 @@ export default function Policies() {
     queryFn: ({ signal }) => fetchStorePolicies(signal),
     staleTime: 60_000,
   });
+  useEffect(() => {
+    if (!data) return;
+    const section = policySections.find(({ key }) => window.location.hash === `#${key}`);
+    if (section) document.getElementById(section.key)?.scrollIntoView();
+  }, [data]);
   return <Layout>
     <div className="container max-w-4xl py-12 md:py-20">
       <h1 className="font-serif text-3xl font-bold md:text-4xl">Store Information &amp; Policies</h1>
       <p className="mt-4 text-muted-foreground">Published policies are loaded directly from Place in Thyme's Shopify store.</p>
+      <nav aria-label="Policy sections" className="mt-4 flex flex-wrap gap-x-5 gap-y-1">
+        {policySections.map(({ key, label }) => <a key={key} className="inline-flex min-h-11 items-center text-sm text-primary underline underline-offset-4" href={`#${key}`}>{label}</a>)}
+      </nav>
       <section className="mt-8 rounded-xl border bg-primary/5 p-6">
         <h2 className="font-serif text-xl font-bold">Local delivery &amp; pickup</h2>
         <p className="mt-3 leading-relaxed">Orange County delivery is $15 on orders of $99 or more, on Monday or Tuesday. Orders close Friday at 11:59 PM Pacific Time. Pickup is free at 26021 Acero, Mission Viejo, CA 92691, on Monday after 9:00 AM. Shipping is not offered.</p>

@@ -6,6 +6,7 @@ export interface StorePolicies {
   refundPolicy: StorePolicy | null;
   termsOfService: StorePolicy | null;
   shippingPolicy: StorePolicy | null;
+  subscriptionPolicy: StorePolicy | null;
 }
 
 export async function fetchStorePolicies(signal?: AbortSignal): Promise<StorePolicies> {
@@ -16,6 +17,7 @@ export async function fetchStorePolicies(signal?: AbortSignal): Promise<StorePol
         refundPolicy { title body url }
         termsOfService { title body url }
         shippingPolicy { title body url }
+        subscriptionPolicy { title body url }
       }
     }
   `, {}, signal);

@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest';
-import { policyParagraphs, safePolicyUrl } from './storePolicies';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fetchStorePolicies, policyParagraphs, safePolicyUrl } from './storePolicies';
+afterEach(() => vi.unstubAllGlobals());
 describe('published policy rendering', () => {
+  it('requests the native subscription policy alongside the other published policies', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { shop: { subscriptionPolicy: { title: 'Subscription policy', body: 'TEST ONLY', url: '' } } } }) });
+    vi.stubGlobal('fetch', fetchMock);
+    expect((await fetchStorePolicies()).subscriptionPolicy?.body).toBe('TEST ONLY');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).query).toContain('subscriptionPolicy { title body url }');
+  });
   it('preserves readable paragraphs and decodes entities without executing HTML', () => {
     expect(policyParagraphs('<h2>Privacy</h2><p>Meals &amp; juices.</p><ul><li>Contact us.</li></ul>'))
       .toEqual(['Privacy', 'Meals & juices.', 'Contact us.']);
