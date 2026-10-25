@@ -4,7 +4,7 @@ import { Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CartDrawer } from '@/components/cart/CartDrawer';
 import { cn } from '@/lib/utils';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo-96.webp';
 
 const navLinks = [
   { href: '/', label: 'Home' },
@@ -56,6 +56,8 @@ export function Header() {
           <img
             src={logo}
             alt="Place in Thyme logo"
+            width={96}
+            height={96}
             className="h-11 w-11 rounded-full object-cover transition-transform group-hover:scale-110"
           />
           <span className="font-serif text-xl font-bold text-foreground md:text-2xl tracking-tight">

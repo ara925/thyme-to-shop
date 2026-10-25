@@ -3,23 +3,34 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight, Leaf, Clock, Truck, Sparkles } from 'lucide-react';
 import heroBg from '@/assets/hero-bg.jpg';
 import heroBgSmall from '@/assets/hero-bg-960.jpg';
+import heroAvif from '@/assets/hero-bg-1920.avif';
+import heroAvifSmall from '@/assets/hero-bg-960.avif';
+import heroAvifMobile from '@/assets/hero-bg-768.avif';
 
 export function Hero() {
   return (
     <section className="relative overflow-hidden">
       {/* Hero Image with Overlay */}
       <div className="relative min-h-[85vh] flex items-center">
-        <img
-          src={heroBg}
-          srcSet={`${heroBgSmall} 960w, ${heroBg} 1920w`}
-          sizes="100vw"
-          alt="Fresh meal prep containers"
-          width={1920}
-          height={1080}
-          loading="eager"
-          decoding="async"
-          className="absolute inset-0 w-full h-full object-cover"
-        />
+        <picture>
+          <source
+            type="image/avif"
+            srcSet={`${heroAvifMobile} 768w, ${heroAvifSmall} 960w, ${heroAvif} 1920w`}
+            sizes="100vw"
+          />
+          <img
+            src={heroBg}
+            srcSet={`${heroBgSmall} 960w, ${heroBg} 1920w`}
+            sizes="100vw"
+            alt="Fresh meal prep containers"
+            width={1920}
+            height={1080}
+            loading="eager"
+            {...{ fetchpriority: 'high' }}
+            decoding="async"
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        </picture>
         <div className="absolute inset-0 bg-gradient-to-r from-espresso/90 via-espresso/70 to-espresso/40" />
         <div className="absolute inset-0 bg-gradient-to-t from-espresso/60 via-transparent to-transparent" />
         
@@ -74,7 +85,7 @@ export function Hero() {
                 <div className={`inline-flex h-12 w-12 items-center justify-center rounded-xl ${item.color} text-white shadow-lg`}>
                   <item.icon className="h-6 w-6" />
                 </div>
-                <h3 className="mt-3 font-serif text-lg font-bold text-foreground">{item.title}</h3>
+                <h2 className="mt-3 font-serif text-lg font-bold text-foreground">{item.title}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">{item.desc}</p>
               </div>
             ))}

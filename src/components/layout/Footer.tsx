@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Instagram, Mail, MapPin } from 'lucide-react';
-import logo from '@/assets/logo.png';
+import logo from '@/assets/logo-96.webp';
 
 const subscriptionManagementUrl =
   import.meta.env.VITE_SHOPIFY_SUBSCRIPTION_MANAGEMENT_URL
@@ -19,6 +19,8 @@ export function Footer() {
               <img
                 src={logo}
                 alt="Place in Thyme logo"
+                width={96}
+                height={96}
                 className="h-11 w-11 rounded-full object-cover"
               />
               <span className="font-serif text-2xl font-bold text-white tracking-tight">
