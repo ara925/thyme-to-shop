@@ -230,6 +230,21 @@ describe('cart purchase minimums', () => {
       "Pick n' Choose Bundle needs $0.49 more before checkout.",
     );
   });
+
+  it.each(['135junk', '135.001', '-135', '1.35e2'])('rejects malformed native line total %s', amount => {
+    expect(() => validateCartMinimums([minimumItem('line-a', amount)])).toThrow(/invalid cart price/);
+  });
+
+  it('rejects partial or duplicated minimum attributes', () => {
+    for (const value of ['13499junk', '1e4', '013499', '-13499']) {
+      const item = minimumItem('line-a', '135.00');
+      item.attributes = minimumAttributes.map(attribute => attribute.key === '_minimum_cents' ? { ...attribute, value } : attribute);
+      expect(() => validateCartMinimums([item])).toThrow(/minimum rule is invalid/);
+    }
+    const item = minimumItem('line-a', '135.00');
+    item.attributes = [...minimumAttributes, { key: '_minimum_cents', value: '1' }];
+    expect(() => validateCartMinimums([item])).toThrow(/duplicated/);
+  });
 });
 
 describe('cart bundle dependencies', () => {

@@ -33,6 +33,7 @@ import {
   type FulfillmentMethod,
 } from '@/lib/orderCutoff';
 import { validateFulfillmentForCheckout } from '@/lib/fulfillmentRules';
+import { parseMoneyCents } from '@/lib/moneyCents';
 import {
   DROPOFF_WINDOWS,
   PICKUP_WINDOWS,
@@ -120,11 +121,11 @@ interface CartMinimumGroup {
 }
 
 function moneyToCents(money: MoneyV2): number {
-  const amount = Number.parseFloat(money.amount);
-  if (!Number.isFinite(amount)) {
+  const amount = parseMoneyCents(money.amount);
+  if (amount === null) {
     throw new Error('Shopify returned an invalid cart price.');
   }
-  return Math.round(amount * 100);
+  return amount;
 }
 
 /** Revalidates planner and custom-bundle minimums using Shopify-returned line costs. */
@@ -133,6 +134,11 @@ export function validateCartMinimums(items: CartItem[]): void {
 
   for (const item of items) {
     const attributes = item.attributes || [];
+    for (const key of [MINIMUM_GROUP_ATTRIBUTE, MINIMUM_CENTS_ATTRIBUTE, MINIMUM_CURRENCY_ATTRIBUTE, MINIMUM_LABEL_ATTRIBUTE]) {
+      if (attributes.filter(attribute => attribute.key === key).length > 1) {
+        throw new Error('A cart minimum rule is duplicated. Remove the affected item and add it again.');
+      }
+    }
     const groupId = getAttribute(attributes, MINIMUM_GROUP_ATTRIBUTE);
     const minimumValue = getAttribute(attributes, MINIMUM_CENTS_ATTRIBUTE);
 
@@ -141,8 +147,8 @@ export function validateCartMinimums(items: CartItem[]): void {
       throw new Error('A cart minimum rule is incomplete. Remove the affected item and add it again.');
     }
 
-    const minimumCents = Number.parseInt(minimumValue, 10);
-    if (!Number.isInteger(minimumCents) || minimumCents <= 0) {
+    const minimumCents = Number(minimumValue);
+    if (!/^[1-9][0-9]{0,8}$/.test(minimumValue) || !Number.isSafeInteger(minimumCents)) {
       throw new Error('A cart minimum rule is invalid. Remove the affected item and add it again.');
     }
 
