@@ -27,5 +27,5 @@ export function PolicyContent({ html }: { html: string }) {
     };
     return Array.from(doc.body.childNodes).map((node, index) => renderNode(node, String(index)));
   }, [html]);
-  return <div className="prose prose-sm max-w-none break-words prose-a:text-primary prose-a:underline">{content}</div>;
+  return <div className="max-w-none space-y-4 break-words text-sm leading-relaxed [&_a]:text-primary [&_a]:underline [&_h1]:font-serif [&_h1]:text-2xl [&_h1]:font-bold [&_h2]:font-serif [&_h2]:text-xl [&_h2]:font-bold [&_h3]:text-lg [&_h3]:font-semibold [&_h4]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li+li]:mt-2">{content}</div>;
 }
