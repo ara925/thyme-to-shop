@@ -49,6 +49,9 @@ export class Store {
   }
   secret(name) {
     const encoded = this.getSetting(`secret_${name}`); if (!encoded) return '';
+    return this.decryptSecret(encoded);
+  }
+  decryptSecret(encoded) {
     assert(this.key, 'Private credential key required.');
     const value = Buffer.from(encoded, 'base64');
     const decipher = createDecipheriv('aes-256-gcm', this.key, value.subarray(0, 12)); decipher.setAuthTag(value.subarray(12, 28));

@@ -1,12 +1,24 @@
 # Place in Thyme pre-launch audit
 
 Audit date: 2026-10-25 independent checkout and custom-juice implementation
-Current work: `codex/subscription-enrollment`. Earlier dated findings below are historical unless updated here.
+Current work: `codex/launch-recovery-verification`. Earlier dated findings below are historical unless updated here.
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
 
 **GO for the published frontend and client review. NO-GO for accepting real customer payments.**
+
+### 2026-10-25 policy publication and production recovery checks
+
+The user authorized a general return/refund policy for Cory to review/edit and confirmed that Cory will grant Payments access. Native Shopify now shows both **Return and refund policy** and **Purchase options cancellation policy** as Published. The refund policy provides contact-based review of missing, damaged, incorrect and food-quality issues, appropriate replacement/refund resolution and original-method refunds, without invented reporting deadlines or blanket no-refund terms. Cancellation wording preserves the agreed meal cancel-anytime, fixed-bundle weekly, and custom-juice four-paid-week terms. No financial agreement, tax identity or store ownership details were changed. Terms of service remains unpublished and the automated privacy policy still uses the agency contact; these need merchant review.
+
+Official Chrome verified that the new refund body is visible on the actual customer policies page. A direct native `/policies/subscription-policy` link instead redirected to the storefront homepage. The frontend fix now requests Shopify's native `subscriptionPolicy { title body url }` and renders it on the shop policies page, with accessible section jump links and direct-hash scrolling. This change is in PR **#21**; public publication/visual acceptance is recorded separately after release.
+
+The independent app **0.4.1** was uploaded through SiteGround's normal account → Websites → Node.js Projects → existing Site Tools → Deployment Options → Upload manually flow. Live checking exposed an embedded App Bridge loader redirecting the standalone app into a blank Shopify admin screen. The corrected deployment removes that loader and keeps the existing signed-HMAC/HttpOnly-session authorization; no scope or credential change was made. The production app remains on its independent hostname after reload and retains its connection, owned meal/juice plans and three signed webhooks.
+
+Authenticated production checks passed at **2026-10-25T20:32:46.001Z** (private snapshot integrity, two encrypted values decryptable, saved configuration matching) and **2026-10-25T20:32:52.072Z** (a separate Node process blocked while a lease was held and acquired it after release). The snapshot contained zero saved plans/events. Checks expose only safe counts/booleans, make no Shopify request, never replace the active database, and cannot enable billing. Evidence persisted after reload. This is **not** a completed host-backup restore, environment recovery or Shopify reconciliation. Every billing/enrollment/storage acceptance flag remains OFF.
+
+Verification: **267 storefront tests and 137 independent-app tests pass**, including standalone signed-session persistence, policy display/query, read-only recovery, wrong-key/configuration refusal and two-process locking. Typecheck and production build pass; lint has 0 errors and the same 15 existing warnings. PR #21's CI passed, including retained legacy PHP safety fixtures. Fresh production screenshots are in `launch-readiness-2026-10-25`.
 
 ### 2026-10-25 implemented checkout and juice workflows
 

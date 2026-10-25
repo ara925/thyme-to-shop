@@ -211,6 +211,18 @@ test('rendered app JavaScript is valid and no private values are embedded', asyn
   assert.equal(html.includes(config.clientSecret), false); assert.equal(html.includes(key), false);
   assert.match(response.headers.get('content-security-policy'), /frame-ancestors https:\/\/admin.shopify.com/);
 }));
+
+test('standalone Shopify launch keeps its signed session without loading embedded App Bridge', async () => withServer(async ({ base, config }) => {
+  const fields = { shop: SHOP, timestamp: String(Math.floor(Date.now() / 1000)), host: 'TEST-ONLY-host' };
+  const query = new URLSearchParams(fields);
+  query.set('hmac', createHmac('sha256', config.clientSecret).update(Object.entries(fields).sort().map(([name, value]) => `${name}=${value}`).join('&')).digest('hex'));
+  const response = await fetch(`${base}/?${query}`); const html = await response.text();
+  assert.equal(response.status, 200); assert.doesNotMatch(html, /app-bridge\.js|shopify-api-key|shopify\.idToken/);
+  assert.doesNotMatch(response.headers.get('content-security-policy'), /cdn\.shopify/);
+  const cookie = response.headers.get('set-cookie'); assert.match(cookie, /HttpOnly; Secure; SameSite=Lax/);
+  assert.equal((await fetch(base + '/admin/status', { headers: { Cookie: cookie.split(';')[0] } })).status, 200);
+  assert.equal((await fetch(base + '/admin/status')).status, 403);
+}));
 test('live-price preview is origin-restricted and never persists an enrollment', async () => withServer(async ({ base, store }) => {
   let response = await fetch(base + '/api/preview', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://evil.test' }, body: JSON.stringify({ selections }) }); assert.equal(response.status, 403);
   response = await fetch(base + '/api/preview', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: ORIGIN }, body: JSON.stringify({ selections }) }); assert.equal(response.status, 200);
