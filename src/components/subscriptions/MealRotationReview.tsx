@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import { formatPrice } from '@/lib/shopify';
 import { previewMealRotation, rotationApiUrl, rotationDateLabel, rotationWeekLabel, ROTATION_WEEKS, type RotationPreview, type RotationSelections } from '@/lib/rotationService';
+import { MealEnrollmentCheckout } from './SubscriptionCheckout';
 
 export function MealRotationReview({ selections }: { selections: RotationSelections | null }) {
   const key = JSON.stringify(selections);
@@ -43,6 +44,7 @@ export function MealRotationReview({ selections }: { selections: RotationSelecti
       {!rotationApiUrl() && <p className="mt-3 text-sm text-muted-foreground">Live review opens when the independent Shopify app is connected. Your planner and manual setup request remain available.</p>}
       {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
       {preview && <MealRotationReviewResult preview={preview} />}
+      {preview?.enrollmentReady && selections && <MealEnrollmentCheckout key={key} selections={selections} preview={preview} />}
     </div>
   );
 }
@@ -58,6 +60,6 @@ export function MealRotationReviewResult({ preview }: { preview: RotationPreview
           })}
         </ol>
         <p className="text-muted-foreground">Only the active week’s meals are charged each week. Tax and the $15 local-delivery fee, if selected, are separate; pickup is free.</p>
-        <p className="font-medium">Online enrollment is not yet open. Send your verified selections below for manual setup. This review has not started a subscription.</p>
+        <p className="font-medium">{preview.enrollmentReady ? 'Your plan can continue to a separate Shopify checkout below. This review itself has not started a subscription.' : 'Online enrollment is not yet open. Send your verified selections below for manual setup. This review has not started a subscription.'}</p>
       </div>;
 }

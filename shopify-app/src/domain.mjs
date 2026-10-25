@@ -6,7 +6,8 @@ export const ORIGIN = 'https://shop.placeinthyme.com';
 export const WEEKS = ['week-a', 'week-b', 'week-c'];
 export const ZONE = 'America/Los_Angeles';
 export const SCOPES = ['write_products', 'write_purchase_options', 'write_own_subscription_contracts'];
-export function assert(condition, message) { if (!condition) throw new Error(message); }
+export class ReviewRequiredError extends Error {}
+export function assert(condition, message) { if (!condition) throw new ReviewRequiredError(message); }
 export function cents(value) {
   assert(typeof value === 'string' && /^(0|[1-9][0-9]{0,6})(?:\.[0-9]{1,2})?$/.test(value), 'Invalid USD price.');
   const [whole, fraction = ''] = value.split('.');
@@ -67,7 +68,7 @@ export function matchLines(expected, actual = []) {
 }
 function sorted(value) { return Array.isArray(value) ? value.map(sorted) : value && typeof value === 'object' ? Object.fromEntries(Object.keys(value).sort().map(key => [key, sorted(value[key])])) : value; }
 export const fingerprint = (value, key) => createHmac('sha256', key).update(JSON.stringify(sorted(value))).digest('hex');
-export function assertLocal(contract) {
+export function assertLocal(contract, { billingIntervalCount = 1 } = {}) {
   const method = contract.deliveryMethod;
   const kind = method?.__typename;
   const expected = { SubscriptionDeliveryMethodPickup: 0, SubscriptionDeliveryMethodLocalDelivery: 1500 };
@@ -77,14 +78,14 @@ export function assertLocal(contract) {
     const address = method.address;
     assert(address?.countryCodeV2 === 'US' && address.provinceCode === 'CA' && address.address1 && address.city && /^\d{5}(?:-\d{4})?$/.test(address.zip), 'Native local-delivery address needs review.');
   }
-  for (const policy of [contract.billingPolicy, contract.deliveryPolicy]) assert(policy?.interval === 'WEEK' && policy.intervalCount === 1, 'Weekly billing and delivery required.');
+  assert(contract.billingPolicy?.interval === 'WEEK' && contract.billingPolicy.intervalCount === billingIntervalCount
+    && contract.deliveryPolicy?.interval === 'WEEK' && contract.deliveryPolicy.intervalCount === 1, 'The approved billing interval and weekly delivery are required.');
 }
 export function assertCalculation(calculation, week, contract) {
   assert(calculation.__typename === 'SubscriptionContractCalculationSuccess' && !calculation.warnings?.length, 'Calculation needs review.');
   const snapshot = calculation.calculatedContract; assertLocal(snapshot);
   assert(snapshot.currencyCode === 'USD' && !snapshot.discounts?.nodes?.length && !snapshot.lines?.pageInfo?.hasNextPage
-    && matchLines(week.lines, snapshot.lines?.nodes) && JSON.stringify(sorted(snapshot.deliveryMethod)) === JSON.stringify(sorted(contract.deliveryMethod))
-    && snapshot.customerPaymentMethod?.id === contract.customerPaymentMethod?.id, 'Calculated contract differs from approval.');
+    && matchLines(week.lines, snapshot.lines?.nodes) && JSON.stringify(sorted(snapshot.deliveryMethod)) === JSON.stringify(sorted(contract.deliveryMethod)), 'Calculated contract differs from approval.');
   for (const [key, expected] of Object.entries({ subtotal: week.subtotalCents, totalDelivery: cents(contract.deliveryPrice.amount), totalMerchandiseDiscounts: 0 })) {
     const money = calculation.projectedOrderTotals?.[key]; assert(money?.currencyCode === 'USD' && cents(money.amount) === expected, 'Calculated totals differ from approval.');
   }

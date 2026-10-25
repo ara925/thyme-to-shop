@@ -14,7 +14,7 @@ import { SubscriptionProductSkeletons } from '@/components/subscriptions/Subscri
 import { isCustomerFacingProduct } from '@/lib/productVisibility';
 import { isQuantityMap, usePersistentDraft } from '@/hooks/usePersistentDraft';
 import { MealRotationReview } from '@/components/subscriptions/MealRotationReview';
-import type { RotationSelections } from '@/lib/rotationService';
+import { rotationApiUrl, type RotationSelections } from '@/lib/rotationService';
 
 const MEAL_PRODUCT_QUERY = 'product_type:Meal';
 const MEAL_SELLING_PLAN_GROUP = 'Weekly Meal Subscription - $120 Minimum';
@@ -41,6 +41,7 @@ const formatCents = (cents: number, currencyCode = 'USD') => (
 );
 
 const MealSubscription = () => {
+  const independentReviewConfigured = Boolean(rotationApiUrl());
   const {
     data: allProducts = [],
     isLoading: productsLoading,
@@ -153,11 +154,13 @@ const MealSubscription = () => {
     );
     lines.push(`Three-week total: ${formatCents(rotationTotal)}`);
     lines.push('');
-    lines.push('Please reply with the first delivery date and confirm when manual enrollment is active. I understand that Shopify does not yet automate the A -> B -> C contract rotation, so the team will schedule and manage this rotation manually.');
+    lines.push(independentReviewConfigured
+      ? 'Please reply with the first delivery date and confirm when enrollment is active. This manual request does not start recurring billing. The independent Shopify app must verify and accept the rotation before automatic checkout opens.'
+      : 'Please reply with the first delivery date and confirm when manual enrollment is active. I understand that Shopify does not yet automate the A -> B -> C contract rotation, so the team will schedule and manage this rotation manually.');
 
     const subject = 'Set up my three-week meal plan';
     return `mailto:${ROTATION_REQUEST_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`;
-  }, [productsByWeek, requestIsReady, selections, weekTotalsCents]);
+  }, [independentReviewConfigured, productsByWeek, requestIsReady, selections, weekTotalsCents]);
 
   const updateQuantity = (weekId: WeekId, productId: string, delta: number) => {
     setSelections(previous => {
@@ -236,13 +239,15 @@ const MealSubscription = () => {
             <div className="mb-8 flex items-start gap-2 rounded-xl border border-accent/30 bg-accent/10 p-4 text-sm text-foreground" role="note">
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
               <p>
-                <strong>Manual enrollment:</strong>{' '}
-                {sellingPlansLoading
+                <strong>{independentReviewConfigured ? 'Plan review and enrollment:' : 'Manual enrollment:'}</strong>{' '}
+                {independentReviewConfigured
+                  ? 'The independent Shopify app checks all three menus and their current prices. It offers a separate checkout only after server-side launch acceptance. Until then, the manual request stays available. Only one active menu—not all three sets—belongs in the first checkout.'
+                  : <>{sellingPlansLoading
                   ? 'We are checking the current weekly-plan configuration. '
                   : sellingPlansError || !allRotationProductsHaveStandardWeeklyPlans
                     ? 'One or more meal items do not expose the expected weekly plan. '
                     : 'Weekly plans exist for the meal items, but ordinary weekly plans cannot alternate three different menu selections. '}
-                Shopify does not yet automate the three-week contract rotation. This planner will not add all three sets to your cart, which would charge for every menu every week. Complete the plan below and send it to the team for manual enrollment and scheduling.
+                Shopify does not yet automate the three-week contract rotation. This planner will not add all three sets to your cart, which would charge for every menu every week. Complete the plan below and send it to the team for manual enrollment and scheduling.</>}
               </p>
               {sellingPlansLoading && <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />}
             </div>

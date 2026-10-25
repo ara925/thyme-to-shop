@@ -14,6 +14,7 @@ const Juices = lazy(() => import("./pages/Juices"));
 const PickAndChoose = lazy(() => import("./pages/PickAndChoose"));
 const MealSubscription = lazy(() => import("./pages/MealSubscription"));
 const ManageMealRotation = lazy(() => import("./pages/ManageMealRotation"));
+const ManageJuicePlan = lazy(() => import("./pages/ManageJuicePlan"));
 const JuiceSubscription = lazy(() => import("./pages/JuiceSubscription"));
 const ProductDetail = lazy(() => import("./pages/ProductDetail"));
 const About = lazy(() => import("./pages/About"));
@@ -58,6 +59,7 @@ function AppContent() {
           <Route path="/juices/pick-and-choose" element={<PickAndChoose />} />
           <Route path="/subscribe/meals" element={<MealSubscription />} />
           <Route path="/meal-plan/:id" element={<ManageMealRotation />} />
+          <Route path="/juice-plan/:id" element={<ManageJuicePlan />} />
           <Route path="/subscribe/juices" element={<JuiceSubscription />} />
           <Route path="/product/:handle" element={<ProductDetail />} />
           <Route path="/about" element={<About />} />

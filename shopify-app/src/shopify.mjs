@@ -1,4 +1,5 @@
 import { SHOP, CLIENT_ID, SCOPES, ZONE, assert, amount } from './domain.mjs';
+import { JUICE_MERCHANT_CODE, JUICE_MINIMUM_CENTS, JUICE_TEA_TITLE, normalizeTitle, isJuiceTea, juicePlanInput, validateJuicePlans } from './juice-domain.mjs';
 
 export const API_VERSION = '2026-10';
 export class ShopifyRequestError extends Error {
@@ -10,7 +11,7 @@ export class ShopifyRequestError extends Error {
 const DELIVERY = `__typename ... on SubscriptionDeliveryMethodLocalDelivery { address { address1 address2 city zip countryCodeV2 provinceCode } localDeliveryOption { code } }
   ... on SubscriptionDeliveryMethodPickup { pickupOption { code location { id } } }`;
 export const SNAPSHOT = `currencyCode billingPolicy { interval intervalCount } deliveryPolicy { interval intervalCount }
-  deliveryMethod { ${DELIVERY} } deliveryPrice { amount currencyCode } customerPaymentMethod { id }
+  deliveryMethod { ${DELIVERY} } deliveryPrice { amount currencyCode }
   lines(first:100) { nodes { id variantId quantity sellingPlanId currentPrice { amount currencyCode } customAttributes { key value } } pageInfo { hasNextPage } }
   discounts(first:1) { nodes { id } }`;
 export const CONTRACT = `id status nextBillingDate revisionId ${SNAPSHOT} originOrder { id displayFinancialStatus }`;
@@ -37,7 +38,7 @@ export class Shopify {
       this.store.saveSecret('access_token', result.access_token);
       if (result.refresh_token) this.store.saveSecret('refresh_token', result.refresh_token);
       this.store.setSetting('tokenExpires', Number(result.expires_in) > 0 ? Date.now() + Number(result.expires_in) * 1000 : 0);
-      this.store.setSetting('scopes', scopes); this.store.db.exec('COMMIT');
+      this.store.setSetting('scopes', scopes); this.store.setSetting('backupLastCompleted', 0); this.store.db.exec('COMMIT');
     } catch (error) { this.store.db.exec('ROLLBACK'); throw error; }
   }
   async token() {
@@ -85,6 +86,70 @@ export class Shopify {
     }
     throw new Error('Meal catalog pagination needs review.');
   }
+  async juiceCatalog() {
+    const items = {}; const parents = []; const teas = []; let after = null;
+    for (let page = 0; page < 10; page++) {
+      const result = await this.request(`query Juices($after:String,$search:String!){shop{currencyCode ianaTimezone}
+        products(first:10,after:$after,query:$search){
+          nodes{id title productType status variants(first:10){nodes{id price availableForSale requiresComponents} pageInfo{hasNextPage}}}
+          pageInfo{hasNextPage endCursor}}}`, { after, search: '(product_type:Juice OR product_type:"Juice Bundle") AND status:active' });
+      assert(result.shop.currencyCode === 'USD' && result.shop.ianaTimezone === ZONE, 'Store currency or timezone changed.');
+      for (const product of result.products.nodes) {
+        assert(!product.variants.pageInfo.hasNextPage, 'Juice variant pagination needs review.');
+        if (product.productType === 'Juice Bundle' && normalizeTitle(product.title) === normalizeTitle("Pick n' Choose Bundle")) {
+          assert(product.variants.nodes.length === 1, 'The exact custom-juice minimum needs review.'); parents.push(product.variants.nodes[0]);
+        }
+        if (product.productType !== 'Juice') continue;
+        for (const variant of product.variants.nodes) {
+          const item = { id: variant.id, title: product.title, type: product.productType, status: product.status, currency: 'USD', price: variant.price, available: variant.availableForSale, requiresComponents: variant.requiresComponents };
+          if (normalizeTitle(product.title) === normalizeTitle(JUICE_TEA_TITLE)) { if (!variant.requiresComponents) teas.push(item); }
+          else if (!isJuiceTea(product.title)) items[variant.id] = item;
+        }
+      }
+      if (!result.products.pageInfo.hasNextPage) {
+        if (parents.length !== 1 || parents[0].price !== (JUICE_MINIMUM_CENTS / 100).toFixed(2)) throw new ShopifyRequestError('JUICE_MINIMUM_NEEDS_REVIEW');
+        return { minimumCents: JUICE_MINIMUM_CENTS, items, tea: teas.length === 1 ? teas[0] : null };
+      }
+      after = result.products.pageInfo.endCursor;
+    }
+    throw new ShopifyRequestError('JUICE_CATALOG_PAGINATION');
+  }
+  async verifyJuicePlans({ required = false } = {}) {
+    const result = (await this.request(`query{sellingPlanGroups(first:100){nodes{id merchantCode name
+      sellingPlans(first:10){nodes{id category
+        billingPolicy{__typename ... on SellingPlanRecurringBillingPolicy{interval intervalCount minCycles maxCycles anchors{type day}}}
+        deliveryPolicy{__typename ... on SellingPlanRecurringDeliveryPolicy{interval intervalCount cutoff preAnchorBehavior intent anchors{type day}}}
+        pricingPolicies{__typename ... on SellingPlanFixedPricingPolicy{adjustmentType adjustmentValue{... on SellingPlanPricingPolicyPercentageValue{percentage}}}}}
+        pageInfo{hasNextPage}}}pageInfo{hasNextPage}}}`)).sellingPlanGroups;
+    assert(!result.pageInfo.hasNextPage, 'App-owned plan pagination needs review.');
+    const groups = result.nodes.filter(group => group.merchantCode === JUICE_MERCHANT_CODE);
+    this.store.setSetting('juiceVerifiedAt', 0);
+    if (!groups.length && !required) { this.store.setSetting('juicePlanIds', null); return null; }
+    assert(groups.length === 1, 'Exactly one app-owned custom juice group is required.');
+    const plans = validateJuicePlans(groups[0]);
+    this.store.setSetting('juicePlanIds', plans); this.store.setSetting('juiceGroupId', groups[0].id); this.store.setSetting('juiceVerifiedAt', Date.now());
+    return plans;
+  }
+  async prepareJuicePlans({ reportStage = () => {} } = {}) {
+    const lease = this.store.lease('juice-plan-setup', 180); assert(lease, 'Juice plan setup is already running.');
+    try {
+      reportStage('live juice catalog'); await this.juiceCatalog();
+      reportStage('app-owned juice policy lookup');
+      if (!await this.verifyJuicePlans()) {
+        // No products or variants are attached here. Existing fixed-bundle and Shopify Subscriptions plans stay untouched.
+        reportStage('unpublished juice plan creation');
+        const created = (await this.request('mutation JuicePlans($input:SellingPlanGroupInput!){sellingPlanGroupCreate(input:$input){sellingPlanGroup{id}userErrors{field code}}}', { input: juicePlanInput() })).sellingPlanGroupCreate;
+        if (!created?.sellingPlanGroup?.id || created.userErrors?.length) {
+          const known = ['BLANK', 'INVALID', 'INVALID_INPUT', 'INCLUSION', 'GREATER_THAN', 'GREATER_THAN_OR_EQUAL_TO', 'LESS_THAN', 'LESS_THAN_OR_EQUAL_TO', 'SELLING_PLAN_BILLING_AND_DELIVERY_POLICY_ANCHORS_MUST_BE_EQUAL', 'SELLING_PLAN_BILLING_CYCLE_MUST_BE_A_MULTIPLE_OF_DELIVERY_CYCLE', 'SELLING_PLAN_MAX_CYCLES_MUST_BE_GREATER_THAN_MIN_CYCLES', 'SELLING_PLAN_DUPLICATE_NAME', 'SELLING_PLAN_DUPLICATE_OPTIONS', 'TAKEN', 'PRESENT'];
+          const code = created?.userErrors?.map(error => error.code).find(value => known.includes(value));
+          throw new ShopifyRequestError(code ? `JUICE_${code}` : 'JUICE_PLAN_CREATION_REJECTED');
+        }
+      }
+      reportStage('final juice policy verification'); const plans = await this.verifyJuicePlans({ required: true });
+      this.store.setSetting('backupLastCompleted', 0);
+      return { plans, productAssociationsChanged: false, billingEnabled: false, minimumCents: JUICE_MINIMUM_CENTS, discountPercent: 10, commitmentWeeks: 4 };
+    } finally { this.store.release('juice-plan-setup', lease); }
+  }
   async verify() {
     const catalog = await this.catalog();
     const result = await this.request(`query { subscriptionContracts(first:1) { nodes { id } pageInfo { hasNextPage } }
@@ -131,10 +196,10 @@ export class Shopify {
     assert(result.subscriptionContractCalculation?.id, 'Calculation ID missing.'); return result.subscriptionContractCalculation.id;
   }
   async calculation(id) { return (await this.request(`query Calculation($id:ID!){subscriptionContractCalculation(id:$id){__typename ... on SubscriptionContractCalculationPending{id} ... on SubscriptionContractCalculationFailure{id} ... on SubscriptionContractCalculationSuccess{id warnings{code message} calculatedContract{${SNAPSHOT}} projectedOrderTotals{subtotal{amount currencyCode} totalDelivery{amount currencyCode} totalMerchandiseDiscounts{amount currencyCode}}}}}`, { id })).subscriptionContractCalculation; }
-  async commit(id) { await this.mutation('mutation Commit($id:ID!){subscriptionContractCalculationCommit(id:$id){contract{... on SubscriptionContract{id status}} userErrors{field message code}}}', { id }, 'subscriptionContractCalculationCommit'); }
+  async commit(id) { return (await this.mutation(`mutation Commit($id:ID!){subscriptionContractCalculationCommit(id:$id){contract{... on SubscriptionContract{id status revisionId ${SNAPSHOT}}} userErrors{field message code}}}`, { id }, 'subscriptionContractCalculationCommit')).contract; }
   async attempt(id, key, origin) { return (await this.mutation('mutation Bill($id:ID!,$input:SubscriptionBillingAttemptInput!){subscriptionBillingAttemptCreate(subscriptionContractId:$id,subscriptionBillingAttemptInput:$input){subscriptionBillingAttempt{id ready errorCode nextActionUrl order{id}} userErrors{field message code}}}', { id, input: { idempotencyKey: key, originTime: origin, paymentProcessingPolicy: 'FAIL_UNLESS_VALID_PAYMENT_METHOD' } }, 'subscriptionBillingAttemptCreate')).subscriptionBillingAttempt; }
   async pollAttempt(id) { return (await this.request('query Attempt($id:ID!){subscriptionBillingAttempt(id:$id){id ready errorCode nextActionUrl order{id}}}', { id })).subscriptionBillingAttempt; }
-  async nextDate(id, date) { await this.mutation('mutation Next($id:ID!,$date:DateTime!){subscriptionContractSetNextBillingDate(contractId:$id,date:$date){contract{id nextBillingDate} userErrors{field message}}}', { id, date }, 'subscriptionContractSetNextBillingDate'); }
+  async nextDate(id, date) { return (await this.mutation('mutation Next($id:ID!,$date:DateTime!){subscriptionContractSetNextBillingDate(contractId:$id,date:$date){contract{id nextBillingDate revisionId} userErrors{field message}}}', { id, date }, 'subscriptionContractSetNextBillingDate')).contract; }
   async cancel(id) {
     if ((await this.contract(id)).status === 'CANCELLED') return;
     const result = await this.mutation('mutation Cancel($id:ID!){subscriptionContractCancel(subscriptionContractId:$id,actor:CUSTOMER){contract{id status} userErrors{field message code}}}', { id }, 'subscriptionContractCancel');

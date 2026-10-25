@@ -8,7 +8,7 @@ import { Script } from 'node:vm';
 import { SHOP, CLIENT_ID, ORIGIN, WEEKS, cents, amount, firstServiceDate, nextServiceDate, nextBillingDate, serviceCutoff, weekAt, validateSelections, validateUnchanged, fingerprint, matchLines, assertLocal, validWebhook, validOauth, validSessionToken } from '../src/domain.mjs';
 import { Store } from '../src/store.mjs';
 import { Worker } from '../src/worker.mjs';
-import { Shopify, ShopifyRequestError } from '../src/shopify.mjs';
+import { Shopify, ShopifyRequestError, CONTRACT, SNAPSHOT } from '../src/shopify.mjs';
 import { createApplication, configuration } from '../src/server.mjs';
 
 const key = Buffer.alloc(32, 7).toString('base64');
@@ -153,11 +153,11 @@ test('four complete simulated calculate/commit/bill/finalize cycles use exact to
     calculate: async (_id, week) => { calculated = contractFor(week); charged.push(week.subtotalCents); return `calculation-${charged.length}`; },
     calculation: async () => ({ __typename: 'SubscriptionContractCalculationSuccess', warnings: [], calculatedContract: calculated,
       projectedOrderTotals: { subtotal: { amount: amount(charged.at(-1)), currencyCode: 'USD' }, totalDelivery: { amount: '0.00', currencyCode: 'USD' }, totalMerchandiseDiscounts: { amount: '0.00', currencyCode: 'USD' } } }),
-    commit: async () => { current = calculated; }, attempt: async (_id, key) => { keys.push(key); return { id: 'attempt-' + keys.length, ready: true, order: { id: 'order-' + keys.length } }; }, nextDate: async (_id, value) => { current.nextBillingDate = value; },
+    commit: async () => { calculated.revisionId = String(Number(current.revisionId) + 1); current = calculated; return current; }, attempt: async (_id, key) => { keys.push(key); return { id: 'attempt-' + keys.length, ready: true, order: { id: 'order-' + keys.length } }; }, nextDate: async (_id, value) => { current.nextBillingDate = value; current.revisionId = String(Number(current.revisionId) + 1); return current; },
   };
   const worker = new Worker(store, api, { gates, now: () => now, identityKey: key });
   const data = { weeks: approved, nextWeek: 'week-b', serviceDate: date, cycle: 1,
-    approvedDeliveryFingerprint: fingerprint(current.deliveryMethod, key), approvedPaymentMethodId: current.customerPaymentMethod.id };
+    approvedDeliveryFingerprint: fingerprint(current.deliveryMethod, key), approvedRevisionId: String(current.revisionId) };
   const id = store.create(data, 'a'.repeat(64)); store.update(id, { state: 'active', contract_id: current.id, due_at: now - 1000 });
   for (let cycle = 1; cycle <= 4; cycle++) {
     current.nextBillingDate = new Date(now - 1000).toISOString(); store.setSetting('heartbeat', now);
@@ -171,10 +171,20 @@ test('failed payments stop without advancing and ambiguous attempts retain the s
   const store = memory(); ready(store); const current = contractFor(approved['week-b']); const keys = []; let fail = true;
   const api = { contract: async () => current, attempt: async (_id, key) => { keys.push(key); if (fail) throw new Error('Timeout'); return { id: 'attempt', errorCode: 'PAYMENT_FAILED', ready: true }; } };
   const worker = new Worker(store, api, { gates, identityKey: key });
-  const id = store.create({ weeks: approved, nextWeek: 'week-b', serviceDate: '2099-10-19T09:00:00-07:00', cycle: 1, idempotencyKey: 'saved-key', billingOrigin: new Date().toISOString(), approvedDeliveryFingerprint: fingerprint(current.deliveryMethod, key), approvedPaymentMethodId: current.customerPaymentMethod.id }, 'a'.repeat(64));
+  const id = store.create({ weeks: approved, nextWeek: 'week-b', serviceDate: '2099-10-19T09:00:00-07:00', cycle: 1, idempotencyKey: 'saved-key', billingOrigin: new Date().toISOString(), approvedDeliveryFingerprint: fingerprint(current.deliveryMethod, key), approvedRevisionId: String(current.revisionId) }, 'a'.repeat(64));
   store.update(id, { state: 'billing', contract_id: current.id }); const lease = store.claim(id);
   await assert.rejects(worker.step(id, lease)); fail = false; await worker.step(id, lease);
   assert.deepEqual(keys, ['saved-key', 'saved-key']); assert.equal(store.get(id).state, 'review'); assert.equal(store.get(id).data.nextWeek, 'week-b'); store.close();
+});
+test('unexpected contract revisions stop a pending renewal for review without initiating a charge', async () => {
+  const store = memory(); ready(store); const current = contractFor(approved['week-b']); current.revisionId = '2'; let billed = 0;
+  const worker = new Worker(store, { contract: async () => current, attempt: async () => { billed++; } }, { gates, identityKey: key });
+  const id = store.create({ weeks: approved, nextWeek: 'week-b', serviceDate: '2099-10-19T09:00:00-07:00', approvedDeliveryFingerprint: fingerprint(current.deliveryMethod, key), approvedRevisionId: '1' }, 'a'.repeat(64));
+  store.update(id, { state: 'billing', contract_id: current.id, due_at: Date.now() - 1 });
+  try { await worker.tick(); assert.equal(billed, 0); assert.equal(store.get(id).state, 'review'); } finally { store.close(); }
+});
+test('renewal queries do not request private payment instruments or add customer-data scopes', () => {
+  assert.doesNotMatch(CONTRACT + SNAPSHOT, /customerPaymentMethod|instrument|billingAddress/);
 });
 
 async function withServer(callback, apiOverrides = {}) {
@@ -256,6 +266,23 @@ test('authenticated setup failure identifies a safe stage while keeping billing 
   assert.equal(response.status, 422);
   assert.match((await response.json()).message, /connection and owned-plan verification \(MAX_COST_EXCEEDED\)/);
 }, { verify: async () => { throw new ShopifyRequestError('MAX_COST_EXCEEDED'); } }));
+
+test('juice setup diagnostics identify the failed stage without exposing remote details', async () => withServer(async ({ base, store, config }) => {
+  const session = store.ticket('admin', 1800);
+  const response = await fetch(base + '/admin/juice/prepare', { method: 'POST', headers: { Cookie: `pit_app_session=${session}`, Origin: config.baseUrl }, body: '{}' });
+  assert.equal(response.status, 422); const body = await response.json();
+  assert.match(body.message, /app-owned juice policy lookup \(undefinedField\)/);
+  assert.doesNotMatch(JSON.stringify(body), /TEST-ONLY-private/);
+  assert.equal((await (await fetch(base + '/health')).json()).billingEnabled, false);
+}, { prepareJuicePlans: async ({ reportStage }) => { reportStage('app-owned juice policy lookup'); const error = new ShopifyRequestError('undefinedField'); error.message = 'TEST-ONLY-private'; throw error; } }));
+
+test('live admin juice catalog remains authenticated and read-only', async () => withServer(async ({ base, store }) => {
+  assert.equal((await fetch(base + '/admin/juice/catalog')).status, 403);
+  const session = store.ticket('admin', 1800);
+  const response = await fetch(base + '/admin/juice/catalog', { headers: { Cookie: `pit_app_session=${session}` } });
+  assert.equal(response.status, 200); assert.equal((await response.json()).minimumCents, 13499);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM rotations').get().n, 0);
+}, { juiceCatalog: async () => ({ minimumCents: 13499, items: {}, tea: null }) }));
 test('owned-plan verification uses the app-scoped query, not the unrelated Liquid appId identifier', async () => {
   const store = memory(); const api = new Shopify(store, {}); api.catalog = async () => catalog;
   api.request = async query => {

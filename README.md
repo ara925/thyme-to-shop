@@ -46,6 +46,8 @@ Continue developing this project in the [Lovable editor](https://lovable.dev/pro
 
 The meal-rotation app backend is now maintained separately in [shopify-app/](shopify-app/README.md). It must have its own runtime, persistent storage and scheduler. The former WordPress plugin was removed from the marketing site on October 24, 2026 and is retained in this repository only as migration/recovery reference. Never deploy the rotation backend into the marketing site or point the storefront at its WordPress REST API.
 
+Production subscription reviews use the approved independent app at `https://corys32.sg-host.com/api` by default. An explicit `VITE_SHOPIFY_ROTATION_API_URL` override remains supported; empty disables it. Customer checkout controls appear only when the server reports all required acceptance gates passed. The dev-only `qa/subscriptions.html` renders clearly labelled UI fixtures and is not included in the production entry points. Fixtures do not prove a real payment or cancellation.
+
 Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
 
 ```sh

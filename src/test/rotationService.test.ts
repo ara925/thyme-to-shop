@@ -14,6 +14,10 @@ const reply = (body: unknown, status = 200) => ({ ok: status >= 200 && status < 
 describe('private meal-rotation service', () => {
   beforeEach(() => { vi.stubEnv('VITE_SHOPIFY_ROTATION_API_URL', 'https://pit-rotation-test.sg-host.com/api'); sessionStorage.clear(); localStorage.clear(); history.replaceState(null, '', '/'); });
   afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+  it('uses the approved independent app in production without changing any customer website domain', () => {
+    vi.stubEnv('PROD', true); vi.stubEnv('VITE_SHOPIFY_ROTATION_API_URL', undefined); expect(rotationApiUrl()).toBe('https://corys32.sg-host.com/api');
+    vi.stubEnv('VITE_SHOPIFY_ROTATION_API_URL', ''); expect(rotationApiUrl()).toBeNull();
+  });
   it.each(['', 'https://placeinthyme.com/api', 'https://shop.placeinthyme.com/api', 'https://checkout.placeinthyme.com/api', 'http://app.example/api', 'https://app.example/api?secret=bad'])('never falls back to WordPress or an unsafe app origin: %s', value => {
     vi.stubEnv('VITE_SHOPIFY_ROTATION_API_URL', value); expect(rotationApiUrl()).toBeNull();
   });

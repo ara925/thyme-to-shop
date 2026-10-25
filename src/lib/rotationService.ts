@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 export function rotationApiUrl(): string | null {
   try {
-    const value = import.meta.env.VITE_SHOPIFY_ROTATION_API_URL?.trim();
+    // The approved production app is independent of the marketing site. An explicit empty override still disables it.
+    const value = (import.meta.env.VITE_SHOPIFY_ROTATION_API_URL ?? (import.meta.env.PROD ? 'https://corys32.sg-host.com/api' : '')).trim();
     if (!value) return null;
     const url = new URL(value);
     if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || url.port
@@ -53,7 +54,7 @@ export class RotationServiceError extends Error {
 
 async function request(path: string, options: RequestInit = {}): Promise<unknown> {
   const api = rotationApiUrl();
-  if (!api) throw new RotationServiceError('Online meal-plan management is not available yet. Your selections are preserved; contact us for setup.');
+  if (!api) throw new RotationServiceError('Online subscription setup is not available yet. Your selections are preserved; contact us for setup.');
   const controller = new AbortController();
   const abort = () => controller.abort();
   if (options.signal?.aborted) controller.abort();
@@ -73,13 +74,13 @@ async function request(path: string, options: RequestInit = {}): Promise<unknown
       if (response.status === 403 || response.status === 410) throw new RotationServiceError('This private plan link is invalid or has expired. Contact us for help.');
       if (response.status === 429) throw new RotationServiceError('Please wait a minute before trying again.');
       if (response.status === 409) throw new RotationServiceError('A renewal is being processed. Please retry shortly or contact us.');
-      if (response.status === 422) throw new RotationServiceError('Your selections could not be verified. Check each week’s minimum, prices, and availability, then try again.');
-      throw new RotationServiceError('The meal-plan service is temporarily unavailable. Your selections are preserved. Please try again or contact us.');
+      if (response.status === 422) throw new RotationServiceError('Your selections could not be verified. Check your plan’s minimum, prices, and availability, then try again.');
+      throw new RotationServiceError('The subscription service is temporarily unavailable. Your selections are preserved. Please try again or contact us.');
     }
     return body;
   } catch (error) {
     if (error instanceof RotationServiceError) throw error;
-    throw new RotationServiceError('We could not reach the meal-plan service. Check your connection and try again.');
+    throw new RotationServiceError('We could not reach the subscription service. Check your connection and try again.');
   } finally {
     clearTimeout(timeout);
     options.signal?.removeEventListener('abort', abort);
@@ -88,7 +89,7 @@ async function request(path: string, options: RequestInit = {}): Promise<unknown
 
 function parse<T>(schema: z.ZodType<T>, body: unknown): T {
   const parsed = schema.safeParse(body);
-  if (!parsed.success) throw new RotationServiceError('The meal-plan service returned an incomplete result. Please try again or contact us.');
+  if (!parsed.success) throw new RotationServiceError('The subscription service returned an incomplete result. Please try again or contact us.');
   return parsed.data;
 }
 
@@ -116,17 +117,18 @@ export async function cancelManagedRotation(access: RotationAccess): Promise<voi
 
 // Tokens belong in a fragment (never a query string) and are stripped before rendering.
 // Session storage permits reloads without leaving long-lived credentials in localStorage.
-export function consumeRotationAccess(id: string, location: Location, history: History, storage?: Storage): RotationAccess | null {
+export function consumeRotationAccess(id: string, location: Location, history: History, storage?: Storage, kind: 'meal' | 'juice' = 'meal'): RotationAccess | null {
   const params = new URLSearchParams(location.hash.slice(1));
   const supplied = params.get('token');
   if (location.hash) history.replaceState(history.state, '', `${location.pathname}${location.search}`);
   if (!/^[a-f0-9]{48}$/.test(id)) return null;
   try {
     const session = storage ?? window.sessionStorage;
-    const token = supplied ?? session.getItem(`pit-rotation-access-${id}`) ?? '';
+    const storageKey = `pit-${kind === 'meal' ? 'rotation' : 'juice'}-access-${id}`;
+    const token = supplied ?? session.getItem(storageKey) ?? '';
     const access = { id, token };
     if (!validRotationAccess(access)) return null;
-    session.setItem(`pit-rotation-access-${id}`, token);
+    session.setItem(storageKey, token);
     return access;
   } catch {
     const access = { id, token: supplied ?? '' };
@@ -138,3 +140,5 @@ export const rotationWeekLabel = (week: RotationWeek) => `Week ${ROTATION_WEEKS.
 export const rotationDateLabel = (value: string) => new Date(
   value.length === 10 ? `${value}T12:00:00-08:00` : value,
 ).toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles', weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+export { request as subscriptionRequest, parse as parseSubscriptionResponse, previewSchema as rotationPreviewSchema };

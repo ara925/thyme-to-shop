@@ -1,12 +1,26 @@
 # Place in Thyme pre-launch audit
 
-Audit date: 2026-10-24 independent Shopify-app migration
+Audit date: 2026-10-25 independent checkout and custom-juice implementation
 Current work: `codex/subscription-enrollment`. Earlier dated findings below are historical unless updated here.
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
 
 **GO for the published frontend and client review. NO-GO for accepting real customer payments.**
+
+### 2026-10-25 implemented checkout and juice workflows
+
+The independent app is now deployed as **0.4.0**, using SiteGround's account → Websites → Node.js Projects → existing project Site Tools → Deployment Options → Actions → Upload manually workflow in the official ChatGPT Chrome extension. No direct SiteGround internal navigation was used for these deployments. The marketing website, domains, prices and existing fixed-bundle plans were not changed. Redeploy preserved the app connection and private storage. Live setup re-read 17 meals, the owned meal plan, three signed app webhooks, zero legacy WordPress endpoints and no existing app-owned contracts. A fresh checked private snapshot completed at `2026-10-25T19:21:03.687Z` before native juice preparation; preparation forces a fresh snapshot as well. All charge/enrollment/storage acceptance flags remain OFF.
+
+New implementation: isolated active-week-only meal checkout; private quote authorization and encrypted cached cart identity; native Storefront price/quantity/subtotal/plan read-back before returning a checkout URL; separate weekly/prepaid custom-juice checkout with tea once and undiscounted; a durable same-mix juice worker; four-paid-week cancellation boundaries and truthful pending-confirmation handling; and customer review/management screens. The ordinary basket is never reused for subscription enrollment. Contract revisions fence unexpected edits without reading private customer payment instruments or adding scopes. Billing retries retain one idempotency key; ambiguous finalization cannot count a payment twice.
+
+Live native plan creation initially failed because billing and delivery weekday anchors must match. The corrected input and regression tests require matching Monday anchors. Creation and final native read-back then succeeded for app-owned weekly plan `gid://shopify/SellingPlan/11247386922` and prepaid plan `gid://shopify/SellingPlan/11247419690`, in merchant-code group `pit-custom-juice-four-week-v1`. Weekly billing requires four cycles; four-week prepayment requires one four-week cycle, not sixteen weeks. Both apply the exact 10% adjustment and weekly delivery. **No product associations changed, no old plan was deleted, and no customer charge or order was created.**
+
+Official Chrome live-catalog preview used 16 Green Cleanse juices at $8.50: $136 retail, $122.40 after 10%, $489.60 for four weeks, plus two $3 one-time teas = $495.60 first prepaid subtotal, excluding tax and delivery. The four Monday dates were November 2/9/16/23. Both Hibiscus records are excluded from the recurring mix/minimum. Native plans verified; enrollment remained false. This is a real catalog/no-charge preview, **not** native paid checkout, fulfillment or renewal acceptance.
+
+Current verification: **264 storefront and 130 independent-app tests pass**, typecheck and production build pass, lint has 0 errors and 15 existing warnings. Official Chrome also interacted with explicitly marked dev-only fixture screens at desktop and 390×844 mobile: prepaid totals, separate checkout acknowledgment/fulfillment choice, two-step cancellation, scheduled boundary and pending confirmation states. Those fixtures had no horizontal overflow and created no real order. The temporary viewport was reset. Screenshots are retained in `subscription-acceptance-2026-10-25`. The frontend changes are still a release candidate until the PR/public-publish check is recorded below.
+
+Remaining implementation/acceptance blockers: authoritative Basic-compatible pre-payment enforcement after a native cart can be edited; exact Orange County address eligibility and cutoff enforcement; native prepaid fulfillment/delivery-fee acceptance; merchant payment-provider confirmation; paid meal A→B→C→A and juice renewal/cancellation acceptance; host backup/restore and continuous scheduler acceptance; and client-approved policies/taxes. The earlier credential-exposure follow-up also remains open, but is not the only blocker. The store is **not launch-ready**, and billing gates must not be enabled based solely on passing fixtures or no-charge previews.
 
 ### 2026-10-24 main-site separation and implementation
 
