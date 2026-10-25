@@ -2,6 +2,12 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { PolicyContent } from './PolicyContent';
 describe('safe readable policies', () => {
+  it('uses active spacing and list utilities instead of an unconfigured typography plugin', () => {
+    const { container } = render(<PolicyContent html='<p>First paragraph</p><p>Second paragraph</p><ul><li>One item</li></ul>' />);
+    expect(container.firstElementChild).toHaveClass('space-y-4', 'leading-relaxed', '[&_ul]:list-disc');
+    expect(container.firstElementChild).not.toHaveClass('prose');
+    expect(container.querySelectorAll('p')).toHaveLength(2);
+  });
   it('preserves headings, lists and working privacy links', () => {
     render(<PolicyContent html='<h2>Your rights</h2><ul><li>Contact us</li></ul><p><a href="https://privacy.shopify.com/en">Privacy portal</a></p>' />);
     expect(screen.getByRole('heading', { name: 'Your rights' })).toBeInTheDocument();
