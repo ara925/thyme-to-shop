@@ -40,7 +40,7 @@ export default function Policies() {
       <section className="mt-8 rounded-xl border p-6">
         <h2 className="font-serif text-xl font-bold">Meal &amp; juice plan terms</h2>
         <p className="mt-3 leading-relaxed">The meal plan rotates Week 1 → Week 2 → Week 3, charging the active week's actual selected total with a $120 weekly minimum. You may cancel anytime.</p>
-        <p className="mt-3 leading-relaxed">The Pick n' Choose juice plan repeats one mix, with a $134.99 retail minimum before 10% off. It has a four-week minimum commitment, with weekly billing or four-week prepayment. Cancellation is available after each four-week period.</p>
+        <p className="mt-3 leading-relaxed">The Pick n' Choose juice plan repeats one mix, with a $134.99 retail minimum before 10% off. Payments are weekly, not four weeks upfront, with a four-paid-week minimum commitment. Orange County delivery adds $15 for each weekly delivery; pickup is free. Cancellation is available after each four-week period.</p>
         <p className="mt-3 text-sm text-muted-foreground">Both custom plans currently require team enrollment; submitting a plan does not create an online subscription or make a charge. Fixed juice bundles have separate one-time and weekly purchase options and do not use the custom plan's 10% discount or four-week terms.</p>
         <div className="mt-4 flex flex-wrap gap-3"><Button asChild variant="outline"><Link to="/subscribe/meals">Meal planner</Link></Button><Button asChild variant="outline"><Link to="/subscribe/juices">Juice planner</Link></Button></div>
       </section>

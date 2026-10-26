@@ -1,5 +1,6 @@
 import { SHOP, assert, cents, ORIGIN, validateUnchanged, firstServiceDate } from './domain.mjs';
 import { validateJuiceSelection, deliveryWeeksPerPayment } from './juice-domain.mjs';
+import { assertWeeklyJuiceEnrollment } from './enrollment-policy.mjs';
 
 const CHECKOUT_HOSTS = [SHOP, 'checkout.placeinthyme.com'];
 export function checkoutUrl(value) {
@@ -66,6 +67,7 @@ export function verifyMealCart(cart, row, planId, input) {
 export function juiceCheckoutInput(row, planId, fulfillment) {
   assert(row?.state === 'quoted' && row.data.kind === 'juice' && /^gid:\/\/shopify\/SellingPlan\/\d+$/.test(planId || ''), 'This juice plan cannot enter checkout.');
   const choice = fulfillmentSelection(fulfillment); const mix = row.data.mix;
+  assertWeeklyJuiceEnrollment(mix);
   const lines = mix.lines.map(line => ({ merchandiseId: line.variantId, quantity: line.quantity, sellingPlanId: planId, attributes: [{ key: '_pit_juice_id', value: row.id }] }));
   if (mix.oneTimeAddOn) lines.push({ merchandiseId: mix.oneTimeAddOn.variantId, quantity: mix.oneTimeAddOn.quantity, attributes: [{ key: '_pit_juice_tea', value: 'one-time' }] });
   return { lines, attributes: [
@@ -152,6 +154,7 @@ export class SubscriptionCheckout {
     try {
       const row = this.store.get(id); const choice = fulfillmentSelection(fulfillment);
       assert(row?.state === 'quoted' && row.data.kind === 'juice' && row.data.expiresAt > this.now(), 'The unenrolled juice plan expired or is already enrolled.');
+      assertWeeklyJuiceEnrollment(row.data.mix);
       assert(row.data.firstServiceDate.slice(0, 10) === firstServiceDate(this.now()).slice(0, 10), 'The service cutoff changed. Review your juice mix again.');
       const mix = validateJuiceSelection({ selections: Object.fromEntries(row.data.mix.lines.map(line => [line.variantId, line.quantity])), billingPreference: row.data.mix.billingPreference, teaQuantity: row.data.mix.oneTimeAddOn?.quantity || 0 }, await this.api.juiceCatalog());
       assert(JSON.stringify(mix) === JSON.stringify(row.data.mix), 'Juice prices changed; review is required before checkout.');

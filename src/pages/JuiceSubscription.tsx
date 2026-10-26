@@ -22,6 +22,7 @@ import { isQuantityMap, usePersistentDraft } from '@/hooks/usePersistentDraft';
 import { JuicePlanReview } from '@/components/subscriptions/JuicePlanReview';
 import { rotationApiUrl } from '@/lib/rotationService';
 import type { JuiceSelections } from '@/lib/juiceSubscriptionService';
+import { CUSTOMER_JUICE_PREPAYMENT_ENABLED } from '@/lib/juiceBilling';
 import {
   AlertCircle,
   Check,
@@ -87,8 +88,8 @@ const JuiceSubscription = () => {
     'place-in-thyme-juice-mix-v1', {}, isQuantityMap,
   );
   const [billingPreference, setBillingPreference, billingStorageUnavailable] = usePersistentDraft<BillingPreference | null>(
-    'place-in-thyme-juice-billing-v1', null,
-    (value: unknown): value is BillingPreference | null => value === null || value === 'weekly' || value === 'prepaid',
+    'place-in-thyme-juice-billing-v1', 'weekly',
+    (value: unknown): value is BillingPreference | null => value === 'weekly' || (CUSTOMER_JUICE_PREPAYMENT_ENABLED && (value === null || value === 'prepaid')),
   );
   const [hibiscusAddOnQuantity, setHibiscusAddOnQuantity, teaStorageUnavailable] = usePersistentDraft<number>(
     'place-in-thyme-juice-tea-v1', 0,
@@ -248,7 +249,7 @@ const JuiceSubscription = () => {
   );
   const reviewSelections: JuiceSelections | null = useMemo(() => canRequest && billingPreference ? {
     selections: Object.fromEntries(selectedItems.map(item => [item.product.node.variants.edges[0].node.id, item.quantity])),
-    billingPreference, teaQuantity: hibiscusAddOnQuantity,
+    billingPreference: 'weekly', teaQuantity: hibiscusAddOnQuantity,
   } : null, [canRequest, billingPreference, selectedItems, hibiscusAddOnQuantity]);
 
   const requestMailto = useMemo(() => {
@@ -286,12 +287,13 @@ const JuiceSubscription = () => {
       `Live weekly minimum: ${formatCents(minimumCents, minimumMoney.currencyCode)}`,
       '',
       'Confirmed subscription terms: 10% off the selected retail total and a minimum four-week commitment. Cancellation is available after each four-week period.',
+      'Payment is collected weekly, not four weeks upfront. Orange County delivery is $15 for each weekly delivery; pickup is free. Tax is confirmed by Shopify.',
       `Billing preference: ${BILLING_PREFERENCE_COPY[billingPreference]}.`,
       '',
       'Live Shopify configuration check:',
       `- Exact weekly plan on every selected juice: ${everySelectedItemHasExactWeeklyPlan ? 'Yes' : 'No'}`,
       `- Exact 10% percentage adjustment on every selected plan: ${everySelectedPlanHasExactDiscount ? 'Yes' : 'No'}`,
-      independentReviewConfigured ? '- This manual request does not enroll a subscription. Use the app-verified separate checkout when it is offered.' : '- Four-cycle commitment / prepaid option enforceable in online checkout: No; this is not currently exposed by the storefront configuration.',
+      independentReviewConfigured ? '- This manual request does not enroll a subscription. Use the app-verified separate checkout when it is offered.' : '- Four-paid-week commitment enforceable in online checkout: No; this is not currently exposed by the storefront configuration.',
       '',
       'Please send the manual enrollment or payment link, billing schedule, and delivery or pickup details before charging me.',
     ].join('\n');
@@ -368,10 +370,10 @@ const JuiceSubscription = () => {
                 ? 'This browser cannot save your juice draft. Keep this page open to retain your choices.'
                 : 'Your juice mix, tea add-on and billing preference are saved on this device for 30 days. Prices and availability are checked again when you return.'}
             </p>
-            {(Object.values(selections).some(quantity => quantity > 0) || billingPreference || hibiscusAddOnQuantity > 0) && (
+            {(Object.values(selections).some(quantity => quantity > 0) || (CUSTOMER_JUICE_PREPAYMENT_ENABLED && billingPreference) || hibiscusAddOnQuantity > 0) && (
               <Button variant="outline" className="mb-4" onClick={() => {
                 setSelections({});
-                setBillingPreference(null);
+                setBillingPreference(CUSTOMER_JUICE_PREPAYMENT_ENABLED ? null : 'weekly');
                 setHibiscusAddOnQuantity(0);
               }}>Reset juice draft</Button>
             )}
@@ -388,17 +390,17 @@ const JuiceSubscription = () => {
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
               <div className="space-y-2">
                 <p>
-                  The confirmed subscription is 10% off with a four-week minimum commitment. Choose weekly billing or four-week prepayment below{independentReviewConfigured ? ' and review the plan with the independent Shopify app.' : ' for manual enrollment.'}
+                  The confirmed subscription is 10% off with a four-paid-week minimum commitment. Payments are weekly, not four weeks upfront{independentReviewConfigured ? '. Review the plan with the independent Shopify app.' : '; request manual enrollment below.'}
                   {' '}Cancellation is available after each four-week period.
                 </p>
                 <p>
                   {independentReviewConfigured
-                    ? 'The live review checks this app’s weekly and prepaid policies separately from the ordinary weekly juice plans. A checkout is offered only after the server confirms launch acceptance.'
+                    ? 'The live review checks this app’s weekly-payment policy separately from the ordinary weekly juice plans. A checkout is offered only after the server confirms launch acceptance.'
                     : sellingPlansLoading
                     ? 'Checking the live weekly plans and discount configuration…'
                     : everyCatalogPlanHasExactDiscount
-                      ? 'An exact 10% percentage adjustment is present on every live weekly juice plan. Online subscription checkout still remains unavailable until the four-cycle commitment or prepaid option can be verified and enforced.'
-                      : 'Shopify still needs the confirmed exact 10% percentage adjustment on every live weekly juice plan. The four-cycle commitment and prepaid option also cannot currently be enforced in online checkout, so this page will not add a misleading subscription to the cart.'}
+                      ? 'An exact 10% percentage adjustment is present on every live weekly juice plan. Online subscription checkout still remains unavailable until the four-paid-week commitment can be verified and enforced.'
+                      : 'Shopify still needs the confirmed exact 10% percentage adjustment on every live weekly juice plan. The four-paid-week commitment also cannot currently be enforced in online checkout, so this page will not add a misleading subscription to the cart.'}
                 </p>
                 <p className="font-medium">
                   {everyCatalogPlanHasExactDiscount
@@ -700,9 +702,9 @@ const JuiceSubscription = () => {
                 )}
 
                 <div className="mb-5 rounded-xl border border-border bg-muted/30 p-4">
-                  <h3 className="font-serif text-base font-bold text-foreground">Billing preference</h3>
+                  <h3 className="font-serif text-base font-bold text-foreground">Weekly payments</h3>
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    {independentReviewConfigured ? 'Choose weekly payments or one payment for four weekly deliveries. The review below checks the current policies and tells you whether online enrollment is open.' : 'Select how you want the confirmed four-week enrollment billed. This records a manual-enrollment choice; Shopify does not currently expose a four-payment commitment or prepaid plan for online checkout.'}
+                    Pay for one week at a time, with a four-paid-week minimum. Orange County delivery adds $15 for each weekly delivery; pickup is free. No four-week upfront payment is offered.
                   </p>
                   <RadioGroup
                     className="mt-4 gap-3"
@@ -719,7 +721,7 @@ const JuiceSubscription = () => {
                         </span>
                       </span>
                     </Label>
-                    <Label htmlFor="juice-billing-prepaid" className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 leading-relaxed">
+                    {CUSTOMER_JUICE_PREPAYMENT_ENABLED && <Label htmlFor="juice-billing-prepaid" className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-background p-3 leading-relaxed">
                       <RadioGroupItem value="prepaid" id="juice-billing-prepaid" className="mt-0.5" />
                       <span>
                         <span className="block">Prepay all four weeks</span>
@@ -727,7 +729,7 @@ const JuiceSubscription = () => {
                           {independentReviewConfigured ? 'One payment funds four weekly deliveries. The one-time tea add-on is not repeated.' : 'One upfront payment covering four deliveries. No live prepaid selling plan is configured, so enrollment remains manual.'}
                         </span>
                       </span>
-                    </Label>
+                    </Label>}
                   </RadioGroup>
                   {billingPreference === 'prepaid' && estimatedPrepaidCents !== null && (
                     <p className="mt-3 text-sm font-semibold text-primary">

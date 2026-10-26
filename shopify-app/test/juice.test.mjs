@@ -197,7 +197,7 @@ function juiceCart(input, row) {
         cost: { amountPerQuantity: { amount: amount(price), currencyCode: 'USD' }, totalAmount: { amount: amount(price * line.quantity), currencyCode: 'USD' } } };
     }) } };
 }
-for (const mode of ['weekly', 'prepaid']) test(`isolated ${mode} juice cart has one recurring mix and only one one-time tea purchase`, () => {
+for (const mode of ['weekly']) test(`isolated ${mode} juice cart has one recurring mix and only one one-time tea purchase`, () => {
   const { store, id } = fixture(mode);
   try { const row = store.get(id); const input = juiceCheckoutInput(row, plans[mode], { method: 'pickup', window: 'monday-after-9am' });
     const cart = juiceCart(input, row); assert.equal(input.lines[1].sellingPlanId, undefined);
@@ -205,11 +205,14 @@ for (const mode of ['weekly', 'prepaid']) test(`isolated ${mode} juice cart has 
     cart.lines.nodes[1].sellingPlanAllocation = cart.lines.nodes[0].sellingPlanAllocation; assert.throws(() => verifyJuiceCart(cart, row, plans[mode], input));
   } finally { store.close(); }
 });
-test('native prepaid price or subtotal mismatch is rejected before exposing any checkout URL', async () => {
+test('a stale prepaid quote is rejected before any catalog, cart or checkout request', async () => {
   const { store, id } = fixture('prepaid'); const row = store.get(id);
-  const service = new SubscriptionCheckout(store, { juiceCatalog: async () => catalog, verifyJuicePlans: async () => plans }, { storefrontToken: 'TEST-ONLY-public', now: () => initialNow,
-    fetchImpl: async (_url, options) => { const input = JSON.parse(options.body).variables.input; const cart = juiceCart(input, row); cart.cost.subtotalAmount.amount = '999.00'; return { ok: true, text: async () => JSON.stringify({ data: { cartCreate: { cart, warnings: [], userErrors: [] } } }) }; } });
-  try { await assert.rejects(service.startJuice(id, { method: 'pickup', window: 'monday-after-9am' })); assert.equal(store.getSetting(`secret_checkout_${id}`), null); }
+  let calls = 0;
+  const service = new SubscriptionCheckout(store, { juiceCatalog: async () => { calls++; return catalog; }, verifyJuicePlans: async () => { calls++; return plans; } }, { storefrontToken: 'TEST-ONLY-public', now: () => initialNow,
+    fetchImpl: async () => { calls++; throw Error('A prepaid cart must not be created.'); } });
+  try { assert.throws(() => juiceCheckoutInput(row, plans.prepaid, { method: 'pickup', window: 'monday-after-9am' }), /paid weekly/);
+    await assert.rejects(service.startJuice(id, { method: 'pickup', window: 'monday-after-9am' }), /paid weekly/);
+    assert.equal(calls, 0); assert.equal(store.getSetting(`secret_checkout_${id}`), null); }
   finally { store.close(); }
 });
 test('juice preview is read-only and enrollment remains closed while the extra juice gate is off', async () => {
@@ -218,10 +221,30 @@ test('juice preview is read-only and enrollment remains closed while the extra j
   await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve)); const base = `http://127.0.0.1:${app.server.address().port}`;
   try {
     const before = store.db.prepare('SELECT COUNT(*) AS n FROM rotations').get().n;
-    let response = await fetch(base + '/api/juice/preview', { method: 'POST', headers: { Origin: ORIGIN }, body: JSON.stringify(input('prepaid')) }); assert.equal(response.status, 200);
-    const value = await response.json(); assert.equal(value.enrollmentReady, false); assert.equal(value.mix.firstSubtotalCents, 49200); assert.equal(value.deliveryDates.length, 4);
+    let response = await fetch(base + '/api/juice/preview', { method: 'POST', headers: { Origin: ORIGIN }, body: JSON.stringify(input('weekly')) }); assert.equal(response.status, 200);
+    const value = await response.json(); assert.equal(value.enrollmentReady, false); assert.equal(value.mix.firstSubtotalCents, 12750); assert.equal(value.deliveryDates.length, 4);
+    response = await fetch(base + '/api/juice/preview', { method: 'POST', headers: { Origin: ORIGIN }, body: JSON.stringify(input('prepaid')) }); assert.equal(response.status, 422);
     assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM rotations').get().n, before);
     response = await fetch(base + '/api/juice/quote', { method: 'POST', headers: { Origin: ORIGIN }, body: JSON.stringify(input('prepaid')) }); assert.equal(response.status, 503);
     response = await fetch(base + '/api/juice/preview', { method: 'POST', headers: { Origin: 'https://evil.test' }, body: JSON.stringify(input('weekly')) }); assert.equal(response.status, 403);
   } finally { app.server.closeAllConnections(); await new Promise(resolve => app.server.close(resolve)); store.close(); }
+});
+
+test('four committed weekly juice deliveries retain a separate $15 fee each week, never a $60 upfront fee', async () => {
+  const { store, id, contract } = fixture(); let now = initialNow; const deliveryFees = [1500];
+  contract.deliveryMethod = { __typename: 'SubscriptionDeliveryMethodLocalDelivery', address: { countryCodeV2: 'US', provinceCode: 'CA', address1: 'TEST-ONLY address', city: 'Mission Viejo', zip: '92691' } };
+  contract.deliveryPrice = { amount: '15.00', currencyCode: 'USD' };
+  const api = { contract: async () => contract, juiceCatalog: async () => catalog,
+    attempt: async () => { assert.equal(contract.billingPolicy.intervalCount, 1); assert.equal(contract.deliveryPrice.amount, '15.00'); deliveryFees.push(1500); return { id: 'attempt-' + deliveryFees.length, ready: true, order: { id: 'order-' + deliveryFees.length } }; },
+    nextDate: async (_id, value) => { contract.nextBillingDate = value; }, cancel: async () => { contract.status = 'CANCELLED'; } };
+  const worker = new JuiceWorker(store, api, { gates, now: () => now, identityKey: key });
+  try {
+    await worker.bind(contract.id, contract); let lease = store.claim(id); await worker.requestCancellation(id, lease); store.unlock(id, lease);
+    for (let payment = 0; payment < 3; payment++) {
+      now = Date.parse(contract.nextBillingDate); store.setSetting('heartbeat', now); lease = store.claim(id);
+      for (let step = 0; step < 3; step++) await worker.step(id, lease);
+      store.unlock(id, lease);
+    }
+    assert.deepEqual(deliveryFees, [1500, 1500, 1500, 1500]); assert.equal(store.get(id).data.paidWeeks, 4); assert.equal(store.get(id).state, 'stopped');
+  } finally { store.close(); }
 });

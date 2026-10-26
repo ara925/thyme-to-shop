@@ -3,9 +3,9 @@ import { previewJuicePlan, quoteJuiceEnrollment, getManagedJuicePlan, cancelMana
 import { consumeRotationAccess } from '@/lib/rotationService';
 
 const id = 'c'.repeat(48); const token = 'd'.repeat(64); const access = { id, token };
-const input: JuiceSelections = { selections: { 'gid://shopify/ProductVariant/100': 9 }, billingPreference: 'prepaid', teaQuantity: 2 };
-const preview: JuicePreview = { mix: { billingPreference: 'prepaid', minimumCents: 13499, discountPercent: 10, commitmentWeeks: 4, deliveriesPerPayment: 4,
-  retailSubtotalCents: 13500, subtotalCents: 12150, fourWeekSubtotalCents: 48600, firstSubtotalCents: 49200,
+const input: JuiceSelections = { selections: { 'gid://shopify/ProductVariant/100': 9 }, billingPreference: 'weekly', teaQuantity: 2 };
+const preview: JuicePreview = { mix: { billingPreference: 'weekly', minimumCents: 13499, discountPercent: 10, commitmentWeeks: 4, deliveriesPerPayment: 1,
+  retailSubtotalCents: 13500, subtotalCents: 12150, fourWeekSubtotalCents: 48600, firstSubtotalCents: 12750,
   lines: [{ variantId: 'gid://shopify/ProductVariant/100', title: 'TEST-ONLY Green Juice', quantity: 9, retailPriceCents: 1500, priceCents: 1350 }],
   oneTimeAddOn: { variantId: 'gid://shopify/ProductVariant/200', title: 'Hibiscus Tea (Sweetened)', quantity: 2, priceCents: 300, subtotalCents: 600 } },
   firstServiceDate: '2026-11-02', deliveryDates: ['2026-11-02', '2026-11-09', '2026-11-16', '2026-11-23'], currencyCode: 'USD', pricingVerified: true, enrollmentReady: false };
@@ -13,9 +13,18 @@ const reply = (body: unknown, status = 200) => ({ ok: status >= 200 && status < 
 describe('private four-week juice service', () => {
   beforeEach(() => { vi.stubEnv('VITE_SHOPIFY_ROTATION_API_URL', 'https://TEST-ONLY-app.sg-host.com/api'); sessionStorage.clear(); localStorage.clear(); history.replaceState(null, '', '/'); });
   afterEach(() => { vi.unstubAllEnvs(); vi.unstubAllGlobals(); });
-  it('validates a no-charge prepaid quote with one tea purchase and four separate delivery weeks', async () => {
+  it('validates a no-charge weekly quote with one tea purchase and four separate delivery weeks', async () => {
     const fetch = vi.fn().mockResolvedValue(reply(preview)); vi.stubGlobal('fetch', fetch);
     expect(await previewJuicePlan(input)).toEqual(preview); expect(fetch.mock.calls[0][0]).toMatch(/\/juice\/preview$/); expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual(input);
+  });
+  it('rejects a prepaid enrollment request before making any network request', async () => {
+    const fetch = vi.fn(); vi.stubGlobal('fetch', fetch);
+    await expect(previewJuicePlan({ ...input, billingPreference: 'prepaid' } as unknown as JuiceSelections)).rejects.toThrow();
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  it('rejects a stale prepaid server review even when its four-week math is internally valid', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ ...preview, mix: { ...preview.mix, billingPreference: 'prepaid', deliveriesPerPayment: 4, firstSubtotalCents: 49200 } })));
+    await expect(previewJuicePlan(input)).rejects.toThrow('incomplete');
   });
   it.each(['subtotal', 'tea', 'schedule', 'discount', 'minimum'])('rejects an inconsistent server %s result', async field => {
     const value = structuredClone(preview);
