@@ -1,4 +1,4 @@
-import { assert, assertLocal, fingerprint, matchLines, serviceCutoff, ReviewRequiredError } from './domain.mjs';
+import { assert, assertLocal, assertReviewedFulfillment, fingerprint, matchLines, serviceCutoff, ReviewRequiredError } from './domain.mjs';
 import { deliveryWeeksPerPayment, advanceService, advanceJuiceBilling, unchangedJuiceMix, cancellationTarget } from './juice-domain.mjs';
 
 const LIVE = ['active', 'billing', 'finalizing', 'cancelling'];
@@ -33,6 +33,7 @@ export class JuiceWorker {
       }
       assert(current.state === 'quoted' && data.expiresAt > this.now(), 'Initial juice enrollment expired; review is required.');
       this.verifyContract(contract, data);
+      assertReviewedFulfillment(contract, data.checkoutFulfillment);
       assert(contract.status === 'ACTIVE' && contract.originOrder?.displayFinancialStatus === 'PAID'
         && Date.parse(contract.nextBillingDate) > this.now() + 86400000, 'Initial juice payment or next billing date is unconfirmed.');
       const paidWeeks = deliveryWeeksPerPayment(data.mix.billingPreference);

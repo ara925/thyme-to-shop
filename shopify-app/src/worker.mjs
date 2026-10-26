@@ -1,4 +1,4 @@
-import { WEEKS, assert, assertLocal, assertCalculation, fingerprint, matchLines, validateUnchanged, nextServiceDate, nextBillingDate, serviceCutoff, weekAt, ReviewRequiredError } from './domain.mjs';
+import { WEEKS, assert, assertLocal, assertReviewedFulfillment, assertCalculation, fingerprint, matchLines, validateUnchanged, nextServiceDate, nextBillingDate, serviceCutoff, weekAt, ReviewRequiredError } from './domain.mjs';
 import { JuiceWorker } from './juice-worker.mjs';
 
 const LIVE_STATES = ['active', 'calculating', 'committing', 'billing', 'finalizing'];
@@ -62,6 +62,7 @@ export class Worker {
       const planId = this.store.getSetting('planId');
       assert(planId && contract.lines.nodes.every(line => line.sellingPlanId === planId), 'Selling plan does not match.');
       assertLocal(contract);
+      assertReviewedFulfillment(contract, data.checkoutFulfillment);
       assert(contract.status === 'ACTIVE' && contract.currencyCode === 'USD' && !contract.discounts?.nodes?.length && !contract.lines.pageInfo.hasNextPage
         && matchLines(data.weeks[data.firstWeek].lines, contract.lines.nodes), 'Initial checkout differs from saved selections.');
       assert(contract.originOrder?.displayFinancialStatus === 'PAID', 'Initial payment is not confirmed.');

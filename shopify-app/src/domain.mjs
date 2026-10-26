@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 export const SHOP = 'thyme-time-store-brreo.myshopify.com';
 export const CLIENT_ID = '7d9a72b3188adb3a745370a1768b751d';
 export const ORIGIN = 'https://shop.placeinthyme.com';
+export const PICKUP_LOCATION_ID = 'gid://shopify/Location/111856681258';
 export const WEEKS = ['week-a', 'week-b', 'week-c'];
 export const ZONE = 'America/Los_Angeles';
 export const SCOPES = ['write_products', 'write_purchase_options', 'write_own_subscription_contracts'];
@@ -73,13 +74,20 @@ export function assertLocal(contract, { billingIntervalCount = 1 } = {}) {
   const kind = method?.__typename;
   const expected = { SubscriptionDeliveryMethodPickup: 0, SubscriptionDeliveryMethodLocalDelivery: 1500 };
   assert(Object.hasOwn(expected, kind) && contract.deliveryPrice?.currencyCode === 'USD' && cents(contract.deliveryPrice.amount) === expected[kind], 'Only free pickup or $15 native local delivery is supported.');
-  if (kind === 'SubscriptionDeliveryMethodPickup') assert(/^gid:\/\/shopify\/Location\/[0-9]+$/.test(method.pickupOption?.location?.id || ''), 'Pickup identity missing.');
+  if (kind === 'SubscriptionDeliveryMethodPickup') assert(method.pickupOption?.location?.id === PICKUP_LOCATION_ID, 'Pickup must use the approved Place in Thyme location.');
   else {
     const address = method.address;
     assert(address?.countryCodeV2 === 'US' && address.provinceCode === 'CA' && address.address1 && address.city && /^\d{5}(?:-\d{4})?$/.test(address.zip), 'Native local-delivery address needs review.');
   }
   assert(contract.billingPolicy?.interval === 'WEEK' && contract.billingPolicy.intervalCount === billingIntervalCount
     && contract.deliveryPolicy?.interval === 'WEEK' && contract.deliveryPolicy.intervalCount === 1, 'The approved billing interval and weekly delivery are required.');
+}
+export function assertReviewedFulfillment(contract, selection) {
+  const pickup = selection?.method === 'pickup' && selection.window === 'monday-after-9am';
+  const delivery = selection?.method === 'delivery' && ['monday', 'tuesday'].includes(selection.window);
+  assert(pickup || delivery, 'The reviewed local fulfillment choice is missing or invalid.');
+  assert(contract.deliveryMethod?.__typename === (pickup ? 'SubscriptionDeliveryMethodPickup' : 'SubscriptionDeliveryMethodLocalDelivery'),
+    'Shopify fulfillment differs from the reviewed choice; manual reconciliation is required.');
 }
 export function assertCalculation(calculation, week, contract) {
   assert(calculation.__typename === 'SubscriptionContractCalculationSuccess' && !calculation.warnings?.length, 'Calculation needs review.');

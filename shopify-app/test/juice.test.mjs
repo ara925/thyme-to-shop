@@ -5,7 +5,7 @@ import { Worker } from '../src/worker.mjs';
 import { JuiceWorker } from '../src/juice-worker.mjs';
 import { createApplication } from '../src/server.mjs';
 import { Shopify, ShopifyRequestError } from '../src/shopify.mjs';
-import { SHOP, ORIGIN, amount, fingerprint } from '../src/domain.mjs';
+import { SHOP, ORIGIN, PICKUP_LOCATION_ID, amount, fingerprint } from '../src/domain.mjs';
 import { validateJuiceSelection, unchangedJuiceMix, juicePlanInput, validateJuicePlans, cancellationTarget, advanceJuiceBilling } from '../src/juice-domain.mjs';
 import { juiceCheckoutInput, verifyJuiceCart, SubscriptionCheckout } from '../src/checkout.mjs';
 
@@ -23,13 +23,13 @@ function contractFor(mode, id, now = initialNow) {
   const mix = mixFor(mode); const next = advanceJuiceBilling(new Date(now).toISOString(), mode);
   return { id: 'gid://shopify/SubscriptionContract/100', status: 'ACTIVE', currencyCode: 'USD', revisionId: '1', nextBillingDate: next,
     billingPolicy: { interval: 'WEEK', intervalCount: mode === 'prepaid' ? 4 : 1 }, deliveryPolicy: { interval: 'WEEK', intervalCount: 1 },
-    deliveryMethod: { __typename: 'SubscriptionDeliveryMethodPickup', pickupOption: { code: 'pickup', location: { id: 'gid://shopify/Location/1' } } }, deliveryPrice: { amount: '0.00', currencyCode: 'USD' },
+    deliveryMethod: { __typename: 'SubscriptionDeliveryMethodPickup', pickupOption: { code: 'pickup', location: { id: PICKUP_LOCATION_ID } } }, deliveryPrice: { amount: '0.00', currencyCode: 'USD' },
     customerPaymentMethod: { id: 'gid://shopify/CustomerPaymentMethod/1' }, discounts: { nodes: [] }, originOrder: { id: 'gid://shopify/Order/1', displayFinancialStatus: 'PAID' },
     lines: { pageInfo: { hasNextPage: false }, nodes: mix.lines.map(line => ({ variantId: line.variantId, quantity: line.quantity, currentPrice: { amount: amount(line.priceCents), currencyCode: 'USD' }, sellingPlanId: plans[mode], customAttributes: [{ key: '_pit_juice_id', value: id }] })) } };
 }
 function fixture(mode = 'weekly') {
   const store = new Store(':memory:', key); ready(store, initialNow); const mix = mixFor(mode);
-  const id = store.create({ kind: 'juice', mix, firstServiceDate: firstService, expiresAt: initialNow + 1800000, paidWeeks: 0 }, 'b'.repeat(64));
+  const id = store.create({ kind: 'juice', mix, firstServiceDate: firstService, checkoutFulfillment: { method: 'pickup', window: 'monday-after-9am' }, expiresAt: initialNow + 1800000, paidWeeks: 0 }, 'b'.repeat(64));
   const contract = contractFor(mode, id); return { store, id, mix, contract };
 }
 test('juice weekly and four-week-prepaid quotes use the same mix and exactly one first-order tea add-on', () => {
@@ -234,6 +234,7 @@ test('four committed weekly juice deliveries retain a separate $15 fee each week
   const { store, id, contract } = fixture(); let now = initialNow; const deliveryFees = [1500];
   contract.deliveryMethod = { __typename: 'SubscriptionDeliveryMethodLocalDelivery', address: { countryCodeV2: 'US', provinceCode: 'CA', address1: 'TEST-ONLY address', city: 'Mission Viejo', zip: '92691' } };
   contract.deliveryPrice = { amount: '15.00', currencyCode: 'USD' };
+  store.update(id, { data: { ...store.get(id).data, checkoutFulfillment: { method: 'delivery', window: 'monday' } } });
   const api = { contract: async () => contract, juiceCatalog: async () => catalog,
     attempt: async () => { assert.equal(contract.billingPolicy.intervalCount, 1); assert.equal(contract.deliveryPrice.amount, '15.00'); deliveryFees.push(1500); return { id: 'attempt-' + deliveryFees.length, ready: true, order: { id: 'order-' + deliveryFees.length } }; },
     nextDate: async (_id, value) => { contract.nextBillingDate = value; }, cancel: async () => { contract.status = 'CANCELLED'; } };

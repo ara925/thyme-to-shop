@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Script } from 'node:vm';
-import { SHOP, CLIENT_ID, ORIGIN, WEEKS, cents, amount, firstServiceDate, nextServiceDate, nextBillingDate, serviceCutoff, weekAt, validateSelections, validateUnchanged, fingerprint, matchLines, assertLocal, validWebhook, validOauth, validSessionToken } from '../src/domain.mjs';
+import { SHOP, CLIENT_ID, ORIGIN, PICKUP_LOCATION_ID, WEEKS, cents, amount, firstServiceDate, nextServiceDate, nextBillingDate, serviceCutoff, weekAt, validateSelections, validateUnchanged, fingerprint, matchLines, assertLocal, validWebhook, validOauth, validSessionToken } from '../src/domain.mjs';
 import { Store } from '../src/store.mjs';
 import { Worker } from '../src/worker.mjs';
 import { Shopify, ShopifyRequestError, CONTRACT, SNAPSHOT } from '../src/shopify.mjs';
@@ -27,7 +27,7 @@ const memory = () => new Store(':memory:', key);
 const gates = Object.fromEntries(['billing', 'checkout', 'fulfillment', 'storefront', 'launch', 'persistentStorage'].map(key => [key, true]));
 const contractFor = week => ({ id: 'gid://shopify/SubscriptionContract/123', status: 'ACTIVE', currencyCode: 'USD', revisionId: '1',
   nextBillingDate: new Date(Date.now() - 1000).toISOString(), billingPolicy: { interval: 'WEEK', intervalCount: 1 }, deliveryPolicy: { interval: 'WEEK', intervalCount: 1 },
-  deliveryMethod: { __typename: 'SubscriptionDeliveryMethodPickup', pickupOption: { code: 'pickup', location: { id: 'gid://shopify/Location/1' } } },
+  deliveryMethod: { __typename: 'SubscriptionDeliveryMethodPickup', pickupOption: { code: 'pickup', location: { id: PICKUP_LOCATION_ID } } },
   deliveryPrice: { amount: '0.00', currencyCode: 'USD' }, customerPaymentMethod: { id: 'payment-1' }, discounts: { nodes: [] },
   lines: { nodes: week.lines.map(line => ({ variantId: line.variantId, quantity: line.quantity, currentPrice: { amount: amount(line.priceCents), currencyCode: 'USD' }, sellingPlanId: 'gid://shopify/SellingPlan/1', customAttributes: [] })), pageInfo: { hasNextPage: false } },
 });
