@@ -32,6 +32,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Reject high and critical dependency advisories
+        run: npm audit --audit-level=high
+
+      - name: Check independent app dependencies
+        run: npm audit --prefix shopify-app --audit-level=high
+
       - name: Run tests
         run: npm test
 
