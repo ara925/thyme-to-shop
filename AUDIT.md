@@ -8,6 +8,16 @@ Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkou
 
 **GO for the published frontend and client review. NO-GO for accepting real customer payments.**
 
+### 2026-10-26 final owner handoff and remaining in-scope hardening
+
+The independent app's 0.4.3 change restricts free subscription pickup to the already-verified Place in Thyme location `111856681258`. Both meal and custom-juice binding now require the reviewed checkout fulfillment choice to exist, use an approved window and match Shopify's actual pickup/delivery method. Wrong-location and changed-method contracts remain unbound for reconciliation, without starting recurring billing or falsely recording paid commitment weeks. This is a post-checkout defense, not a refund mechanism or substitute for native checkout validation. Sixteen additional no-network binding fixtures cover valid and rejected cases. No merchant terms, plan publication, permissions, credentials or launch flags were changed.
+
+A fresh registry advisory scan found 11 advisories in the prior dependency tree, including high/critical build/test dependencies and a high-severity Zod advisory. The update uses Vite 7.3.7, Vitest 4.1.12, Zod 4.6.7 and a same-major `postcss-selector-parser` 6.1.5 override, with compatible transitive safety updates. A clean `npm ci` succeeded and both root and independent-app audits report **zero vulnerabilities**. Typecheck, 307 storefront tests and 153 backend tests pass (**460 total**). The static CSS artifact is unchanged. CI now rejects high/critical advisories in both dependency trees. Build, visual acceptance and deployment receipts are recorded after publication; these local checks alone are not paid acceptance.
+
+An additional official-Chrome diagnostic confirmed empty bodies in both the installed MW app iframe and Shopify's own Online Store language editor. No actionable console error was exposed; a cause such as cookies, permissions or an app outage is not asserted. The collaborator's Users page displays **This feature isn't currently available for your store**, so access cannot be repaired from this account. Owner/support intervention is required to unblock those admin surfaces. No security protections were disabled and no additional app was installed. The final email must ask Cory for owner-side access/payment/policy/business review without claiming that granting access itself completes the unfinished technical enforcement or subscription acceptance.
+
+Closed business decisions remain closed: Orange County only, Monday–Tuesday delivery, $99 delivery minimum, $15 per delivery, Friday 11:59 PM Pacific cutoff, free Monday-after-9 pickup at 26021 Acero, and weekly custom-juice payments with the four-paid-week commitment. Do not ask Cory about prepaid delivery fees again. The developer-organization credential rotation and private storage-key/reconnection handoff belongs to the developer/hosting account holder or IT, not automatically to Cory, who may not own that developer account. Remaining engineering and live charge/refund/renewal/cancellation tests are still our work after the access and security handoffs.
+
 ### 2026-10-26 non-payment checkout and delivery acceptance
 
 #### Latest merchant instruction: weekly juice billing, $15 each delivery
