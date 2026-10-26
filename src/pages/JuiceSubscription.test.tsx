@@ -148,10 +148,6 @@ function chooseWeeklyBilling(): void {
   fireEvent.click(screen.getByRole('radio', { name: /pay weekly for four weeks/i }));
 }
 
-function choosePrepaidBilling(): void {
-  fireEvent.click(screen.getByRole('radio', { name: /prepay all four weeks/i }));
-}
-
 describe('JuiceSubscription', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -196,8 +192,8 @@ describe('JuiceSubscription', () => {
     expect(screen.getByText(/add \$34\.99 more to meet the \$134\.99 live weekly minimum/i)).toBeInTheDocument();
 
     fireEvent.click(getPlusButton());
-    expect(screen.getByRole('button', { name: /request this 4-week subscription/i })).toBeDisabled();
-    expect(screen.getByText(/choose a billing preference to prepare the enrollment request/i)).toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /prepay all four weeks/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /pay weekly for four weeks/i })).toBeChecked();
 
     chooseWeeklyBilling();
     expect(screen.getByRole('link', { name: /request this 4-week subscription/i })).toHaveAttribute(
@@ -257,14 +253,15 @@ describe('JuiceSubscription', () => {
     fireEvent.click(getPlusButton());
     expect(screen.getByText('Estimated weekly total after verified 10%')).toBeInTheDocument();
     expect(screen.getByText('$121.49')).toBeInTheDocument();
-    choosePrepaidBilling();
-    expect(screen.getByText(/estimated four-week prepaid total: \$485\.96/i)).toBeInTheDocument();
+    chooseWeeklyBilling();
+    expect(screen.queryByText(/estimated four-week prepaid total/i)).not.toBeInTheDocument();
     const requestLink = screen.getByRole('link', { name: /request this 4-week subscription/i });
     const body = decodeURIComponent((requestLink.getAttribute('href') || '').split('&body=')[1]);
     expect(body).toContain('Exact 10% percentage adjustment on every selected plan: Yes');
     expect(body).toContain('Estimated weekly total after verified 10% plan adjustment: $121.49');
-    expect(body).toContain('Estimated four-week prepaid total: $485.96');
-    expect(body).toContain('Billing preference: Prepay all four weeks.');
+    expect(body).not.toContain('Estimated four-week prepaid total');
+    expect(body).toContain('Billing preference: Pay weekly for four weeks.');
+    expect(body).toContain('delivery is $15 for each weekly delivery');
     expect(mocks.addItems).not.toHaveBeenCalled();
   });
 
@@ -328,20 +325,20 @@ describe('JuiceSubscription', () => {
     expect(screen.getByText(/does not count toward the \$134\.99 minimum/i)).toBeInTheDocument();
 
     fireEvent.click(getPlusButton());
-    choosePrepaidBilling();
+    chooseWeeklyBilling();
     expect(screen.getByText('Weekly mix retail total')).toBeInTheDocument();
     expect(screen.getByText(/excluded from the weekly minimum and discount/i)).toBeInTheDocument();
-    expect(screen.getByText(/estimated four-week prepaid total: \$485\.96/i)).toBeInTheDocument();
+    expect(screen.queryByText(/estimated four-week prepaid total/i)).not.toBeInTheDocument();
 
     const requestLink = screen.getByRole('link', { name: /request this 4-week subscription/i });
     const body = decodeURIComponent((requestLink.getAttribute('href') || '').split('&body=')[1]);
     expect(body).toContain('Weekly retail total: $134.99');
     expect(body).toContain('Estimated weekly total after verified 10% plan adjustment: $121.49');
-    expect(body).toContain('Estimated four-week prepaid total: $485.96');
+    expect(body).not.toContain('Estimated four-week prepaid total');
     expect(body).toContain('Optional one-time add-on: 2 x Hibiscus Tea (Sweetened) = $6.00');
     expect(body).toContain('One-time Hibiscus add-on total: $6.00');
     expect(body).toContain('excluded from the weekly minimum and 10% discount');
-    expect(body).toContain('Billing preference: Prepay all four weeks.');
+    expect(body).toContain('Billing preference: Pay weekly for four weeks.');
     expect(mocks.addItems).not.toHaveBeenCalled();
   });
 
@@ -448,21 +445,23 @@ describe('JuiceSubscription', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
   });
 
-  it('restores the mix, one-time tea and prepaid billing after remount', () => {
+  it('restores the mix and tea but migrates a legacy prepaid preference to weekly billing', () => {
     const hibiscus = createProduct({ id: 'hibiscus', title: 'Hibiscus Tea (Sweetened)', amount: '3.00' });
     mockProductQueries([createProduct(), hibiscus]);
     mocks.useSellingPlans.mockReturnValue({ data: { 'green-cleanse': weeklyPlanWithTenPercent }, isLoading: false, isError: false });
     const view = render(<JuiceSubscription />);
     fireEvent.click(getPlusButton());
     fireEvent.click(screen.getByRole('button', { name: /add one one-time hibiscus tea add-on/i }));
-    choosePrepaidBilling();
     view.unmount();
+    localStorage.setItem('place-in-thyme-juice-billing-v1', JSON.stringify({ savedAt: Date.now(), value: 'prepaid' }));
     const restored = render(<JuiceSubscription />);
-    expect(screen.getByRole('radio', { name: /prepay all four weeks/i })).toBeChecked();
+    expect(screen.getByRole('radio', { name: /pay weekly for four weeks/i })).toBeChecked();
     const body = decodeURIComponent((screen.getByRole('link', { name: /request this 4-week subscription/i }).getAttribute('href') || '').split('&body=')[1]);
     expect(body).toContain('1 x Green Cleanse 12oz = $134.99');
     expect(body).toContain('Optional one-time add-on: 1 x Hibiscus Tea (Sweetened) = $3.00');
-    expect(body).toContain('Estimated four-week prepaid total: $485.96');
+    expect(body).not.toContain('Estimated four-week prepaid total');
+    expect(body).toContain('Billing preference: Pay weekly for four weeks.');
+    expect(screen.queryByRole('radio', { name: /prepay all four weeks/i })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Reset juice draft' }));
     restored.unmount();
     render(<JuiceSubscription />);

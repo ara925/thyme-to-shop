@@ -10,6 +10,12 @@ Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkou
 
 ### 2026-10-26 non-payment checkout and delivery acceptance
 
+#### Latest merchant instruction: weekly juice billing, $15 each delivery
+
+The user explicitly confirmed **$15 for each delivery** and **weekly payments, not four weeks upfront** on October 26. No delivery-fee question remains for Cory. New custom juice enrollment now defaults to weekly, retains the four-paid-week minimum/exact 10% adjustment, hides the prepaid customer choice and migrates a saved prepaid preference without losing mix/tea quantities. The original unpublished prepaid plan and legacy management/cancellation logic are retained, not deleted. New server previews and checkout creation reject crafted or stale prepaid enrollment. Frontend request/response validation also refuses it. Customer reviews distinguish the first weekly subtotal, later weekly subtotal and $15 per weekly delivery; the four-week aggregate is explicitly labelled as paid weekly. Free pickup and the one-time undiscounted tea remain unchanged. Unit renewal/cancellation simulation confirms four separate $15 fees, not one $60 upfront fee. This is not a real paid-renewal acceptance result.
+
+The native published cancellation policy was edited only to reflect these newly approved billing/delivery facts, preserving the meal, fixed-bundle and cancellation terms. A rollback text copy is retained with the proof. Payments was rechecked through normal Settings navigation and still explicitly denied the collaborator. App version 0.4.2 packages the weekly-only server guard and admin copy without new scopes or changes to credential/storage configuration. Pre-release checks: 307 storefront + 137 backend tests pass, typecheck/build/production-boundary pass, lint 0 errors / 15 existing warnings. Deployment/public acceptance is recorded after release below.
+
 Official Chrome used one working tab and real, isolated one-time Storefront carts, opened from the clearly marked local-only `qa/checkout-delivery.html` tool. No customer basket was read or changed. No email, phone, card details, order submission, subscription enrollment or payment was entered. These are real native checkout/rate observations, **not paid checkout acceptance**. The local tool can run only in development on a loopback hostname, has no public route, and is excluded from the production build. CI now checks the production artifacts for accidental inclusion.
 
 | Native checkout case | Observed result |

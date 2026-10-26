@@ -22,10 +22,10 @@ const previewObject = z.object({ mix: juiceMixSchema, firstServiceDate: date, de
 const validPreview = (value: z.infer<typeof previewObject>) => (!value.enrollmentReady || value.pricingVerified)
   && new Date(value.firstServiceDate + 'T12:00:00Z').getUTCDay() === 1
   && value.deliveryDates.every((valueDate, index) => Date.parse(valueDate + 'T12:00:00Z') === Date.parse(value.firstServiceDate + 'T12:00:00Z') + index * 604800000);
-const previewSchema = previewObject.refine(validPreview);
-const quoteSchema = previewObject.merge(enrollmentAccessSchema).refine(validPreview);
+const previewSchema = previewObject.refine(value => validPreview(value) && value.mix.billingPreference === 'weekly');
+const quoteSchema = previewObject.merge(enrollmentAccessSchema).refine(value => validPreview(value) && value.mix.billingPreference === 'weekly');
 const inputSchema = z.object({ selections: z.record(variantId, z.number().int().min(1).max(50)).refine(items => Object.keys(items).length > 0 && Object.keys(items).length <= 50),
-  billingPreference: z.enum(['weekly', 'prepaid']), teaQuantity: z.number().int().min(0).max(50) }).strict();
+  billingPreference: z.literal('weekly'), teaQuantity: z.number().int().min(0).max(50) }).strict();
 export type JuiceSelections = z.infer<typeof inputSchema>;
 export type JuicePreview = z.infer<typeof previewSchema>;
 export type JuiceEnrollmentQuote = z.infer<typeof quoteSchema>;
@@ -49,8 +49,9 @@ export async function quoteJuiceEnrollment(selections: JuiceSelections, reviewed
   return quote;
 }
 export async function startJuiceEnrollmentCheckout(quote: JuiceEnrollmentQuote, fulfillment: SubscriptionFulfillment, signal?: AbortSignal): Promise<string> {
+  if (quote.mix.billingPreference !== 'weekly') throw new RotationServiceError('New juice subscriptions are paid weekly. Review your mix again.');
   if (!validRotationAccess({ id: quote.id, token: quote.manageToken }) || Date.parse(quote.expiresAt) <= Date.now()) throw new RotationServiceError('This juice review expired. Check your mix again.');
-  const schema = z.object({ checkoutUrl: secureCheckoutSchema, expiresAt: z.string().datetime({ offset: true }), billingPreference: z.enum(['weekly', 'prepaid']), firstServiceDate: date,
+  const schema = z.object({ checkoutUrl: secureCheckoutSchema, expiresAt: z.string().datetime({ offset: true }), billingPreference: z.literal('weekly'), firstServiceDate: date,
     firstSubtotalCents: money, fulfillment: z.object({ method: z.enum(['pickup', 'delivery']), window: z.enum(['monday-after-9am', 'monday', 'tuesday']) }) });
   const checkout = parseSubscriptionResponse(schema, await subscriptionRequest(`/juice/checkout/${quote.id}`, {
     method: 'POST', headers: { Authorization: `Bearer ${quote.manageToken}` }, body: JSON.stringify({ fulfillment }), signal,
