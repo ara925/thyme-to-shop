@@ -390,7 +390,7 @@ const JuiceSubscription = () => {
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
               <div className="space-y-2">
                 <p>
-                  The confirmed subscription is 10% off with a four-week minimum commitment. Choose weekly billing or four-week prepayment below{independentReviewConfigured ? ' and review the plan with the independent Shopify app.' : ' for manual enrollment.'}
+                  The confirmed subscription is 10% off with a four-paid-week minimum commitment. Payments are weekly, not four weeks upfront{independentReviewConfigured ? '. Review the plan with the independent Shopify app.' : '; request manual enrollment below.'}
                   {' '}Cancellation is available after each four-week period.
                 </p>
                 <p>

@@ -170,6 +170,8 @@ describe('JuiceSubscription', () => {
 
     expect(screen.getByRole('heading', { name: /build one weekly juice mix/i })).toBeInTheDocument();
     expect(screen.queryAllByRole('tab')).toHaveLength(0);
+    expect(screen.queryByText(/choose weekly billing or four-week prepayment/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio', { name: /prepay/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/week 1/i)).not.toBeInTheDocument();
     const description = screen.getByText((_, element) => (
       element?.tagName === 'P' && element.textContent === liveDescription
