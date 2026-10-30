@@ -1,3 +1,6 @@
+// Shopify quantities use GraphQL Int. This is a transport limit, not a 50-meal cap.
+export const MAX_MEAL_QUANTITY = 2_147_483_647;
+
 /** Converts a Shopify decimal money string to integer cents. */
 export const parseMoneyAmountToCents = (amount: string): number | null => {
   const match = amount.trim().match(/^(\d+)(?:\.(\d+))?$/);
