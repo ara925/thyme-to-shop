@@ -3,14 +3,16 @@ import { JuiceWorker } from './juice-worker.mjs';
 
 const LIVE_STATES = ['active', 'calculating', 'committing', 'billing', 'finalizing'];
 export class Worker {
-  constructor(store, shopify, { gates = {}, now = () => Date.now(), identityKey = '' } = {}) { this.store = store; this.api = shopify; this.gates = gates; this.now = now; this.key = identityKey; this.juices = new JuiceWorker(store, shopify, { gates, now, identityKey }); }
+  constructor(store, shopify, { gates = {}, now = () => Date.now(), identityKey = '', recoveryHold = false } = {}) { this.store = store; this.api = shopify; this.gates = gates; this.now = now; this.key = identityKey; this.recoveryHold = recoveryHold === true; this.juices = new JuiceWorker(store, shopify, { gates, now, identityKey, recoveryHold }); }
   enabled() {
-    return ['billing', 'checkout', 'fulfillment', 'storefront', 'launch', 'persistentStorage'].every(key => this.gates[key] === true)
+    return !this.recoveryHold && ['billing', 'checkout', 'fulfillment', 'storefront', 'launch', 'persistentStorage'].every(key => this.gates[key] === true)
       && this.store.getSetting('heartbeat', 0) >= this.now() - 120000 && this.store.getSetting('verifiedAt', 0) > 0
       && /^gid:\/\/shopify\/SellingPlan\/\d+$/.test(this.store.getSetting('planId', ''))
       && this.store.getSetting('webhooks', []).length === 3 && Boolean(this.key);
   }
   async tick() {
+    // Billing gates intentionally permit cancellation retries. Recovery must pause those too.
+    if (this.recoveryHold) return;
     this.store.setSetting('heartbeat', this.now());
     const lock = this.store.lease('worker', 120); if (!lock) return;
     try {
@@ -44,6 +46,7 @@ export class Worker {
     } finally { this.store.release('worker', lock); }
   }
   async bind(contractId, suppliedContract) {
+    assert(!this.recoveryHold, 'Recovery reconciliation is still in progress.');
     const contract = suppliedContract || await this.api.contract(contractId);
     const ids = [...new Set(contract.lines.nodes.flatMap(line => (line.customAttributes || []).filter(attribute => attribute.key === '_pit_rotation_id').map(attribute => attribute.value)))];
     if (!ids.length) return;

@@ -3,10 +3,10 @@ import { deliveryWeeksPerPayment, advanceService, advanceJuiceBilling, unchanged
 
 const LIVE = ['active', 'billing', 'finalizing', 'cancelling'];
 export class JuiceWorker {
-  constructor(store, api, { gates = {}, now = () => Date.now(), identityKey = '' } = {}) { this.store = store; this.api = api; this.gates = gates; this.now = now; this.key = identityKey; }
+  constructor(store, api, { gates = {}, now = () => Date.now(), identityKey = '', recoveryHold = false } = {}) { this.store = store; this.api = api; this.gates = gates; this.now = now; this.key = identityKey; this.recoveryHold = recoveryHold === true; }
   enabled() {
     const plans = this.store.getSetting('juicePlanIds');
-    return ['billing', 'checkout', 'fulfillment', 'storefront', 'launch', 'persistentStorage', 'juice'].every(gate => this.gates[gate] === true)
+    return !this.recoveryHold && ['billing', 'checkout', 'fulfillment', 'storefront', 'launch', 'persistentStorage', 'juice'].every(gate => this.gates[gate] === true)
       && this.store.getSetting('heartbeat', 0) >= this.now() - 120000 && this.store.getSetting('verifiedAt', 0) > 0 && this.store.getSetting('juiceVerifiedAt', 0) > 0
       && ['weekly', 'prepaid'].every(mode => /^gid:\/\/shopify\/SellingPlan\/\d+$/.test(plans?.[mode] || ''))
       && plans.weekly !== plans.prepaid && this.store.getSetting('webhooks', []).length === 3 && Boolean(this.key);
@@ -19,6 +19,7 @@ export class JuiceWorker {
       && contract.revisionId !== undefined && contract.revisionId !== null, 'Juice contract prices, items, plan or revision differ from approval.');
   }
   async bind(contractId, contract) {
+    assert(!this.recoveryHold, 'Recovery reconciliation is still in progress.');
     const ids = [...new Set(contract.lines.nodes.flatMap(line => (line.customAttributes || []).filter(item => item.key === '_pit_juice_id').map(item => item.value)))];
     if (!ids.length) return false;
     assert(ids.length === 1 && /^[a-f0-9]{48}$/.test(ids[0]), 'Invalid juice enrollment identity.');
@@ -45,6 +46,7 @@ export class JuiceWorker {
     } finally { this.store.unlock(row.id, lease); }
   }
   async finishCancellation(id, lease) {
+    assert(!this.recoveryHold, 'Recovery reconciliation is still in progress.');
     const row = this.store.get(id); const data = row.data;
     assert(data.kind === 'juice' && data.cancellationRequested && data.paidWeeks >= data.cancelAfterPaidWeeks, 'The four-week cancellation boundary is not funded yet.');
     this.store.update(id, { state: 'cancelling', data: { ...data, cancellationPending: true } }, lease);
@@ -52,6 +54,7 @@ export class JuiceWorker {
     this.store.update(id, { state: 'stopped', data: { ...data, cancellationPending: false, cancellationConfirmed: true } }, lease);
   }
   async requestCancellation(id, lease) {
+    assert(!this.recoveryHold, 'Recovery reconciliation is still in progress.');
     const row = this.store.get(id); assert(row?.data.kind === 'juice' && row.contract_id, 'This juice plan is not enrolled.');
     if (row.data.cancellationConfirmed) return { state: 'cancelled', effectiveDate: row.data.cancellationEffectiveDate };
     const target = cancellationTarget(row.data);
@@ -64,6 +67,7 @@ export class JuiceWorker {
     return { state: 'scheduled', effectiveDate: data.cancellationEffectiveDate, afterPaidWeeks: data.cancelAfterPaidWeeks };
   }
   async stepDue() {
+    if (this.recoveryHold) return;
     const allowed = this.enabled() ? LIVE : ['cancelling'];
     const rows = this.store.db.prepare(`SELECT id FROM rotations WHERE json_extract(payload,'$.kind')='juice' AND state IN (${allowed.map(() => '?').join(',')}) AND due_at<=? ORDER BY due_at LIMIT 3`).all(...allowed, this.now());
     for (const { id } of rows) {
