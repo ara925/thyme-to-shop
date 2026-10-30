@@ -18,7 +18,7 @@ export function configuration(env = process.env) {
     assert(url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash && url.pathname === '/' && !['placeinthyme.com', 'www.placeinthyme.com', 'shop.placeinthyme.com', 'checkout.placeinthyme.com'].includes(url.hostname), 'Use an independent HTTPS app hostname, not either website or checkout.');
   }
   return { baseUrl, clientSecret: env.SHOPIFY_API_SECRET || '', encryptionKey: env.PIT_ENCRYPTION_KEY || '',
-    storefrontToken: env.SHOPIFY_STOREFRONT_TOKEN || '',
+    storefrontToken: env.SHOPIFY_STOREFRONT_TOKEN || '', recoveryHold: env.PIT_RECOVERY_HOLD === 'true',
     databasePath: env.PIT_DATABASE_PATH || resolve('data/rotation.sqlite'),
     gates: Object.fromEntries(['billing', 'checkout', 'fulfillment', 'storefront', 'launch', 'persistentStorage', 'juice'].map(key => [key, env[`PIT_${key.replace(/[A-Z]/g, char => `_${char}`).toUpperCase()}_VERIFIED`] === 'true'])),
   };
@@ -33,7 +33,8 @@ async function readBody(request, maximum = 30000) {
   for await (const chunk of request) { length += chunk.length; assert(length <= maximum, 'Request too large.'); chunks.push(chunk); }
   return Buffer.concat(chunks);
 }
-function adminPage(nonce) {
+function adminPage(nonce, recoveryHold = false) {
+  const recoveryNotice = recoveryHold ? '<section class="warning" role="status"><h2>Recovery pause is active</h2><p>Background processing, enrollment and subscription changes are paused while the restored records are checked. Read-only management and storage checks remain available. Existing saved plans and pending work are preserved.</p></section>' : '';
   // This app is standalone. The embedded App Bridge loader redirects it into an unusable admin iframe.
   return String.raw`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Place in Thyme Meal Rotation</title><style>body{font:16px/1.6 system-ui;background:#f6f8f5;color:#1e352a;margin:0}main{max-width:820px;margin:auto;padding:32px 20px}section{background:white;border:1px solid #d8e0d9;border-radius:12px;padding:24px;margin:24px 0}button,a.button{display:inline-block;background:#295f48;color:white;padding:12px 18px;border:0;border-radius:7px;font:inherit;margin:8px 8px 8px 0;text-decoration:none;cursor:pointer}button:disabled{opacity:.5}pre{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#295f48}label{display:block;margin:8px 0}input{width:80px;padding:10px;font:inherit}strong{font-weight:650}.warning{background:#fff5df;border-color:#dbc891}h1{font-size:30px;line-height:1.3}h2{font-size:22px}</style></head><body><main><h1>Place in Thyme Meal Rotation</h1><p>Shopify products, checkout, payments, and app-owned contracts. Independent app runtime; no WordPress connection.</p><section class="warning"><strong>Enrollment and billing remain disabled until launch acceptance.</strong><p>Previews create no checkout, order, contract, or charge. The main website is not used as a scheduler or API.</p></section><section><h2>Shopify connection</h2><p>Open this app from the store’s Shopify admin. Reconnecting uses only the three previously approved app scopes.</p><a class="button" href="/auth/start">Connect Existing Shopify App</a><button id="verify">Verify Connection and Move App Webhooks</button><pre id="status" role="status">Checking app configuration…</pre></section><section><h2>Three-week preview</h2><p>Choose independent quantities. Each menu needs at least $120. Only the active week’s actual selected total applies.</p><form id="preview"><div id="menus">Verify the Shopify connection to load the live menus.</div><button id="review" disabled>Preview Four Weeks — No Charge</button></form><pre id="result" role="status"></pre></section><section><h2>Launch acceptance still required</h2><p>Checkout minimums and the Friday cutoff must be enforced inside Shopify. Orange County delivery, a subscription-capable payment gateway, real renewal/cancellation tests, secure app reconnection, private recovery and scheduler checks must pass before activation. New custom juice plans are paid weekly, with a four-paid-week minimum and $15 for each local delivery; four-week prepayment is not required or offered for launch. Pickup is free at 26021 Acero on Mondays after 9:00 AM.</p></section></main><script nonce="${nonce}">
 const status=document.getElementById('status'), result=document.getElementById('result'), menus=document.getElementById('menus');
@@ -49,12 +50,12 @@ juiceLoad.textContent='Load Live Juice Preview';juiceMode.setAttribute('aria-lab
 juiceLoad.onclick=async()=>{juiceLoad.disabled=true;try{const data=await api('/admin/juice/catalog');juiceFields.textContent='';for(const item of [...Object.values(data.items),...(data.tea?[data.tea]:[])]){const label=document.createElement('label'),input=document.createElement('input');input.type='number';input.min='0';input.max='50';input.step='1';input.value='0';input.dataset.id=item.id;if(data.tea?.id===item.id)input.dataset.tea='true';label.append(input,document.createTextNode(' '+item.title+' — $'+item.price+(input.dataset.tea?' (one time)':'')));juiceFields.append(label)}juiceReview.disabled=false;juiceResult.textContent='Live catalog loaded. The weekly juice mix must reach $134.99 before the exact 10% adjustment. Tea does not count.'}catch(error){juiceResult.textContent=error.message}finally{juiceLoad.disabled=false}};
 juiceForm.onsubmit=async event=>{event.preventDefault();juiceReview.disabled=true;try{const input={selections:{},billingPreference:juiceMode.value,teaQuantity:0};for(const field of juiceFields.querySelectorAll('input')){const quantity=Number(field.value);if(field.dataset.tea)input.teaQuantity=quantity;else if(quantity>0)input.selections[field.dataset.id]=quantity}juiceResult.textContent=JSON.stringify(await api('/admin/juice/preview',input),null,2)}catch(error){juiceResult.textContent=error.message}finally{juiceReview.disabled=false}};
 const storageSection=document.createElement('section'),storageHeading=document.createElement('h2'),storageNote=document.createElement('p'),storageStatus=document.createElement('pre');storageHeading.textContent='Private storage verification';storageNote.textContent='Read-only recovery checks and an independent-process lock probe. No live data is restored, no Shopify request is made, and this does not enable billing. A restored copy must be placed in the private restore-probe folder, never public_html.';storageStatus.setAttribute('role','status');storageSection.append(storageHeading,storageNote);for(const [check,label] of [['snapshot','Verify Current Private Snapshot'],['restored-copy','Verify Restored Private Copy'],['process-lock','Verify Independent-Process Locking']]){const button=document.createElement('button');button.textContent=label;button.onclick=async()=>{button.disabled=true;try{storageStatus.textContent=JSON.stringify(await api('/admin/storage/check',{check}),null,2)}catch(error){storageStatus.textContent=error.message}finally{button.disabled=false}};storageSection.append(button)}storageSection.append(storageStatus);document.querySelector('main').append(storageSection);
-</script></body></html>`;
+</script></body></html>`.replace('</h1>', '</h1>' + recoveryNotice);
 }
 
 export function createApplication(config, { store = new Store(config.databasePath, config.encryptionKey), shopify, clock } = {}) {
   const api = shopify || new Shopify(store, config);
-  const worker = new Worker(store, api, { gates: config.gates, now: clock, identityKey: config.encryptionKey });
+  const worker = new Worker(store, api, { gates: config.gates, now: clock, identityKey: config.encryptionKey, recoveryHold: config.recoveryHold });
   const now = clock || (() => Date.now());
   const checkout = new SubscriptionCheckout(store, api, { storefrontToken: config.storefrontToken, now });
   const enrollmentReady = () => worker.enabled() && Boolean(config.storefrontToken);
@@ -66,7 +67,7 @@ export function createApplication(config, { store = new Store(config.databasePat
     serviceDate: row.data.serviceDate, nextBillingDate: row.data.nextBillingDate || null,
     cancellationPending: Boolean(row.data.cancellationPending), cancellationConfirmed: Boolean(row.data.cancellationConfirmed),
     canCancel: Boolean(row.contract_id && !row.data.cancellationConfirmed) });
-  const status = () => ({ app: 'Place in Thyme Meal Rotation', version: '0.4.4', runtime: 'independent-node-app', mainWebsiteDependency: false,
+  const status = () => ({ app: 'Place in Thyme Meal Rotation', version: '0.4.5', runtime: 'independent-node-app', mainWebsiteDependency: false, recoveryHold: config.recoveryHold === true,
     configured: configured(), connected: Boolean(store.getSetting('verifiedAt')), enrollmentReady: enrollmentReady(), billingEnabled: worker.enabled(),
     ownedPlanConfigured: Boolean(store.getSetting('planId')), signedWebhooks: store.getSetting('webhooks', []).length,
     juiceEnrollmentReady: juiceEnrollmentReady(), juicePlansConfigured: Boolean(store.getSetting('juiceVerifiedAt')),
@@ -102,10 +103,10 @@ export function createApplication(config, { store = new Store(config.databasePat
     try {
       const url = new URL(request.url, 'https://app.invalid'); const path = url.pathname;
       if (path.startsWith('/api/') && request.method === 'OPTIONS') { response.writeHead(request.headers.origin === ORIGIN ? 204 : 403); response.end(); return; }
-      if (path === '/health' || path === '/api/health') { json(response, { version: '0.4.4', mainWebsiteDependency: false, configured: configured(), previewReady: Boolean(store.getSetting('verifiedAt')), enrollmentReady: enrollmentReady(), juiceEnrollmentReady: juiceEnrollmentReady(), billingEnabled: worker.enabled(), minimumCents: 12000, currencyCode: 'USD', timeZone: ZONE }); return; }
+      if (path === '/health' || path === '/api/health') { json(response, { version: '0.4.5', mainWebsiteDependency: false, configured: configured(), recoveryHold: config.recoveryHold === true, previewReady: !config.recoveryHold && Boolean(store.getSetting('verifiedAt')), enrollmentReady: enrollmentReady(), juiceEnrollmentReady: juiceEnrollmentReady(), billingEnabled: worker.enabled(), minimumCents: 12000, currencyCode: 'USD', timeZone: ZONE }); return; }
       if (path === '/' && request.method === 'GET') {
         if (validOauth(url.searchParams, config.clientSecret)) response.setHeader('Set-Cookie', cookie('pit_app_session', store.ticket('admin', 1800), 1800));
-        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); response.end(adminPage(nonce)); return;
+        response.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); response.end(adminPage(nonce, config.recoveryHold === true)); return;
       }
       const rateKey = createHmac('sha256', config.encryptionKey || 'unconfigured-app').update(request.socket.remoteAddress || '').digest('hex');
       if (!store.rate(rateKey, path === '/api/webhook' ? 300 : 60)) { errorResponse(response, 429, 'pit_rate', 'Please wait a minute and try again.'); return; }
@@ -125,6 +126,7 @@ export function createApplication(config, { store = new Store(config.databasePat
       }
       if (path.startsWith('/admin/')) {
         if (!adminAuthorized(request) || (request.method !== 'GET' && request.headers.origin !== config.baseUrl)) { errorResponse(response, 403, 'pit_admin', 'Open this app from the approved Shopify store or reconnect it.'); return; }
+        if (config.recoveryHold && !['/admin/status', '/admin/storage/check'].includes(path)) { errorResponse(response, 503, 'pit_recovery_hold', 'The app is paused for recovery checks. No setup, enrollment or subscription changes have been started.'); return; }
         if (path === '/admin/status' && request.method === 'GET') { json(response, status()); return; }
         if (path === '/admin/storage/check' && request.method === 'POST') {
           const input = JSON.parse((await readBody(request)).toString());
@@ -176,6 +178,7 @@ export function createApplication(config, { store = new Store(config.databasePat
       }
       if (path.startsWith('/api/')) {
         if (request.headers.origin !== ORIGIN) { errorResponse(response, 403, 'pit_origin', 'Use the Place in Thyme shop.'); return; }
+        if (config.recoveryHold && request.method !== 'GET') { errorResponse(response, 503, 'pit_recovery_hold', 'The app is temporarily paused for recovery checks. No payment or subscription change has been started. Please contact Place in Thyme for assistance.'); return; }
         if (path === '/api/preview' && request.method === 'POST') { json(response, await preview(JSON.parse((await readBody(request)).toString()).selections)); return; }
         if (path === '/api/quote' && request.method === 'POST') {
           if (!enrollmentReady()) { errorResponse(response, 503, 'pit_not_ready', 'Automatic enrollment is not live yet. Your selections are preserved.'); return; }
@@ -277,6 +280,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   application.server.listen(port, '0.0.0.0', () => { console.info(`Place in Thyme app listening on port ${port}. Billing defaults OFF.`); });
   let currentTick = null;
   const tick = () => {
+    // Keep the last good snapshot intact while the restored database is reconciled.
+    if (application.status().recoveryHold) return;
     if (currentTick) return currentTick;
     currentTick = (async () => {
       await application.worker.tick().catch(() => application.store.setSetting('workerReviewNeeded', true));

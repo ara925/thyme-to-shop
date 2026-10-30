@@ -1,12 +1,26 @@
 # Place in Thyme pre-launch audit
 
-Audit date: 2026-10-26 non-payment checkout, delivery and customer-side acceptance
-Current work: non-payment checkout/delivery acceptance and mobile performance follow-up. Earlier dated findings below are historical unless updated here.
+Audit date: 2026-10-30 payment-access recheck, policy publication and isolated recovery hardening
+Current work: checkout enforcement, pickup wording, app recovery/deployment and payment acceptance. Earlier dated findings below are historical unless updated here.
 Scope: Vite/React storefront, live Shopify Storefront API data, cart and checkout, meal/juice subscriptions, bundles, catalog integrity, resilience, accessibility, SEO, security, and performance.
 
 ## Release decision
 
 **GO for the published frontend and client review. NO-GO for accepting real customer payments.**
+
+### 2026-10-30 verified progress and current release boundary
+
+The collaborator can now open Payments. Shopify Payments explicitly reports **Accepting payments** and **Receiving payouts**; the masked payout account is marked Verified. This resolves the earlier inability to inspect provider status, not checkout or renewal acceptance. The current Manage and payment-method screens do not expose an Enable test mode control to this account. No payment settings, bank details, real orders or charges were changed. The user has been asked to enable test mode through the owner account before simulated payment tests proceed.
+
+The Terms of Service policy was written from the confirmed ordering/meal/juice/delivery/pickup arrangements, saved in Shopify and verified on `https://shop.placeinthyme.com/policies#termsOfService`. All 11 content sections and links to the other four policy sections are present. The meeting report now marks page preparation/publication DONE and groups the public policy-review links under Discussion; Cory's business/legal approval is not claimed. A hidden editable review copy was retained in native Shopify Pages. No automatic policy template, unsupported business rules, paid ordering or recurring-billing gate was activated.
+
+PR #32 merged as `292d104261feb6bb39174576a1927ad0317e5140` and the existing publisher confirmed the fixed-menu frontend update on the unchanged shop domain. Public customer interactions verified zero/51 quantities, independent week quantities, refresh persistence, $120 weekly minimums, a correctly prepared manual request excluding zero quantities, and the no-charge Week 1/2/3/1 preview at $132/$120/$120/$132 for those test selections. The six dishes in each menu match Cory's source document. Standalone Carne Asada remains available outside the current displayed menu. Temporary planner choices were restored and the existing basket preserved. The pending backend quantity-limit change was not described as deployed.
+
+Version **0.4.5** adds an explicit operator-only `PIT_RECOVERY_HOLD` for restored runtimes. It pauses automated work, due renewals, queued cancellation retries, catalog/setup actions, customer changes and automatic snapshot refresh while preserving stored checkpoints. Read-only authenticated management/status/storage checks and manual OAuth reconnection remain available; authenticated webhooks stay queued and uninstall revocation still applies. Normal cancellation retries are unchanged when the recovery pause is off. The existing launch flags still default off, and neither an upload nor this recovery control approves billing.
+
+Five additional isolated fixtures cover the recovery switch, paused work/HTTP paths, unchanged normal cancellation retry behavior and a real SQLite-copy boot in a fresh Node process. The latter decrypts synthetic credentials, preserves pending billing/cancellation checkpoints, deduplicates events, makes zero external requests, and leaves the source database/snapshot byte-for-byte unchanged. **311 storefront tests and 159 app tests pass (470 total)**; typecheck, app syntax, production build and the 34-artifact production boundary check pass, and lint has zero errors with the same 15 existing warnings. Official Chrome visually checked the clearly local recovery-pause screen. This is not a live host recovery, a paid renewal test or continuous-uptime acceptance.
+
+The actual SiteGround account still requires sign-in, so 0.4.5 is a tested source candidate, **not a deployed release**. The last independently verified production app remains 0.4.3. Hosting upload, production reconnection/environment recovery, native meal/juice minimum and Friday-cutoff enforcement, exact Orange County address eligibility, and initial/renewal/cancellation payment acceptance remain open. The pickup label is also unresolved: the native dropdown has only fixed hour/day buckets, and the normal checkout-language editor still renders an empty embedded body after the access update. No alternate false pickup promise, shipping-zone narrowing, security exception, new app/scopes or charge was applied. The free Essential checkout app's suitability and requested customer/order/discount/function access are being reviewed before any installation.
 
 ### 2026-10-26 final owner handoff and remaining in-scope hardening
 
