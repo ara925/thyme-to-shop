@@ -3,12 +3,13 @@ import { Layout } from '@/components/layout/Layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AlertCircle, CalendarDays, Check, Loader2, Mail, Minus, Plus } from 'lucide-react';
 import { useProducts, useSellingPlans } from '@/hooks/useProducts';
 import { ShopifyProduct, formatPrice } from '@/lib/shopify';
 import { getShopifyImageUrl } from '@/lib/images';
-import { parseMoneyAmountToCents } from '@/lib/mealRotation';
+import { MAX_MEAL_QUANTITY, parseMoneyAmountToCents } from '@/lib/mealRotation';
 import { parseMealMinimumCents } from '@/lib/subscriptionMinimum';
 import { SubscriptionProductSkeletons } from '@/components/subscriptions/SubscriptionProductSkeletons';
 import { isCustomerFacingProduct } from '@/lib/productVisibility';
@@ -33,7 +34,8 @@ type WeekId = typeof WEEKS[number]['id'];
 type WeekSelections = Record<WeekId, Record<string, number>>;
 function isWeekSelections(value: unknown): value is WeekSelections {
   return Boolean(value && typeof value === 'object'
-    && WEEKS.every(week => isQuantityMap((value as WeekSelections)[week.id])));
+    && WEEKS.every(week => isQuantityMap((value as WeekSelections)[week.id])
+      && Object.values((value as WeekSelections)[week.id]).every(quantity => quantity <= MAX_MEAL_QUANTITY)));
 }
 
 const formatCents = (cents: number, currencyCode = 'USD') => (
@@ -66,7 +68,7 @@ const MealSubscription = () => {
       'week-c': [],
     };
     allProducts.forEach(product => {
-      if (!isCustomerFacingProduct(product)) return;
+      if (product.node.productType !== 'Meal' || !isCustomerFacingProduct(product)) return;
       const tags = product.node.tags || [];
       WEEKS.forEach(week => {
         if (tags.includes(week.tag)) grouped[week.id].push(product);
@@ -162,14 +164,19 @@ const MealSubscription = () => {
     return `mailto:${ROTATION_REQUEST_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join('\n'))}`;
   }, [independentReviewConfigured, productsByWeek, requestIsReady, selections, weekTotalsCents]);
 
-  const updateQuantity = (weekId: WeekId, productId: string, delta: number) => {
+  const setMealQuantity = (weekId: WeekId, productId: string, quantity: number) => {
+    if (!Number.isInteger(quantity) || quantity < 0 || quantity > MAX_MEAL_QUANTITY) return;
+    // Customers change quantities, never the merchant's menu membership/settings.
+    const product = productsByWeek[weekId].find(item => item.node.id === productId);
+    if (quantity > 0 && !product) return;
     setSelections(previous => {
-      const current = previous[weekId][productId] || 0;
+      if (quantity > (previous[weekId][productId] || 0)
+        && !product?.node.variants.edges[0]?.node.availableForSale) return previous;
       return {
         ...previous,
         [weekId]: {
           ...previous[weekId],
-          [productId]: Math.min(50, Math.max(0, current + delta)),
+          [productId]: quantity,
         },
       };
     });
@@ -186,10 +193,10 @@ const MealSubscription = () => {
               Three-Week Meal Plan
             </Badge>
             <h1 className="font-serif text-4xl font-bold text-white md:text-6xl tracking-tight">
-              Build Your Meal Rotation
+              Fixed Three-Week Meal Plan
             </h1>
             <p className="mt-4 text-lg text-white/70 max-w-lg">
-              Choose independent quantities for all three menus. The intended sequence is Week 1 → Week 2 → Week 3, then it starts again.
+              Cory sets the dishes for each weekly menu. Choose how many of each listed meal you want, or leave it at zero. The menus repeat Week 1 → Week 2 → Week 3.
             </p>
           </div>
 
@@ -217,10 +224,10 @@ const MealSubscription = () => {
         <div className="container">
           <div className="max-w-4xl mx-auto">
             <h2 className="font-serif text-2xl md:text-3xl font-bold text-foreground mb-2">
-              Plan All Three Weeks
+              Set Your Weekly Quantities
             </h2>
             <p className="text-muted-foreground mb-4">
-              Fill every menu tab. Your choices stay in place while you move between weeks, and each week must meet the {MEAL_MINIMUM_DISPLAY || 'live'} minimum.
+              Each tab has a fixed menu. Adjust quantities within that menu; dishes cannot be moved or substituted between weeks. Your quantities are saved as you switch tabs, and each week must meet the {MEAL_MINIMUM_DISPLAY || 'live'} minimum.
             </p>
             <p className="mb-4 text-sm text-muted-foreground" aria-live={storageUnavailable ? 'polite' : undefined}>
               {storageUnavailable ? 'Your browser cannot save this draft. Keep this page open until you send your plan.' : 'Your meal selections are saved on this device for 30 days. Prices and availability are checked again when you return.'}
@@ -229,7 +236,8 @@ const MealSubscription = () => {
             <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-foreground" role="note">
               <p className="font-semibold">Confirmed plan terms</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
-                <li>Choose at least {MEAL_MINIMUM_DISPLAY || 'the required minimum'} of meals for each of the three weeks.</li>
+                <li>Set quantities of the listed dishes to reach at least {MEAL_MINIMUM_DISPLAY || 'the required minimum'} for each week. Leave any unwanted dish at zero.</li>
+                <li>The dishes and plan settings stay fixed. Changing your quantities does not change Cory's menus.</li>
                 <li>Each week, billing is for that active menu's actual selected total—not a flat {MEAL_MINIMUM_DISPLAY || 'minimum'} charge.</li>
                 <li>The menus repeat in order: Week 1 → Week 2 → Week 3.</li>
                 <li>You may cancel anytime.</li>
@@ -241,7 +249,7 @@ const MealSubscription = () => {
               <p>
                 <strong>{independentReviewConfigured ? 'Plan review and enrollment:' : 'Manual enrollment:'}</strong>{' '}
                 {independentReviewConfigured
-                  ? 'The independent Shopify app checks all three menus and their current prices. It offers a separate checkout only after server-side launch acceptance. Until then, the manual request stays available. Only one active menu—not all three sets—belongs in the first checkout.'
+                  ? 'Review your quantities and current prices before signing up. Online enrollment opens after the final checks pass; until then, you can send your plan to the team. Only the active week’s meals are included in the first order, not all three menus.'
                   : <>{sellingPlansLoading
                   ? 'We are checking the current weekly-plan configuration. '
                   : sellingPlansError || !allRotationProductsHaveStandardWeeklyPlans
@@ -366,26 +374,29 @@ const MealSubscription = () => {
                                     variant="outline"
                                     size="icon"
                                     className="h-11 w-11 rounded-full"
-                                    onClick={() => updateQuantity(week.id, product.node.id, -1)}
+                                    onClick={() => setMealQuantity(week.id, product.node.id, Math.max(0, quantity - 1))}
                                     disabled={quantity === 0}
                                     aria-label={`Remove one ${product.node.title} from ${week.label}`}
                                   >
                                     <Minus className="h-4 w-4" aria-hidden="true" />
                                   </Button>
-                                  <span
-                                    className="w-8 text-center font-semibold"
-                                  >
-                                    <span className="sr-only">
-                                      {product.node.title} quantity for {week.label}:{' '}
-                                    </span>
-                                    {quantity}
-                                  </span>
+                                  <Input
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={0}
+                                    max={MAX_MEAL_QUANTITY}
+                                    step={1}
+                                    value={quantity}
+                                    onChange={event => setMealQuantity(week.id, product.node.id, Number(event.target.value))}
+                                    aria-label={`${product.node.title} quantity for ${week.label}`}
+                                    className="h-11 w-20 text-center font-semibold"
+                                  />
                                   <Button
                                     variant="outline"
                                     size="icon"
                                     className="h-11 w-11 rounded-full"
-                                    onClick={() => updateQuantity(week.id, product.node.id, 1)}
-                                    disabled={!variant?.availableForSale || quantity >= 50}
+                                    onClick={() => setMealQuantity(week.id, product.node.id, quantity + 1)}
+                                    disabled={!variant?.availableForSale || quantity >= MAX_MEAL_QUANTITY}
                                     aria-label={`Add one ${product.node.title} to ${week.label}`}
                                   >
                                     <Plus className="h-4 w-4" aria-hidden="true" />
@@ -437,7 +448,15 @@ const MealSubscription = () => {
                         <ul className="mt-3 space-y-1 pl-6 text-sm text-muted-foreground">
                           {chosenItems.map(([productId, quantity]) => {
                             const product = productsByWeek[week.id].find(item => item.node.id === productId);
-                            return <li key={productId}>{quantity} × {product?.node.title || (productsLoading ? 'Loading meal…' : 'Unavailable meal')}</li>;
+                            return <li key={productId}>
+                              {quantity} × {product?.node.title || (productsLoading ? 'Loading meal…' : 'Unavailable meal')}
+                              {!product && !productsLoading && !productsError && <Button
+                                type="button"
+                                variant="link"
+                                onClick={() => setMealQuantity(week.id, productId, 0)}
+                                aria-label={`Remove unavailable meal from ${week.label}`}
+                              >Remove</Button>}
+                            </li>;
                           })}
                         </ul>
                       ) : (

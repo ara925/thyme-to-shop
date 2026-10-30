@@ -5,6 +5,7 @@ export const CLIENT_ID = '7d9a72b3188adb3a745370a1768b751d';
 export const ORIGIN = 'https://shop.placeinthyme.com';
 export const PICKUP_LOCATION_ID = 'gid://shopify/Location/111856681258';
 export const WEEKS = ['week-a', 'week-b', 'week-c'];
+export const MAX_MEAL_QUANTITY = 2_147_483_647;
 export const ZONE = 'America/Los_Angeles';
 export const SCOPES = ['write_products', 'write_purchase_options', 'write_own_subscription_contracts'];
 export class ReviewRequiredError extends Error {}
@@ -46,7 +47,7 @@ export function validateSelections(selections, catalog) {
     assert(entries.length > 0 && entries.length <= 50, 'Every menu needs meals.');
     let subtotalCents = 0;
     const lines = entries.map(([variantId, quantity]) => {
-      assert(/^gid:\/\/shopify\/ProductVariant\/[0-9]+$/.test(variantId) && Number.isInteger(quantity) && quantity >= 1 && quantity <= 50, 'Invalid meal quantity.');
+      assert(/^gid:\/\/shopify\/ProductVariant\/[0-9]+$/.test(variantId) && Number.isInteger(quantity) && quantity >= 1 && quantity <= MAX_MEAL_QUANTITY, 'Invalid meal quantity.');
       const meal = catalog[variantId];
       assert(meal && meal.type === 'Meal' && meal.status === 'ACTIVE' && meal.currency === 'USD' && meal.available && !meal.requiresComponents && meal.tags.includes(week), 'Meal unavailable or in another menu.');
       const priceCents = cents(meal.price); assert(priceCents > 0, 'Invalid meal price.');

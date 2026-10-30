@@ -89,8 +89,16 @@ describe('private meal-rotation service', () => {
   });
   it('rejects non-integer and oversized quantities before sending', async () => {
     const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock);
-    await expect(previewMealRotation({ ...selections, 'week-a': { 'gid://shopify/ProductVariant/1': 51 } })).rejects.toThrow('quantities');
+    await expect(previewMealRotation({ ...selections, 'week-a': { 'gid://shopify/ProductVariant/1': 2_147_483_648 } })).rejects.toThrow('quantities');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it('accepts quantities above fifty without changing the fixed weekly selections', async () => {
+    const many = { ...week, subtotalCents: 91800, lines: [{ ...week.lines[0], quantity: 51 }] };
+    const fetchMock = vi.fn().mockResolvedValue(reply({ ...preview, weeks: { ...weeks, 'week-a': many } }));
+    vi.stubGlobal('fetch', fetchMock);
+    const larger = { ...selections, 'week-a': { 'gid://shopify/ProductVariant/1': 51 } };
+    expect((await previewMealRotation(larger)).weeks['week-a'].lines[0].quantity).toBe(51);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ selections: larger });
   });
   it('uses customer-safe messages instead of echoing remote error data', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ message: 'Private payment data' }, 500)));

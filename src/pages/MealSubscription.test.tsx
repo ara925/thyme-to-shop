@@ -192,11 +192,73 @@ describe('MealSubscription', () => {
     });
     const controls = addButton.parentElement;
     expect(controls).not.toBeNull();
-    const quantity = within(controls as HTMLElement).getByText('0');
+    const quantity = within(controls as HTMLElement).getByRole('spinbutton');
 
     expect(quantity).not.toHaveAttribute('role');
     expect(quantity).not.toHaveAttribute('aria-live');
+    expect(quantity).toHaveValue(0);
     expect(screen.getByRole('status')).toHaveTextContent('Week 1 Total: $0.00');
+  });
+
+  it('lets customers enter zero or more than fifty without altering the fixed menu', () => {
+    render(<MealSubscription />);
+    expect(screen.getByRole('heading', { name: 'Fixed Three-Week Meal Plan' })).toBeInTheDocument();
+    const quantity = screen.getByRole('spinbutton', { name: 'Weekly Meal quantity for Week 1' });
+    fireEvent.change(quantity, { target: { value: '51' } });
+    expect(quantity).toHaveValue(51);
+    fireEvent.click(screen.getByRole('button', { name: /add one weekly meal to week 1/i }));
+    expect(quantity).toHaveValue(52);
+    fireEvent.change(quantity, { target: { value: '0' } });
+    expect(quantity).toHaveValue(0);
+    expect(screen.getByRole('button', { name: /remove one weekly meal from week 1/i })).toBeDisabled();
+    expect(screen.getByRole('heading', { name: 'Weekly Meal' })).toBeInTheDocument();
+    switchToWeek(2);
+    expect(screen.getByRole('spinbutton', { name: 'Weekly Meal quantity for Week 2' })).toHaveValue(0);
+  });
+
+  it('keeps dishes in their assigned week and excludes zero quantities from the request', () => {
+    const salad = createProduct({ amount: '15.00' });
+    salad.node.id = 'week-one-salad';
+    salad.node.title = 'Week One Salad';
+    salad.node.tags = ['week-a'];
+    const steak = createProduct({ amount: '20.00' });
+    steak.node.id = 'week-two-steak';
+    steak.node.title = 'Week Two Steak';
+    steak.node.tags = ['week-b'];
+    const products = [createProduct(), salad, steak];
+    const original = structuredClone(products);
+    mocks.useProducts.mockReturnValue({ data: products, isLoading: false, isError: false });
+    render(<MealSubscription />);
+    expect(screen.getByRole('heading', { name: 'Week One Salad' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Week Two Steak' })).not.toBeInTheDocument();
+    const saladQuantity = screen.getByRole('spinbutton', { name: 'Week One Salad quantity for Week 1' });
+    fireEvent.change(saladQuantity, { target: { value: '6' } });
+    fireEvent.change(saladQuantity, { target: { value: '0' } });
+    addOneMealToWeek(1);
+    addOneMealToWeek(2);
+    expect(screen.getByRole('heading', { name: 'Week Two Steak' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Week One Salad' })).not.toBeInTheDocument();
+    addOneMealToWeek(3);
+    const handoff = decodeURIComponent(screen.getByRole('link', { name: /send plan for manual setup/i }).getAttribute('href') || '');
+    expect(handoff).not.toContain('Week One Salad');
+    expect(handoff).not.toContain('Week Two Steak');
+    expect(products).toEqual(original);
+    switchToWeek(1);
+    expect(screen.getByRole('heading', { name: 'Week One Salad' })).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: 'Week One Salad quantity for Week 1' })).toHaveValue(0);
+  });
+
+  it('blocks a dish saved in the wrong menu and allows removing only that stale quantity', () => {
+    localStorage.setItem('place-in-thyme-meal-draft-v1', JSON.stringify({ savedAt: Date.now(), value: {
+      'week-a': { 'meal-product': 1, 'not-in-this-menu': 2 },
+      'week-b': { 'meal-product': 1 },
+      'week-c': { 'meal-product': 1 },
+    } }));
+    render(<MealSubscription />);
+    expect(screen.queryByRole('link', { name: /send plan for manual setup/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove unavailable meal from Week 1' }));
+    expect(screen.getByRole('link', { name: /send plan for manual setup/i })).toBeInTheDocument();
+    expect(screen.getByRole('spinbutton', { name: 'Weekly Meal quantity for Week 1' })).toHaveValue(1);
   });
 
   it('does not send ordinary weekly selling plans to cart and explains the Shopify limitation', () => {

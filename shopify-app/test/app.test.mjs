@@ -37,7 +37,15 @@ function ready(store) {
 
 test('three separate actual totals, not a flat fee or combined checkout', () => assert.deepEqual(Object.values(approved).map(week => week.subtotalCents), [12600, 13300, 14000]));
 for (const invalid of ['-1.00', '1e3', 'NaN', '01.00', '1.001', ' 18.00', '']) test(`reject malformed money ${invalid}`, () => assert.throws(() => cents(invalid)));
-for (const quantity of [0, -1, 1.5, '7', 51, Number.MAX_SAFE_INTEGER]) test(`reject malformed quantity ${quantity}`, () => assert.throws(() => validateSelections({ ...selections, 'week-a': { 'gid://shopify/ProductVariant/1': quantity } }, catalog)));
+for (const quantity of [0, -1, 1.5, '7', 2_147_483_648, Number.MAX_SAFE_INTEGER]) test(`reject malformed quantity ${quantity}`, () => assert.throws(() => validateSelections({ ...selections, 'week-a': { 'gid://shopify/ProductVariant/1': quantity } }, catalog)));
+test('fixed weekly menus allow quantities above fifty but reject moving a dish to another menu', () => {
+  const larger = validateSelections({ ...selections, 'week-a': { 'gid://shopify/ProductVariant/1': 51 } }, catalog);
+  assert.equal(larger['week-a'].lines[0].quantity, 51);
+  assert.equal(larger['week-a'].subtotalCents, 91800);
+  assert.deepEqual(larger['week-b'], approved['week-b']);
+  assert.deepEqual(catalog['gid://shopify/ProductVariant/1'].tags, ['week-a']);
+  assert.throws(() => validateSelections({ ...selections, 'week-a': { 'gid://shopify/ProductVariant/2': 51 } }, catalog), /another menu/);
+});
 for (const [field, value] of Object.entries({ type: 'Juice', status: 'DRAFT', currency: 'CAD', available: false, requiresComponents: true, tags: ['week-b'] })) test(`reject invalid meal ${field}`, () => assert.throws(() => validateSelections(selections, { ...catalog, 'gid://shopify/ProductVariant/1': { ...catalog['gid://shopify/ProductVariant/1'], [field]: value } })));
 test('reject a below-minimum week and changed live prices', () => {
   assert.throws(() => validateSelections({ ...selections, 'week-b': { 'gid://shopify/ProductVariant/2': 6 } }, catalog));

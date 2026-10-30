@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MAX_MEAL_QUANTITY } from './mealRotation';
 
 export function rotationApiUrl(): string | null {
   try {
@@ -17,7 +18,7 @@ export type RotationWeek = typeof ROTATION_WEEKS[number];
 export type RotationSelections = Record<RotationWeek, Record<string, number>>;
 const variantId = z.string().regex(/^gid:\/\/shopify\/ProductVariant\/\d+$/);
 const lineSchema = z.object({
-  variantId, title: z.string().min(1).max(500), quantity: z.number().int().min(1).max(50),
+  variantId, title: z.string().min(1).max(500), quantity: z.number().int().min(1).max(MAX_MEAL_QUANTITY),
   priceCents: z.number().int().min(0).max(1000000),
 });
 const weekSchema = z.object({
@@ -95,9 +96,9 @@ function parse<T>(schema: z.ZodType<T>, body: unknown): T {
 
 export async function previewMealRotation(selections: RotationSelections, signal?: AbortSignal): Promise<RotationPreview> {
   const parsed = z.object({
-    'week-a': z.record(variantId, z.number().int().min(1).max(50)),
-    'week-b': z.record(variantId, z.number().int().min(1).max(50)),
-    'week-c': z.record(variantId, z.number().int().min(1).max(50)),
+    'week-a': z.record(variantId, z.number().int().min(1).max(MAX_MEAL_QUANTITY)),
+    'week-b': z.record(variantId, z.number().int().min(1).max(MAX_MEAL_QUANTITY)),
+    'week-c': z.record(variantId, z.number().int().min(1).max(MAX_MEAL_QUANTITY)),
   }).safeParse(selections);
   if (!parsed.success) throw new RotationServiceError('Check the selected meals and quantities before reviewing your plan.');
   return parse(previewSchema, await request('/preview', { method: 'POST', body: JSON.stringify({ selections: parsed.data }), signal }));
