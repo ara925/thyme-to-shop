@@ -53,6 +53,12 @@ jobs:
       - name: Keep local checkout inspection tools out of production
         run: npm run check:production-boundary
 
+      - name: Verify the deployable app archive and reject unsafe packages
+        shell: pwsh
+        run: |
+          ./scripts/package-shopify-app.ps1
+          ./scripts/test-shopify-app-package.ps1
+
       - name: Run lint
         run: npm run lint
 

@@ -94,6 +94,7 @@
     "vitest": "^4.1.12"
   },
   "overrides": {
+    "sucrase": "3.35.1",
     "postcss-selector-parser": "^6.1.5"
   }
 }

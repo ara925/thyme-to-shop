@@ -6,6 +6,48 @@ Node.js 22.18+ is required. There are no third-party runtime dependencies. The b
 
 Run `npm test --prefix shopify-app` from the repository root. Fixtures create no live requests, orders or charges. Package the deployment using `./scripts/package-shopify-app.ps1`; its allow-list excludes credentials, environment files and databases.
 
+## Prepared hosting session — November 2, 2026
+
+The prepared runtime **0.4.5 was deployed and verified on November 2**; 0.4.3 was the pre-upload baseline. No runtime source or database schema was changed during release preparation. This upload combines the pending meal-quantity fix and recovery pause. It does not finish Shopify checkout enforcement or authorize billing.
+
+Build the checked upload outside Vite's disposable `dist` directory:
+
+```powershell
+./scripts/package-shopify-app.ps1 -OutputDirectory release-handoff/2026-11-02
+./scripts/test-shopify-app-package.ps1 -ArchivePath release-handoff/2026-11-02/place-in-thyme-shopify-app.zip
+```
+
+Use `-NodePath` with a trusted Node 22.18+ executable if `node` on PATH is not suitable. The packager keeps the prior ZIP until its replacement passes. Its receipt records SHA-256, every included file and an isolated boot of the **extracted artifact**, not just the working checkout. That drill uses synthetic settings and an in-memory database, leaves all acceptance flags off, checks health/version and protected endpoints, and makes zero external requests. The verifier rejects private/unexpected files, missing/duplicate/altered files, ZIP traversal and wrong filename case or version. It never reads the host's environment or database. These checks do not prove live hosting acceptance.
+
+The handoff also includes a **code-only 0.4.3 rollback** from the previously deployed source revision `0bf69c8be2632275daec4cfbb20c3abbde153031`, with Git-blob verification and its own isolated-boot receipt. It contains no database or private settings. Do not use old code against a restored database as a substitute for the new recovery pause.
+
+### Before uploading
+
+1. Sign in normally to the existing SiteGround account. Use **Websites → Node.js Projects → existing corys32 project → Site Tools → Node.js → Deployment Options**. Do not create another project or touch the marketing WordPress site.
+2. Record safe baseline facts through the app's normal Shopify launch: version, connection state, owned meal/juice policies, three signed webhooks, zero legacy destinations, record counts and current launch flags. Do not record tokens, private URLs or environment values. If counts differ from the earlier empty-store checks, preserve the records and reconcile before any credential/storage change.
+3. Create/confirm the native host backup and its coverage of the private app directory. The account holder must also confirm private-environment recovery; file backup coverage alone is not that proof. Preserve the existing private database path outside `public_html`, permissions and environment. Never replace the database or upload `.env` with the code ZIP.
+4. Keep all seven acceptance flags off: billing, checkout, fulfillment, storefront, launch, persistent storage and juice. A code upload does not approve any flag. `PIT_RECOVERY_HOLD` defaults false for an ordinary code-only update; set it true **before** an actual restored-database boot, with all other flags still off. It is not needed just to install new code.
+5. The previously required client-secret/storage-key rotation and secure reconnection remain a separate developer/IT acceptance item. The account holder must enter new private credentials themselves. Never replace an encryption key against existing encrypted data without a retained private backup and an agreed migration/reconnection procedure. No secret belongs in these instructions or the release kit.
+
+### One upload, then live verification
+
+1. In **Deployment Options → Actions → Upload manually**, choose only `place-in-thyme-shopify-app.zip`. The receipts, rollback ZIP and instructions are not part of the normal upload. Confirm the native **Deployed!** result and retain the receipt without showing private settings.
+2. Open **Place in Thyme Meal Rotation** from Shopify, allowing its normal signed standalone launch. Check actual version **0.4.5**, connection, retained owned policies, three signed webhooks and no old WordPress destination. Verify that public health still has preview/enrollment/billing states appropriate to the closed launch; enrollment and billing must remain false. A cached screen or source commit is not deployment proof.
+3. Reload once and compare safe connection/configuration/record-count facts with the baseline. Run the authenticated fixed **snapshot**, **restored-copy** and **independent-process lock** checks. If a restored copy is missing/stale, prepare it through the native copy-only backup workflow into private `restore-probe`, never over the active database or in `public_html`. Do not overwrite an existing good copy merely to make a check pass.
+4. Verify at least two fresh minute-worker heartbeats without running setup or leaving a browser page as the scheduler. Record these as a short interruption/restart check, not long-term uptime acceptance. A successful snapshot/copy check is not a full private-environment restore or live operational cutover.
+5. In the public meal planner, temporarily check a quantity above 50 and independent Week 1/2/3 prices. Run only the no-charge review; confirm the cyclic menu order and actual weekly totals, starting with the menu for the next eligible service date (not always Week 1). Recheck weekly-only custom juice, the 10% adjustment, one-time tea and $15 per delivery. Restore only temporary choices and preserve the ordinary basket. No order or charge is needed for this step.
+6. If a post-upload regression occurs, keep enrollment/billing closed and preserve private storage. Use the prepared old-code ZIP only for a **code-only** rollback, then verify actual version 0.4.3 and the retained state again. If any database was restored or reconciliation is uncertain, stop and use the 0.4.5 recovery pause instead; 0.4.3 does not have that control.
+
+### Work that the hosting upload cannot close
+
+Essential Apps support confirmed that its free app cannot calculate per-selling-plan subtotals or original pre-adjustment juice totals, cannot exclude tea from that calculation, has no recurring weekday/service-date/cart-attribute condition, and cannot verify a county boundary. It can target local delivery separately from local pickup, but that partial capability does not satisfy the full launch requirements. Its blank admin panel is not a reason to weaken browser security or buy another app without approval.
+
+The replacement checkout solution must demonstrate: a $120 selected-meal minimum for each actual subscription week; $134.99 juice retail minimum before the exact 10% adjustment with tea excluded; fixed bundles and one-time/pickup orders unaffected; authoritative Friday 11:59 PM **Pacific** service-week cutoff; exact Orange County eligibility including both sides of shared ZIP 90631; and compatibility with Basic and the existing native subscriptions. Test mixed carts, altered quantities, accelerated checkout, delivery-to-pickup switching and direct checkout links. A global $99/$120 cart rule is not an acceptable substitute.
+
+Payment test mode is not yet confirmed available to the collaborator. Initial order, renewal, failed-payment, cancellation and agreed refund tests still require a controlled, agreed method. Do not turn unaccepted launch flags on merely to get a test through or expose public enrollment while testing. A zero-dollar order does not prove card/recurring billing. Cory's price, policy, business-contact and tax approvals remain separate. Completing one hosting session must not be reported as completing these outstanding requirements.
+
+**November 2 live receipt:** the included pre-update backup completed and the native manual-upload wizard confirmed Deployed. Actual 0.4.5 connection/policies/webhooks and closed launch flags survived reload. Snapshot, restored-copy and process-lock checks passed again; a later heartbeat was fresh. The public 51-quantity review succeeded, starting November 9 at Week 2 → 3 → 1 → 2 with $120/$120/$510/$120 test totals. The weekly juice/tea/delivery review also passed. Temporary choices were restored and the basket preserved. Full private-environment recovery, credential rotation and paid acceptance are not claimed.
+
 Configure the private environment variables documented in `.env.example`, then run `npm start` in this directory. The process listens on the platform's `PORT` and schedules a minute worker independent of browser traffic. Restart/redeploy persistence, background uptime and multi-process locking still require host acceptance. A local database-reopen fixture does not establish the production host's guarantees.
 
 For the isolated SiteGround project, do **not** use the default database beneath `public_html/.nodeapp/<build>/app_source`: uploads replace that directory. The approved live app uses `/home/customer/www/corys32.sg-host.com/private/meal-rotation/rotation.sqlite`, outside `public_html`. The private directory has mode 700 and the database is restricted to mode 600. A full manual-upload redeploy retained its OAuth/session state, owned plan, webhooks and worker heartbeat on October 24, 2026. This does not establish disaster recovery or long-term uptime by itself.
@@ -44,7 +86,7 @@ Authenticated admin controls can prepare and re-read the two app-owned juice pol
 
 ## Not customer-live
 
-Every billing/enrollment gate is OFF by default, including after upload, restart or OAuth. The six private acceptance flags, a fresh scheduler heartbeat, owned plan and signed hooks must all pass. There is no public or admin button that can switch those gates on.
+Every billing/enrollment gate is OFF by default, including after upload, restart or OAuth. The seven private acceptance flags, a fresh scheduler heartbeat, owned plan and signed hooks must all pass. There is no public or admin button that can switch those gates on.
 
 The isolated checkout and juice workflows are implemented but not paid-accepted. Crucially, validating a newly created cart does not prevent subsequent native checkout tampering: authoritative minimum/quantity/cutoff enforcement compatible with the merchant's Basic plan is still required. Native Orange County address enforcement (including shared ZIP 90631), $15-per-weekly-delivery acceptance, merchant payment provider, paid A→B→C→A and weekly juice renewal/cancellation acceptance, secure reconnection/storage recovery and uptime remain required. New prepaid enrollment is disabled and its delivery-fee question is resolved; do not delay weekly launch for an unoffered prepaid workflow. The quote endpoint stays closed until applicable checks pass. A successful no-charge preview or simulated renewal is not launch approval. Do not silently buy Plus, install another paid app, change the catalog or repurpose fixed juice plans to bypass those constraints.
 
