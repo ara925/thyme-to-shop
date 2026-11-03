@@ -27,7 +27,8 @@ describe('DeliveryTimeSelect without approved windows', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(
       /checkout stays disabled while launch testing is in progress/i,
     );
-    expect(screen.getByText(/online ordering is in test mode/i)).toBeInTheDocument();
+    expect(screen.getByText(/online ordering is not open yet/i)).toBeInTheDocument();
+    expect(screen.queryByText(/test mode/i)).not.toBeInTheDocument();
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 });
