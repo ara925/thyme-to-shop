@@ -35,6 +35,7 @@ vi.mock('@/lib/shopify', async (importOriginal) => {
 import {
   type CartItem,
   type CartItemInput,
+  getCartValidationMessage,
   useCartStore,
   validateCartBundleDependencies,
   validateCartMinimums,
@@ -823,7 +824,9 @@ describe('fulfillment confirmation and checkout', () => {
       { key: 'Fulfillment Method', value: 'Delivery' },
       { key: 'Preferred Dropoff Window', value: 'Monday' },
     ];
-    const confirmed = cart({ attributes, subtotal: '99.00' });
+    const confirmed = cart({ attributes, subtotal: '99.00', lines: [
+      line({ sellingPlanId: null, quantity: 1, unitAmount: '99.00', totalAmount: '99.00' }),
+    ] });
     storefrontMocks.request
       .mockResolvedValueOnce({
         data: { cartAttributesUpdate: { cart: confirmed, userErrors: [], warnings: [] } },
@@ -842,6 +845,36 @@ describe('fulfillment confirmation and checkout', () => {
       attributes,
     });
   });
+
+  it.each(['delivery', 'pickup'] as const)(
+    'revalidates recurring-only delivery spend from Shopify while preserving %s eligibility', async method => {
+      const window = method === 'delivery' ? 'monday' : 'monday-after-9am';
+      const attributes: CartAttribute[] = [
+        { key: 'Fulfillment Method', value: method === 'delivery' ? 'Delivery' : 'Pickup' },
+        { key: method === 'delivery' ? 'Preferred Dropoff Window' : 'Preferred Pickup Window',
+          value: method === 'delivery' ? 'Monday' : 'Monday after 9:00 AM' },
+      ];
+      const mixed = cart({ attributes, subtotal: '103.49', lines: [
+        line({ lineId: 'weekly-bundle', quantity: 1, unitAmount: '94.99', totalAmount: '94.99' }),
+        line({ lineId: 'one-time-extra', sellingPlanId: null, quantity: 1, unitAmount: '8.50', totalAmount: '8.50' }),
+      ] });
+      useCartStore.setState({ fulfillmentMethod: method, deliveryWindow: window, fulfillmentAttributesConfirmed: true });
+      storefrontMocks.request.mockResolvedValueOnce({
+        data: { cartAttributesUpdate: { cart: mixed, userErrors: [], warnings: [] } },
+      } satisfies { data: CartAttributesUpdateData });
+
+      if (method === 'delivery') {
+        await expect(useCartStore.getState().prepareCheckout()).rejects.toThrow('Add $4.01 in weekly items');
+        expect(useCartStore.getState().fulfillmentAttributesConfirmed).toBe(false);
+      } else {
+        await expect(useCartStore.getState().prepareCheckout()).resolves.toContain('/checkouts/test');
+      }
+      expect(getCartValidationMessage(useCartStore.getState().items, 'delivery')).toContain('Add $4.01');
+      expect(getCartValidationMessage(useCartStore.getState().items, 'pickup')).toBeNull();
+      expect(useCartStore.getState().items).toHaveLength(2);
+      expect(storefrontMocks.request).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('blocks checkout when Shopify returns an orphaned bundle add-on', async () => {
     const attributes: CartAttribute[] = [

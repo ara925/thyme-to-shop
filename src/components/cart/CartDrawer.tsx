@@ -57,7 +57,7 @@ export function CartDrawer() {
     clearWarnings,
   } = useCartStore();
   const totalItems = getTotalItems();
-  const cartValidationMessage = getCartValidationMessage(items);
+  const cartValidationMessage = getCartValidationMessage(items, fulfillmentMethod);
   const deliveryMinimum = getDeliveryMinimumStatus(subtotal, fulfillmentMethod);
   const { isCurrentCycleCutoffPassed } = useOrderCutoffStatus();
   const orderCutoffOpen = LOCAL_FULFILLMENT_READY && !isCurrentCycleCutoffPassed;

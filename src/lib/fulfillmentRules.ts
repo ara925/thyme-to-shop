@@ -50,6 +50,35 @@ export function getDeliveryMinimumStatus(
   };
 }
 
+/** One-time extras cannot make later weekly deliveries meet the delivery minimum. */
+export function getRecurringDeliveryMinimumStatus(
+  items: ReadonlyArray<{ sellingPlanId?: string; lineSubtotal: MoneyV2 }>,
+  method: FulfillmentMethod,
+): DeliveryMinimumStatus {
+  const recurring = items.filter(item => Boolean(item.sellingPlanId));
+  if (method === 'pickup' || recurring.length === 0) {
+    return { isMet: true, shortfallCents: 0, message: '' };
+  }
+  let recurringCents = 0;
+  for (const item of recurring) {
+    const cents = parseMoneyCents(item.lineSubtotal.amount);
+    if (cents === null || item.lineSubtotal.currencyCode !== DELIVERY_CURRENCY
+      || !Number.isSafeInteger(recurringCents + cents)) {
+      return { isMet: false, shortfallCents: 0, message: UNVERIFIED_TOTAL_MESSAGE };
+    }
+    recurringCents += cents;
+  }
+  const shortfallCents = Math.max(0, DELIVERY_MINIMUM_CENTS - recurringCents);
+  return {
+    isMet: shortfallCents === 0,
+    shortfallCents,
+    message: shortfallCents === 0 ? ''
+      : `Weekly delivery requires at least $99 in recurring products. Add ${formatPrice(
+        (shortfallCents / 100).toFixed(2), DELIVERY_CURRENCY,
+      )} in weekly items or choose free pickup. One-time extras only count toward the first order.`,
+  };
+}
+
 /** Revalidates launch readiness, cutoff, and the Shopify-returned subtotal. */
 export function validateFulfillmentForCheckout(
   subtotal: MoneyV2 | null,

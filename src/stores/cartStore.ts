@@ -32,7 +32,7 @@ import {
 import {
   type FulfillmentMethod,
 } from '@/lib/orderCutoff';
-import { validateFulfillmentForCheckout } from '@/lib/fulfillmentRules';
+import { getRecurringDeliveryMinimumStatus, validateFulfillmentForCheckout } from '@/lib/fulfillmentRules';
 import { parseMoneyCents } from '@/lib/moneyCents';
 import {
   DROPOFF_WINDOWS,
@@ -192,10 +192,14 @@ export function validateCartMinimums(items: CartItem[]): void {
   }
 }
 
-export function getCartValidationMessage(items: CartItem[]): string | null {
+export function getCartValidationMessage(items: CartItem[], method?: FulfillmentMethod): string | null {
   try {
     validateCartMinimums(items);
     validateCartBundleDependencies(items);
+    if (method) {
+      const recurringDelivery = getRecurringDeliveryMinimumStatus(items, method);
+      if (!recurringDelivery.isMet) return recurringDelivery.message;
+    }
     return null;
   } catch (error) {
     return error instanceof Error ? error.message : 'Please review your bundle before checkout.';
@@ -684,6 +688,8 @@ export const useCartStore = create<CartStore>()(
             validateCartMinimums(cartItems);
             validateCartBundleDependencies(cartItems);
             validateFulfillmentForCheckout(cart.cost.subtotalAmount, fulfillmentMethod);
+            const recurringDelivery = getRecurringDeliveryMinimumStatus(cartItems, fulfillmentMethod);
+            if (!recurringDelivery.isMet) throw new Error(recurringDelivery.message);
             const checkoutUrl = formatCheckoutUrl(cart.checkoutUrl);
             return checkoutUrl;
           } catch (error) {
