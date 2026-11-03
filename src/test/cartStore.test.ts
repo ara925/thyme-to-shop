@@ -701,6 +701,107 @@ describe('useCartStore Shopify synchronization', () => {
     await useCartStore.getState().syncCart();
     expect(useCartStore.getState()).toMatchObject({ cartId: null, items: [], warnings: [] });
   });
+
+  it.each([['18.00', '15.00', '90.00'], ['10.00', '12.00', '72.00']])(
+    'refreshes a saved one-time price from %s to %s without changing six selected items',
+    async (oldPrice, currentPrice, expectedTotal) => {
+      const stale = line({ sellingPlanId: null, quantity: 6, unitAmount: oldPrice });
+      stale.merchandise.price = usd(currentPrice);
+      const staleCart = cart({ lines: [stale] });
+      const attributes = [{ key: 'Customer note', value: 'Keep this selection' }];
+      const refreshed = cart({ attributes, subtotal: expectedTotal, lines: [
+        line({ sellingPlanId: null, quantity: 6, unitAmount: currentPrice, totalAmount: expectedTotal, attributes }),
+      ] });
+      setCartState(staleCart);
+      storefrontMocks.request
+        .mockResolvedValueOnce({ data: { cart: staleCart } })
+        .mockResolvedValueOnce({ data: { cartLinesUpdate: { cart: refreshed, userErrors: [], warnings: [] } } });
+
+      await useCartStore.getState().syncCart();
+
+      expect(storefrontMocks.request).toHaveBeenLastCalledWith(CART_LINES_UPDATE_MUTATION, {
+        cartId: staleCart.id, lines: [{ id: stale.id, quantity: 6 }],
+      });
+      expect(useCartStore.getState()).toMatchObject({ subtotal: usd(expectedTotal), isSyncing: false,
+        items: [{ quantity: 6, lineSubtotal: usd(expectedTotal), attributes }] });
+      expect(storefrontMocks.request).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it('asks Shopify to refresh even matching cached one-time prices without changing quantities', async () => {
+    const remote = cart({ lines: [line({ sellingPlanId: null })] });
+    setCartState(remote);
+    storefrontMocks.request
+      .mockResolvedValueOnce({ data: { cart: remote } })
+      .mockResolvedValueOnce({ data: { cartLinesUpdate: { cart: remote, userErrors: [], warnings: [] } } });
+    await useCartStore.getState().syncCart();
+    expect(storefrontMocks.request).toHaveBeenLastCalledWith(CART_LINES_UPDATE_MUTATION, {
+      cartId: remote.id, lines: [{ id: remote.lines.edges[0].node.id, quantity: 2 }],
+    });
+    expect(storefrontMocks.request).toHaveBeenCalledTimes(2);
+    expect(useCartStore.getState().error).toBeNull();
+  });
+
+  it('does not reprice a subscription against the standalone catalog price', async () => {
+    const subscription = line();
+    subscription.merchandise.price = usd('10.00');
+    const remote = cart({ lines: [subscription] });
+    setCartState(remote);
+    storefrontMocks.request.mockResolvedValueOnce({ data: { cart: remote } });
+    await useCartStore.getState().syncCart();
+    expect(storefrontMocks.request).toHaveBeenCalledTimes(1);
+    expect(useCartStore.getState().items[0].price).toEqual(usd('8.10'));
+    expect(useCartStore.getState().items[0].sellingPlanId).toBe(input.sellingPlanId);
+  });
+
+  it('refreshes only the one-time line in a mixed cart and preserves subscription metadata', async () => {
+    const oneTime = line({ lineId: 'one-time', sellingPlanId: null });
+    const attributes = [{ key: 'Rotation Week', value: 'week-b' }];
+    const subscription = line({ attributes });
+    const remote = cart({ lines: [oneTime, subscription], subtotal: '32.40' });
+    setCartState(remote);
+    storefrontMocks.request
+      .mockResolvedValueOnce({ data: { cart: remote } })
+      .mockResolvedValueOnce({ data: { cartLinesUpdate: { cart: remote, userErrors: [], warnings: [] } } });
+    await useCartStore.getState().syncCart();
+    expect(storefrontMocks.request).toHaveBeenLastCalledWith(CART_LINES_UPDATE_MUTATION, {
+      cartId: remote.id, lines: [{ id: 'one-time', quantity: 2 }],
+    });
+    expect(useCartStore.getState().items[1]).toMatchObject({
+      sellingPlanId: input.sellingPlanId, attributes, quantity: 2, price: usd('8.10'),
+    });
+  });
+
+  it('keeps the saved selection and reports a failed price refresh instead of inventing a total', async () => {
+    const stale = line({ sellingPlanId: null });
+    stale.merchandise.price = usd('12.00');
+    const remote = cart({ lines: [stale] });
+    setCartState(remote);
+    storefrontMocks.request
+      .mockResolvedValueOnce({ data: { cart: remote } })
+      .mockRejectedValueOnce(new StorefrontApiError('Offline', 'network'));
+    await useCartStore.getState().syncCart();
+    expect(useCartStore.getState()).toMatchObject({ cartId: remote.id,
+      items: [{ lineId: stale.id }], subtotal: remote.cost.subtotalAmount, isSyncing: false,
+      error: 'We could not reach the store. Check your connection and try again.' });
+  });
+
+  it('retains existing warnings and any Shopify quantity adjustment during repricing', async () => {
+    const stale = line({ sellingPlanId: null });
+    stale.merchandise.price = usd('10.00');
+    const remote = cart({ lines: [stale] });
+    const refreshed = cart({ subtotal: '10.00', lines: [
+      line({ sellingPlanId: null, quantity: 1, unitAmount: '10.00', totalAmount: '10.00' }),
+    ] });
+    setCartState(remote);
+    useCartStore.setState({ warnings: [stockWarning] });
+    storefrontMocks.request
+      .mockResolvedValueOnce({ data: { cart: remote } })
+      .mockResolvedValueOnce({ data: { cartLinesUpdate: { cart: refreshed, userErrors: [], warnings: [stockWarning] } } });
+    await useCartStore.getState().syncCart();
+    expect(useCartStore.getState()).toMatchObject({ warnings: [stockWarning],
+      items: [{ quantity: 1 }], subtotal: usd('10.00') });
+  });
 });
 
 describe('fulfillment confirmation and checkout', () => {
