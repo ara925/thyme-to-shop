@@ -13,6 +13,8 @@ describe('CutoffBanner', () => {
 
   it('does not advertise ordering before Shopify local fulfillment is ready', () => {
     expect(getCutoffBannerMessage(false, false)).toBe(FULFILLMENT_SETUP_BANNER_MESSAGE);
+    expect(FULFILLMENT_SETUP_BANNER_MESSAGE).toContain('awaiting launch approval');
+    expect(FULFILLMENT_SETUP_BANNER_MESSAGE).not.toMatch(/test mode/i);
   });
 
   it('shows the unambiguous end-of-Friday Pacific deadline while ordering is open', () => {

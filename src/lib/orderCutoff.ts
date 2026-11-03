@@ -13,7 +13,7 @@ export const ORDER_CUTOFF_LABEL = 'Friday at 11:59 PM PT';
 export const ORDER_CUTOFF_CLOSED_MESSAGE =
   'The Friday 11:59 PM PT order cutoff has passed. Online ordering is closed for this delivery cycle.';
 export const FULFILLMENT_SETUP_BANNER_MESSAGE =
-  'Online ordering is in test mode · Delivery and pickup checkout are not open yet';
+  'Online ordering is not open yet · Delivery and pickup checkout are awaiting launch approval';
 
 export function getCutoffBannerMessage(
   fulfillmentReady: boolean,

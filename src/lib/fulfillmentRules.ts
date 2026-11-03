@@ -12,7 +12,7 @@ import { formatPrice, type MoneyV2 } from '@/lib/shopify';
 import { parseMoneyCents } from '@/lib/moneyCents';
 
 export const FULFILLMENT_NOT_READY_MESSAGE =
-  'Online delivery and pickup are not available until the Shopify fulfillment setup is complete.';
+  'Online delivery and pickup checkout are awaiting final launch approval.';
 export const UNVERIFIED_TOTAL_MESSAGE =
   'Your order total could not be verified. Refresh the cart before checkout.';
 
