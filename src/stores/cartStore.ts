@@ -512,6 +512,14 @@ function operationErrorMessage(error: unknown): string {
   return getStorefrontErrorMessage(error);
 }
 
+/** A read can retain cached prices, so ask Shopify to refresh one-time lines in place. */
+function oneTimePriceRefreshLines(cart: ShopifyCart): Array<{ id: string; quantity: number }> {
+  return cart.lines.edges
+    // A subscription's agreed price is not the current standalone catalog price.
+    .filter(({ node }) => !node.sellingPlanAllocation)
+    .map(({ node }) => ({ id: node.id, quantity: node.quantity }));
+}
+
 export const useCartStore = create<CartStore>()(
   persist(
     (set, get) => ({
@@ -708,7 +716,24 @@ export const useCartStore = create<CartStore>()(
               set(emptyCartState());
               return;
             }
-            set(stateFromCart(response.data.cart));
+            let cart = response.data.cart;
+            const priceRefreshLines = oneTimePriceRefreshLines(cart);
+            let warnings: ShopifyCartWarning[] | undefined;
+            if (priceRefreshLines.length > 0) {
+              // Keep quantities, attributes and purchase options intact; Shopify reprices.
+              const refreshed = await storefrontApiRequest<CartLinesUpdateData>(
+                CART_LINES_UPDATE_MUTATION,
+                { cartId: currentCartId, lines: priceRefreshLines },
+              );
+              const result = throwPayloadErrors(refreshed.data.cartLinesUpdate, 'Refreshing cart prices');
+              cart = result.cart;
+              if (result.warnings.length > 0) {
+                warnings = [...get().warnings, ...result.warnings].filter((warning, index, all) =>
+                  all.findIndex(other => other.code === warning.code
+                    && other.target === warning.target && other.message === warning.message) === index);
+              }
+            }
+            set(stateFromCart(cart, warnings));
           } catch (error) {
             set({ error: operationErrorMessage(error) });
           } finally {
