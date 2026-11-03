@@ -14,8 +14,8 @@ import { Toaster } from './sonner';
 describe('notification navigation clearance', () => {
   it('keeps top notifications below the desktop and mobile sticky navigation', () => {
     render(<Toaster />);
-    expect(capture.props.offset).toEqual({ top: 96, right: 16, bottom: 16, left: 16 });
-    expect(capture.props.mobileOffset).toEqual({ top: 64, right: 16, bottom: 16, left: 16 });
+    expect(capture.props.offset).toEqual({ top: 96 });
+    expect(capture.props.mobileOffset).toEqual({ top: 64 });
   });
 
   it('preserves explicit offsets for a caller with a different layout', () => {
