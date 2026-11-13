@@ -77,6 +77,13 @@ describe('private meal-rotation service', () => {
     expect(fetchMock.mock.calls[0][0]).toMatch(/\/preview$/);
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ selections });
   });
+  it.each([[9900, true], [9899, false]])('validates the actual %i-cent weekly amount', async (subtotalCents, eligible) => {
+    const boundary = { subtotalCents, lines: [{ ...week.lines[0], priceCents: subtotalCents, quantity: 1 }] };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(reply({ ...preview, weeks: { ...weeks, 'week-a': boundary } })));
+    const result = previewMealRotation(selections);
+    if (eligible) expect((await result).weeks['week-a']).toEqual(boundary);
+    else await expect(result).rejects.toThrow('incomplete');
+  });
   it.each([
     { ...preview, currencyCode: 'CAD' },
     { ...preview, firstServiceDate: '2026-02-31' },

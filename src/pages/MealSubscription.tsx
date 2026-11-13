@@ -9,8 +9,7 @@ import { AlertCircle, CalendarDays, Check, Loader2, Mail, Minus, Plus } from 'lu
 import { useProducts, useSellingPlans } from '@/hooks/useProducts';
 import { ShopifyProduct, formatPrice } from '@/lib/shopify';
 import { getShopifyImageUrl } from '@/lib/images';
-import { MAX_MEAL_QUANTITY, parseMoneyAmountToCents } from '@/lib/mealRotation';
-import { parseMealMinimumCents } from '@/lib/subscriptionMinimum';
+import { MAX_MEAL_QUANTITY, MEAL_MINIMUM_CENTS, parseMoneyAmountToCents } from '@/lib/mealRotation';
 import { SubscriptionProductSkeletons } from '@/components/subscriptions/SubscriptionProductSkeletons';
 import { isCustomerFacingProduct } from '@/lib/productVisibility';
 import { isQuantityMap, usePersistentDraft } from '@/hooks/usePersistentDraft';
@@ -18,11 +17,9 @@ import { MealRotationReview } from '@/components/subscriptions/MealRotationRevie
 import { rotationApiUrl, type RotationSelections } from '@/lib/rotationService';
 
 const MEAL_PRODUCT_QUERY = 'product_type:Meal';
+// Keep the existing Shopify lookup name separate from the merchant's minimum.
 const MEAL_SELLING_PLAN_GROUP = 'Weekly Meal Subscription - $120 Minimum';
-const MEAL_MINIMUM_CENTS = parseMealMinimumCents(MEAL_SELLING_PLAN_GROUP);
-const MEAL_MINIMUM_DISPLAY = MEAL_MINIMUM_CENTS === null
-  ? null
-  : formatPrice((MEAL_MINIMUM_CENTS / 100).toFixed(2), 'USD');
+const MEAL_MINIMUM_DISPLAY = formatPrice((MEAL_MINIMUM_CENTS / 100).toFixed(2), 'USD');
 const ROTATION_REQUEST_EMAIL = 'info@placeinthyme.com';
 const WEEKS = [
   { id: 'week-a', label: 'Week 1', tag: 'week-a' },
@@ -99,7 +96,7 @@ const MealSubscription = () => {
     })
   )), [productsByWeek, selections]);
 
-  const allWeeksMeetMinimum = MEAL_MINIMUM_CENTS !== null && WEEKS.every(
+  const allWeeksMeetMinimum = WEEKS.every(
     week => weekTotalsCents[week.id] >= MEAL_MINIMUM_CENTS,
   );
   const anySelections = WEEKS.some(week => (
@@ -121,7 +118,7 @@ const MealSubscription = () => {
   );
 
   const requestHref = useMemo(() => {
-    if (!requestIsReady || MEAL_MINIMUM_CENTS === null) return null;
+    if (!requestIsReady) return null;
 
     const lines = [
       'Hello Place in Thyme,',
@@ -203,8 +200,7 @@ const MealSubscription = () => {
           <div className="mt-8 flex flex-wrap gap-3">
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
               <span>
-                <strong>{MEAL_MINIMUM_DISPLAY || 'Live minimum unavailable'}</strong>
-                {MEAL_MINIMUM_DISPLAY ? ' minimum for each week' : ''}
+                <strong>{MEAL_MINIMUM_DISPLAY}</strong> minimum for each week
               </span>
             </div>
             <div className="inline-flex items-center gap-2 rounded-full bg-white/10 backdrop-blur-sm px-5 py-2.5 text-sm text-white border border-white/10">
@@ -227,7 +223,7 @@ const MealSubscription = () => {
               Set Your Weekly Quantities
             </h2>
             <p className="text-muted-foreground mb-4">
-              Each tab has a fixed menu. Adjust quantities within that menu; dishes cannot be moved or substituted between weeks. Your quantities are saved as you switch tabs, and each week must meet the {MEAL_MINIMUM_DISPLAY || 'live'} minimum.
+              Each tab has a fixed menu. Adjust quantities within that menu; dishes cannot be moved or substituted between weeks. Your quantities are saved as you switch tabs, and each week must meet the {MEAL_MINIMUM_DISPLAY} minimum.
             </p>
             <p className="mb-4 text-sm text-muted-foreground" aria-live={storageUnavailable ? 'polite' : undefined}>
               {storageUnavailable ? 'Your browser cannot save this draft. Keep this page open until you send your plan.' : 'Your meal selections are saved on this device for 30 days. Prices and availability are checked again when you return.'}
@@ -236,9 +232,9 @@ const MealSubscription = () => {
             <div className="mb-4 rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-foreground" role="note">
               <p className="font-semibold">Confirmed plan terms</p>
               <ul className="mt-2 list-disc space-y-1 pl-5 text-muted-foreground">
-                <li>Set quantities of the listed dishes to reach at least {MEAL_MINIMUM_DISPLAY || 'the required minimum'} for each week. Leave any unwanted dish at zero.</li>
+                <li>Set quantities of the listed dishes to reach at least {MEAL_MINIMUM_DISPLAY} for each week. Leave any unwanted dish at zero.</li>
                 <li>The dishes and plan settings stay fixed. Changing your quantities does not change Cory's menus.</li>
-                <li>Each week, billing is for that active menu's actual selected total—not a flat {MEAL_MINIMUM_DISPLAY || 'minimum'} charge.</li>
+                <li>Each week, billing is for that active menu's actual selected total—not a flat {MEAL_MINIMUM_DISPLAY} charge.</li>
                 <li>The menus repeat in order: Week 1 → Week 2 → Week 3.</li>
                 <li>You may cancel anytime.</li>
               </ul>
@@ -264,7 +260,7 @@ const MealSubscription = () => {
               <TabsList className="grid w-full grid-cols-3 mb-8">
                 {WEEKS.map(week => {
                   const totalCents = weekTotalsCents[week.id];
-                  const meetsMinimum = MEAL_MINIMUM_CENTS !== null && totalCents >= MEAL_MINIMUM_CENTS;
+                  const meetsMinimum = totalCents >= MEAL_MINIMUM_CENTS;
                   return (
                     <TabsTrigger
                       key={week.id}
@@ -284,10 +280,8 @@ const MealSubscription = () => {
               {WEEKS.map(week => {
                 const weekProducts = productsByWeek[week.id];
                 const totalCents = weekTotalsCents[week.id];
-                const meetsMinimum = MEAL_MINIMUM_CENTS !== null && totalCents >= MEAL_MINIMUM_CENTS;
-                const remainingCents = MEAL_MINIMUM_CENTS === null
-                  ? null
-                  : Math.max(0, MEAL_MINIMUM_CENTS - totalCents);
+                const meetsMinimum = totalCents >= MEAL_MINIMUM_CENTS;
+                const remainingCents = Math.max(0, MEAL_MINIMUM_CENTS - totalCents);
 
                 return (
                   <TabsContent key={week.id} value={week.id}>
@@ -306,7 +300,7 @@ const MealSubscription = () => {
                             {week.label} Total: {formatCents(totalCents)}
                           </span>
                         </div>
-                        {!meetsMinimum && remainingCents !== null && (
+                        {!meetsMinimum && (
                           <span className="text-sm text-muted-foreground">
                             {formatCents(remainingCents)} more needed
                           </span>
@@ -316,9 +310,7 @@ const MealSubscription = () => {
                         <div
                           className={`h-full rounded-full transition-all duration-500 ${meetsMinimum ? 'bg-primary' : 'bg-accent'}`}
                           style={{
-                            width: `${MEAL_MINIMUM_CENTS === null
-                              ? 0
-                              : Math.min(100, (totalCents / MEAL_MINIMUM_CENTS) * 100)}%`,
+                            width: `${Math.min(100, (totalCents / MEAL_MINIMUM_CENTS) * 100)}%`,
                           }}
                         />
                       </div>
@@ -426,7 +418,7 @@ const MealSubscription = () => {
               <div className="space-y-5 mb-6">
                 {WEEKS.map(week => {
                   const totalCents = weekTotalsCents[week.id];
-                  const meetsMinimum = MEAL_MINIMUM_CENTS !== null && totalCents >= MEAL_MINIMUM_CENTS;
+                  const meetsMinimum = totalCents >= MEAL_MINIMUM_CENTS;
                   const chosenItems = Object.entries(selections[week.id]).filter(([, quantity]) => quantity > 0);
                   const itemCount = chosenItems.reduce((total, [, quantity]) => total + quantity, 0);
 
@@ -467,7 +459,7 @@ const MealSubscription = () => {
                 })}
               </div>
 
-              {!productsLoading && !allWeeksMeetMinimum && MEAL_MINIMUM_DISPLAY && (
+              {!productsLoading && !allWeeksMeetMinimum && (
                 <div className="mb-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                   <p className="text-sm text-destructive flex items-center gap-2">
                     <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />

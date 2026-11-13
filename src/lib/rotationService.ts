@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MAX_MEAL_QUANTITY } from './mealRotation';
+import { MAX_MEAL_QUANTITY, MEAL_MINIMUM_CENTS } from './mealRotation';
 
 export function rotationApiUrl(): string | null {
   try {
@@ -22,7 +22,7 @@ const lineSchema = z.object({
   priceCents: z.number().int().min(0).max(1000000),
 });
 const weekSchema = z.object({
-  subtotalCents: z.number().int().min(12000).max(1000000),
+  subtotalCents: z.number().int().min(MEAL_MINIMUM_CENTS).max(1000000),
   lines: z.array(lineSchema).min(1).max(50),
 }).refine(week => week.lines.reduce((sum, line) => sum + line.quantity * line.priceCents, 0) === week.subtotalCents
   && new Set(week.lines.map(line => line.variantId)).size === week.lines.length);

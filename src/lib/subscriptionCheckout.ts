@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { subscriptionRequest, parseSubscriptionResponse, rotationPreviewSchema, validRotationAccess, RotationServiceError, type RotationSelections, type RotationPreview, type RotationAccess } from './rotationService';
 import { SHOPIFY_STORE_PERMANENT_DOMAIN, SHOPIFY_CHECKOUT_DOMAIN } from './shopify';
+import { MEAL_MINIMUM_CENTS } from './mealRotation';
 
 export type SubscriptionFulfillment = { method: 'pickup'; window: 'monday-after-9am' } | { method: 'delivery'; window: 'monday' | 'tuesday' };
 export const enrollmentAccessSchema = z.object({ id: z.string().regex(/^[a-f0-9]{48}$/), manageToken: z.string().regex(/^[a-f0-9]{64}$/), expiresAt: z.string().datetime({ offset: true }) });
@@ -16,7 +17,7 @@ export const secureCheckoutSchema = z.string().url().refine(value => {
 });
 const checkoutSchema = z.object({ checkoutUrl: secureCheckoutSchema, expiresAt: z.string().datetime({ offset: true }),
   firstWeek: z.enum(['week-a', 'week-b', 'week-c']), firstServiceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  firstSubtotalCents: z.number().int().min(12000).max(1000000), fulfillment: fulfillmentSchema });
+  firstSubtotalCents: z.number().int().min(MEAL_MINIMUM_CENTS).max(1000000), fulfillment: fulfillmentSchema });
 export type MealEnrollmentQuote = z.infer<typeof quoteSchema>;
 
 export async function quoteMealEnrollment(selections: RotationSelections, reviewed: RotationPreview, signal?: AbortSignal): Promise<MealEnrollmentQuote> {
