@@ -181,7 +181,21 @@ describe('MealSubscription', () => {
     expect(screen.getByRole('button', { name: /remove one weekly meal from week 1/i })).toBeEnabled();
     expect(screen.getByRole('button', { name: /complete all three weeks to send plan/i })).toBeDisabled();
     expect(screen.queryByRole('link', { name: /send plan for manual setup/i })).not.toBeInTheDocument();
-    expect(screen.getByText(/complete all three menus at \$120.00 or more per week/i)).toBeInTheDocument();
+    expect(screen.getByText(/complete all three menus at \$99.00 or more per week/i)).toBeInTheDocument();
+  });
+
+  it.each([['98.99', false], ['99.00', true]])('checks every menu independently at %s', (amount, ready) => {
+    mocks.useProducts.mockReturnValue({ data: [createProduct({ amount })], isLoading: false, isError: false });
+    render(<MealSubscription />);
+    addOneMealToWeek(1);
+    addOneMealToWeek(2);
+    addOneMealToWeek(3);
+    const link = screen.queryByRole('link', { name: /send plan for manual setup/i });
+    if (ready) expect(decodeURIComponent(link?.getAttribute('href') || '')).toContain('Minimum: Each week is at least $99.00.');
+    else {
+      expect(link).not.toBeInTheDocument();
+      expect(screen.getByText('$0.01 more needed')).toBeInTheDocument();
+    }
   });
 
   it('announces the changing week total without a second quantity live region', () => {
