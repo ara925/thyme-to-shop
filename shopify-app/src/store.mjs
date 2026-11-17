@@ -21,6 +21,9 @@ export class Store {
       CREATE TABLE IF NOT EXISTS events (id TEXT PRIMARY KEY,resource_id TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending',attempts INTEGER NOT NULL DEFAULT 0,due_at INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS rates (key TEXT PRIMARY KEY,count INTEGER NOT NULL,expires INTEGER NOT NULL);`);
     this.db.exec('CREATE TABLE IF NOT EXISTS tickets (hash TEXT PRIMARY KEY,kind TEXT NOT NULL,expires INTEGER NOT NULL)');
+    this.db.exec(`CREATE TABLE IF NOT EXISTS minimum_reviews (
+      contract_id TEXT PRIMARY KEY, order_id TEXT, plan_kind TEXT NOT NULL, reason TEXT NOT NULL, created_at INTEGER NOT NULL
+    )`);
   }
   getSetting(key, fallback = null) { const row = this.db.prepare('SELECT value FROM settings WHERE key=?').get(key); return row ? JSON.parse(row.value) : fallback; }
   setSetting(key, value) { this.db.prepare('INSERT INTO settings VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, JSON.stringify(value)); }
@@ -97,6 +100,15 @@ export class Store {
   }
   unlock(id, lease) { this.db.prepare("UPDATE rotations SET lease='',locked_until=0 WHERE id=? AND lease=?").run(id, lease); }
   enqueue(id, resourceId) { this.db.prepare('INSERT INTO events(id,resource_id) VALUES (?,?) ON CONFLICT(id) DO NOTHING').run(id, resourceId); }
+  flagMinimumReview(contractId, orderId, kind, reason, now) {
+    this.db.prepare('INSERT INTO minimum_reviews VALUES (?,?,?,?,?) ON CONFLICT(contract_id) DO NOTHING')
+      .run(contractId, orderId, kind, reason, now);
+  }
+  hasMinimumReview(contractId) { return Boolean(this.db.prepare('SELECT 1 FROM minimum_reviews WHERE contract_id=?').get(contractId)); }
+  minimumReviewSummary() {
+    return { count: this.db.prepare('SELECT COUNT(*) AS count FROM minimum_reviews').get().count,
+      recent: this.db.prepare('SELECT contract_id AS contractId, order_id AS orderId, plan_kind AS kind, reason FROM minimum_reviews ORDER BY created_at DESC, contract_id LIMIT 20').all().map(row => ({ ...row })) };
+  }
   ticket(kind, seconds) {
     this.db.prepare('DELETE FROM tickets WHERE expires<?').run(Date.now());
     const token = randomBytes(32).toString('hex');

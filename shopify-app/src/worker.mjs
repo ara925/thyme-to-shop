@@ -1,37 +1,43 @@
-import { WEEKS, assert, assertLocal, assertReviewedFulfillment, assertCalculation, fingerprint, matchLines, validateUnchanged, nextServiceDate, nextBillingDate, serviceCutoff, weekAt, ReviewRequiredError } from './domain.mjs';
+import { WEEKS, MEAL_MINIMUM_CENTS, cents, assert, assertLocal, assertNonTestOrigin, assertReviewedFulfillment, assertCalculation, fingerprint, matchLines, validateUnchanged, nextServiceDate, nextBillingDate, serviceCutoff, weekAt, initialOrderWindowReview, renewalPaymentState, ReviewRequiredError } from './domain.mjs';
+import { JUICE_MINIMUM_CENTS } from './juice-domain.mjs';
 import { JuiceWorker } from './juice-worker.mjs';
 
 const LIVE_STATES = ['active', 'calculating', 'committing', 'billing', 'finalizing'];
+const CANCELLATION_RETRY_MS = 15 * 60 * 1000;
 export class Worker {
-  constructor(store, shopify, { gates = {}, now = () => Date.now(), identityKey = '', recoveryHold = false } = {}) { this.store = store; this.api = shopify; this.gates = gates; this.now = now; this.key = identityKey; this.recoveryHold = recoveryHold === true; this.juices = new JuiceWorker(store, shopify, { gates, now, identityKey, recoveryHold }); }
+  constructor(store, shopify, { gates = {}, now = () => Date.now(), identityKey = '', recoveryHold = false, schedulerReady } = {}) { this.store = store; this.api = shopify; this.gates = gates; this.now = now; this.key = identityKey; this.recoveryHold = recoveryHold === true; this.schedulerReady = schedulerReady ?? (() => this.store.getSetting('heartbeat', 0) >= this.now() - 120000); this.juices = new JuiceWorker(store, shopify, { gates, now, identityKey, recoveryHold, schedulerReady: this.schedulerReady }); }
   enabled() {
     return !this.recoveryHold && ['billing', 'checkout', 'fulfillment', 'storefront', 'launch', 'persistentStorage'].every(key => this.gates[key] === true)
-      && this.store.getSetting('heartbeat', 0) >= this.now() - 120000 && this.store.getSetting('verifiedAt', 0) > 0
+      && this.schedulerReady() && this.store.getSetting('verifiedAt', 0) > 0
       && /^gid:\/\/shopify\/SellingPlan\/\d+$/.test(this.store.getSetting('planId', ''))
       && this.store.getSetting('webhooks', []).length === 3 && Boolean(this.key);
   }
   async tick() {
     // Billing gates intentionally permit cancellation retries. Recovery must pause those too.
-    if (this.recoveryHold) return;
-    this.store.setSetting('heartbeat', this.now());
-    const lock = this.store.lease('worker', 120); if (!lock) return;
+    if (this.recoveryHold) return false;
+    const lock = this.store.lease('worker', 120); if (!lock) return false;
     try {
+      this.store.setSetting('heartbeat', this.now());
       const events = this.store.db.prepare("SELECT * FROM events WHERE state='pending' AND due_at<=? ORDER BY due_at LIMIT 5").all(this.now());
       for (const event of events) {
         try {
           const contract = await this.api.contract(event.resource_id);
-          const attributes = contract.lines.nodes.flatMap(line => line.customAttributes || []);
-          assert(!(attributes.some(item => item.key === '_pit_rotation_id') && attributes.some(item => item.key === '_pit_juice_id')), 'Mixed subscription identities require review.');
-          await this.bind(event.resource_id, contract);
-          await this.juices.bind(event.resource_id, contract);
+          // A Shopify test order is not converted to a real order when test mode ends.
+          if (contract.originOrder?.test !== true && !await this.flagInitialMinimumReview(event.resource_id, contract) && !this.flagInitialOrderWindowReview(event.resource_id, contract)) {
+            const attributes = contract.lines.nodes.flatMap(line => line.customAttributes || []);
+            assert(!(attributes.some(item => item.key === '_pit_rotation_id') && attributes.some(item => item.key === '_pit_juice_id')), 'Mixed subscription identities require review.');
+            await this.bind(event.resource_id, contract);
+            await this.juices.bind(event.resource_id, contract);
+          }
           this.store.db.prepare("UPDATE events SET state='processed' WHERE id=?").run(event.id);
         } catch {
           this.store.db.prepare('UPDATE events SET attempts=attempts+1,due_at=?,state=? WHERE id=?').run(this.now() + 60000 * Math.min(60, 2 ** event.attempts), event.attempts >= 9 ? 'review' : 'pending', event.id);
           this.store.setSetting('eventReviewNeeded', true);
         }
       }
+      await this.retryMealCancellations();
       await this.juices.stepDue();
-      if (!this.enabled()) return;
+      if (!this.enabled()) return true;
       const rows = this.store.db.prepare("SELECT id FROM rotations WHERE COALESCE(json_extract(payload,'$.kind'),'meal')='meal' AND state IN ('active','calculating','committing','billing','finalizing') AND due_at<=? ORDER BY due_at LIMIT 3").all(this.now());
       for (const { id } of rows) {
         const lease = this.store.claim(id); if (!lease) continue;
@@ -43,7 +49,109 @@ export class Worker {
           this.store.update(id, { state: retryable ? row.state : 'review', due_at: this.now() + 900000, data: { ...row.data, lastError: 'Renewal requires review or safe retry. No new billing key was generated.' } }, lease);
         } finally { this.store.unlock(id, lease); }
       }
+      return true;
     } finally { this.store.release('worker', lock); }
+  }
+  async requestMealCancellation(id, lease) {
+    assert(!this.recoveryHold, 'Recovery reconciliation is still in progress.');
+    const row = this.store.get(id);
+    assert(row && row.data.kind !== 'juice' && /^gid:\/\/shopify\/SubscriptionContract\/\d+$/.test(row.contract_id || ''), 'This meal plan is not enrolled.');
+    if (row.data.cancellationConfirmed) return;
+    const data = { ...row.data, cancellationPending: true, cancellationRequestedAt: row.data.cancellationRequestedAt || new Date(this.now()).toISOString() };
+    this.store.update(id, { state: 'stopped', due_at: this.now(), data }, lease);
+    await this.finishMealCancellation(id, lease);
+  }
+  async finishMealCancellation(id, lease) {
+    assert(!this.recoveryHold, 'Recovery reconciliation is still in progress.');
+    const row = this.store.get(id);
+    const data = row?.data;
+    assert(row?.state === 'stopped' && data?.kind !== 'juice' && data?.cancellationPending === true && !data.cancellationConfirmed
+      && typeof data.cancellationRequestedAt === 'string' && Number.isFinite(Date.parse(data.cancellationRequestedAt))
+      && /^gid:\/\/shopify\/SubscriptionContract\/\d+$/.test(row.contract_id || ''), 'No saved meal cancellation to finish.');
+    // Persist the next retry before the remote call. A timeout or lost process
+    // cannot reactivate billing, lose the request, or retry on every tick.
+    this.store.update(id, { due_at: this.now() + CANCELLATION_RETRY_MS }, lease);
+    await this.api.cancel(row.contract_id);
+    this.store.update(id, { due_at: 0, data: { ...data, cancellationPending: false, cancellationConfirmed: true } }, lease);
+  }
+  async retryMealCancellations() {
+    if (this.recoveryHold) return;
+    const rows = this.store.db.prepare(`SELECT id FROM rotations WHERE COALESCE(json_extract(payload,'$.kind'),'meal')='meal'
+      AND state='stopped' AND contract_id IS NOT NULL AND json_extract(payload,'$.cancellationPending')=1
+      AND COALESCE(json_extract(payload,'$.cancellationConfirmed'),0)=0 AND due_at<=? ORDER BY due_at LIMIT 3`).all(this.now());
+    for (const { id } of rows) {
+      const lease = this.store.claim(id); if (!lease) continue;
+      try { await this.finishMealCancellation(id, lease); }
+      catch {
+        const row = this.store.get(id);
+        if (row?.state === 'stopped' && row.data.cancellationPending === true && !row.data.cancellationConfirmed && row.due_at <= this.now()) {
+          this.store.update(id, { due_at: this.now() + CANCELLATION_RETRY_MS }, lease);
+        }
+      } finally { this.store.unlock(id, lease); }
+    }
+  }
+  flagInitialOrderWindowReview(contractId, contract) {
+    if (this.store.hasMinimumReview(contractId)) return true;
+    if (this.store.db.prepare('SELECT 1 FROM rotations WHERE contract_id=?').get(contractId) || contract.status !== 'ACTIVE') return false;
+    const plans = this.store.getSetting('juicePlanIds');
+    const mealPlan = this.store.getSetting('planId');
+    const contractKind = mealPlan && contract.lines.nodes.some(line => line.sellingPlanId === mealPlan) ? 'meal'
+      : plans?.weekly && contract.lines.nodes.some(line => line.sellingPlanId === plans.weekly) ? 'juice' : null;
+    if (!contractKind) return false;
+    const identities = contract.lines.nodes.flatMap(line => (line.customAttributes || [])
+      .filter(item => item.key === (contractKind === 'meal' ? '_pit_rotation_id' : '_pit_juice_id')).map(item => item.value));
+    const ids = [...new Set(identities)];
+    const row = ids.length === 1 && /^[a-f0-9]{48}$/.test(ids[0]) ? this.store.get(ids[0]) : null;
+    const reason = !row || row.contract_id || row.state !== 'quoted' || (row.data.kind === 'juice' ? 'juice' : 'meal') !== contractKind
+      ? 'service-week-unverified' : initialOrderWindowReview({ createdAt: contract.originOrder?.createdAt, checkoutPreparedAt: row.data.checkoutPreparedAt,
+        expiresAt: row.data.expiresAt, serviceDate: contractKind === 'juice' ? row.data.firstServiceDate : row.data.serviceDate });
+    if (!reason) return false;
+    const id = contract.originOrder?.id;
+    this.store.flagMinimumReview(contractId, /^gid:\/\/shopify\/Order\/\d+$/.test(id || '') ? id : null, contractKind, reason, this.now());
+    return true;
+  }
+  async flagInitialMinimumReview(contractId, contract) {
+    if (this.store.hasMinimumReview(contractId)) return true;
+    // Only inspect initial custom contracts. For an enrolled plan, renewal checks
+    // already compare the actual contract against its saved selections and prices.
+    if (this.store.db.prepare('SELECT 1 FROM rotations WHERE contract_id=?').get(contractId) || contract.status !== 'ACTIVE') return false;
+    const lines = contract.lines.nodes;
+    const mealId = this.store.getSetting('planId');
+    const juiceIds = this.store.getSetting('juicePlanIds');
+    const meals = mealId ? lines.filter(line => line.sellingPlanId === mealId) : [];
+    const juices = lines.filter(line => Boolean(line.sellingPlanId) && [juiceIds?.weekly, juiceIds?.prepaid].includes(line.sellingPlanId));
+    if (!meals.length && !juices.length) return false;
+    const kind = meals.length && juices.length ? 'mixed' : meals.length ? 'meal' : 'juice';
+    let reason = null;
+    if (kind === 'mixed' || contract.currencyCode !== 'USD' || contract.lines.pageInfo?.hasNextPage || contract.discounts?.nodes?.length) reason = 'minimum-unverified';
+    else {
+      const catalog = kind === 'juice' ? await this.api.juiceCatalog() : null;
+      let subtotal = 0;
+      try {
+        for (const line of kind === 'meal' ? meals : juices) {
+          assert(Number.isSafeInteger(line.quantity) && line.quantity > 0 && line.currentPrice?.currencyCode === 'USD', 'Minimum cannot be verified.');
+          const paid = cents(line.currentPrice.amount);
+          let price = paid;
+          if (kind === 'juice') {
+            const item = catalog.items[line.variantId];
+            assert(item?.price && line.sellingPlanId === juiceIds.weekly, 'Juice price cannot be verified.');
+            price = cents(item.price);
+            assert(paid === Math.floor((price * 90 + 50) / 100), 'Juice discount cannot be verified.');
+          }
+          subtotal += price * line.quantity;
+          assert(price > 0 && Number.isSafeInteger(subtotal), 'Minimum cannot be verified.');
+        }
+        if (subtotal < (kind === 'meal' ? MEAL_MINIMUM_CENTS : JUICE_MINIMUM_CENTS)) reason = 'below-minimum';
+      } catch (error) {
+        if (!(error instanceof ReviewRequiredError)) throw error;
+        reason = 'minimum-unverified';
+      }
+    }
+    if (!reason) return false;
+    const rawOrderId = contract.originOrder?.id;
+    const orderId = /^gid:\/\/shopify\/Order\/\d+$/.test(rawOrderId || '') ? rawOrderId : null;
+    this.store.flagMinimumReview(contractId, orderId, kind, reason, this.now());
+    return true;
   }
   async bind(contractId, suppliedContract) {
     assert(!this.recoveryHold, 'Recovery reconciliation is still in progress.');
@@ -61,7 +169,9 @@ export class Worker {
         if (contract.status !== 'ACTIVE') this.store.update(id, { state: 'stopped', data: { ...data, ...(contract.status === 'CANCELLED' ? { cancellationPending: false, cancellationConfirmed: true } : {}) } }, lease);
         return;
       }
-      assert(current.state === 'quoted' && data.expiresAt > this.now(), 'Enrollment expired; manual reconciliation required.');
+      assertNonTestOrigin(contract);
+      assert(current.state === 'quoted' && !initialOrderWindowReview({ createdAt: contract.originOrder?.createdAt,
+        checkoutPreparedAt: data.checkoutPreparedAt, expiresAt: data.expiresAt, serviceDate: data.serviceDate }), 'Initial order timing needs review.');
       const planId = this.store.getSetting('planId');
       assert(planId && contract.lines.nodes.every(line => line.sellingPlanId === planId), 'Selling plan does not match.');
       assertLocal(contract);
@@ -81,6 +191,7 @@ export class Worker {
     const row = this.store.get(id); if (!row || row.data.kind === 'juice' || !LIVE_STATES.includes(row.state)) return;
     const data = row.data; const contract = await this.api.contract(row.contract_id);
     if (contract.status !== 'ACTIVE') { this.store.update(id, { state: 'stopped' }, lease); return; }
+    assertNonTestOrigin(contract);
     assertLocal(contract);
     assert(!contract.discounts?.nodes?.length && fingerprint(contract.deliveryMethod, this.key) === data.approvedDeliveryFingerprint, 'Contract discounts or delivery changed; review required.');
     if (['active', 'billing'].includes(row.state)) assert(data.approvedRevisionId && String(contract.revisionId) === data.approvedRevisionId, 'The contract was edited outside the app; review is required.');
@@ -121,8 +232,9 @@ export class Worker {
       }
       const attempt = data.attemptId ? await this.api.pollAttempt(data.attemptId) : await this.api.attempt(row.contract_id, data.idempotencyKey, data.billingOrigin);
       assert(attempt?.id, 'Uncertain billing result; reuse saved key.'); data.attemptId = attempt.id;
-      if (attempt.nextActionUrl || attempt.errorCode) { this.store.update(id, { state: 'review', data }, lease); return; }
-      if (!attempt.ready || !attempt.order?.id) { this.store.update(id, { due_at: this.now() + 60000, data }, lease); return; }
+      const payment = renewalPaymentState(attempt);
+      if (payment === 'review') { this.store.update(id, { state: 'review', data }, lease); return; }
+      if (payment === 'pending') { this.store.update(id, { due_at: this.now() + 60000, data }, lease); return; }
       data.paidOrderId = attempt.order.id; data.nextBillingDate = nextBillingDate(data.billingOrigin);
       this.store.update(id, { state: 'finalizing', data }, lease); return;
     }

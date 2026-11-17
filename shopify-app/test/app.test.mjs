@@ -27,6 +27,7 @@ const memory = () => new Store(':memory:', key);
 const gates = Object.fromEntries(['billing', 'checkout', 'fulfillment', 'storefront', 'launch', 'persistentStorage'].map(key => [key, true]));
 const contractFor = week => ({ id: 'gid://shopify/SubscriptionContract/123', status: 'ACTIVE', currencyCode: 'USD', revisionId: '1',
   nextBillingDate: new Date(Date.now() - 1000).toISOString(), billingPolicy: { interval: 'WEEK', intervalCount: 1 }, deliveryPolicy: { interval: 'WEEK', intervalCount: 1 },
+  originOrder: { test: false },
   deliveryMethod: { __typename: 'SubscriptionDeliveryMethodPickup', pickupOption: { code: 'pickup', location: { id: PICKUP_LOCATION_ID } } },
   deliveryPrice: { amount: '0.00', currencyCode: 'USD' }, customerPaymentMethod: { id: 'payment-1' }, discounts: { nodes: [] },
   lines: { nodes: week.lines.map(line => ({ variantId: line.variantId, quantity: line.quantity, currentPrice: { amount: amount(line.priceCents), currencyCode: 'USD' }, sellingPlanId: 'gid://shopify/SellingPlan/1', customAttributes: [] })), pageInfo: { hasNextPage: false } },
@@ -48,8 +49,16 @@ test('fixed weekly menus allow quantities above fifty but reject moving a dish t
 });
 for (const [field, value] of Object.entries({ type: 'Juice', status: 'DRAFT', currency: 'CAD', available: false, requiresComponents: true, tags: ['week-b'] })) test(`reject invalid meal ${field}`, () => assert.throws(() => validateSelections(selections, { ...catalog, 'gid://shopify/ProductVariant/1': { ...catalog['gid://shopify/ProductVariant/1'], [field]: value } })));
 test('reject a below-minimum week and changed live prices', () => {
-  assert.throws(() => validateSelections({ ...selections, 'week-b': { 'gid://shopify/ProductVariant/2': 6 } }, catalog));
+  assert.throws(() => validateSelections({ ...selections, 'week-b': { 'gid://shopify/ProductVariant/2': 5 } }, catalog));
   assert.throws(() => validateUnchanged(approved, { ...catalog, 'gid://shopify/ProductVariant/2': { ...catalog['gid://shopify/ProductVariant/2'], price: '20.00' } }));
+});
+
+test('each selected week accepts $99 and rejects $98.99', () => {
+  const exact = Object.fromEntries(Object.entries(catalog).map(([id, meal]) => [id, { ...meal, price: '99.00' }]));
+  const oneEach = Object.fromEntries(WEEKS.map((week, index) => [week, { [`gid://shopify/ProductVariant/${index + 1}`]: 1 }]));
+  assert.deepEqual(Object.values(validateSelections(oneEach, exact)).map(week => week.subtotalCents), [9900, 9900, 9900]);
+  exact['gid://shopify/ProductVariant/2'].price = '98.99';
+  assert.throws(() => validateSelections(oneEach, exact), /\$99/);
 });
 test('Friday-midnight cutoff and weekend enrollment stay in Pacific time', () => {
   assert.equal(firstServiceDate(Date.parse('2026-10-10T06:59:59Z')).slice(0, 10), '2026-10-12');
@@ -161,7 +170,7 @@ test('four complete simulated calculate/commit/bill/finalize cycles use exact to
     calculate: async (_id, week) => { calculated = contractFor(week); charged.push(week.subtotalCents); return `calculation-${charged.length}`; },
     calculation: async () => ({ __typename: 'SubscriptionContractCalculationSuccess', warnings: [], calculatedContract: calculated,
       projectedOrderTotals: { subtotal: { amount: amount(charged.at(-1)), currencyCode: 'USD' }, totalDelivery: { amount: '0.00', currencyCode: 'USD' }, totalMerchandiseDiscounts: { amount: '0.00', currencyCode: 'USD' } } }),
-    commit: async () => { calculated.revisionId = String(Number(current.revisionId) + 1); current = calculated; return current; }, attempt: async (_id, key) => { keys.push(key); return { id: 'attempt-' + keys.length, ready: true, order: { id: 'order-' + keys.length } }; }, nextDate: async (_id, value) => { current.nextBillingDate = value; current.revisionId = String(Number(current.revisionId) + 1); return current; },
+    commit: async () => { calculated.revisionId = String(Number(current.revisionId) + 1); current = calculated; return current; }, attempt: async (_id, key) => { keys.push(key); return { id: 'attempt-' + keys.length, ready: true, order: { id: 'order-' + keys.length, displayFinancialStatus: 'PAID', test: false } }; }, nextDate: async (_id, value) => { current.nextBillingDate = value; current.revisionId = String(Number(current.revisionId) + 1); return current; },
   };
   const worker = new Worker(store, api, { gates, now: () => now, identityKey: key });
   const data = { weeks: approved, nextWeek: 'week-b', serviceDate: date, cycle: 1,
@@ -184,6 +193,39 @@ test('failed payments stop without advancing and ambiguous attempts retain the s
   await assert.rejects(worker.step(id, lease)); fail = false; await worker.step(id, lease);
   assert.deepEqual(keys, ['saved-key', 'saved-key']); assert.equal(store.get(id).state, 'review'); assert.equal(store.get(id).data.nextWeek, 'week-b'); store.close();
 });
+for (const simulated of [false, true, undefined]) test(`meal renewal waits for a paid order explicitly marked non-test: ${simulated}`, async () => {
+  const store = memory(); ready(store); const now = Date.now(); const current = contractFor(approved['week-b']); const calls = [];
+  const status = (displayFinancialStatus, test) => ({ id: 'attempt', ready: true, order: { id: 'order', displayFinancialStatus, test } });
+  const api = { contract: async () => current,
+    attempt: async (_id, key) => { calls.push(key); return status('AUTHORIZED', false); },
+    pollAttempt: async id => { calls.push(id); return status('PAID', simulated); },
+  };
+  const worker = new Worker(store, api, { gates, identityKey: key, now: () => now });
+  try {
+    const id = store.create({ weeks: approved, nextWeek: 'week-b', serviceDate: '2099-10-19T09:00:00-07:00', cycle: 1,
+      idempotencyKey: 'saved-key', billingOrigin: new Date(now).toISOString(), approvedDeliveryFingerprint: fingerprint(current.deliveryMethod, key), approvedRevisionId: String(current.revisionId) }, 'a'.repeat(64));
+    store.update(id, { state: 'billing', contract_id: current.id }); const lease = store.claim(id);
+    await worker.step(id, lease);
+    const waiting = store.get(id);
+    assert.equal(waiting.state, 'billing'); assert.equal(waiting.data.cycle, 1); assert.equal(waiting.data.nextWeek, 'week-b');
+    assert.equal(waiting.data.paidOrderId, undefined); assert.equal(waiting.data.attemptId, 'attempt');
+    await worker.step(id, lease);
+    assert.equal(store.get(id).state, simulated === false ? 'finalizing' : 'review');
+    assert.equal(store.get(id).data.paidOrderId, simulated === false ? 'order' : undefined);
+    assert.deepEqual(calls, ['saved-key', 'attempt']); store.unlock(id, lease);
+  } finally { store.close(); }
+});
+test('the live meal worker never attempts billing when the origin order is a test or its mode is unknown', async () => {
+  for (const mode of [true, undefined]) {
+    const store = memory(); ready(store); const now = Date.now(); const current = contractFor(approved['week-b']); current.originOrder.test = mode;
+    let attempts = 0;
+    const worker = new Worker(store, { contract: async () => current, attempt: async () => { attempts++; throw new Error('Unexpected billing'); } }, { gates, identityKey: key, now: () => now });
+    const id = store.create({ weeks: approved, nextWeek: 'week-b', serviceDate: '2099-10-19T09:00:00-07:00', cycle: 1,
+      idempotencyKey: 'saved-key', billingOrigin: new Date(now).toISOString(), approvedDeliveryFingerprint: fingerprint(current.deliveryMethod, key), approvedRevisionId: String(current.revisionId) }, 'a'.repeat(64));
+    store.update(id, { state: 'billing', contract_id: current.id, due_at: now - 1 });
+    try { await worker.tick(); assert.equal(attempts, 0); assert.equal(store.get(id).state, 'review'); assert.equal(store.get(id).data.cycle, 1); } finally { store.close(); }
+  }
+});
 test('unexpected contract revisions stop a pending renewal for review without initiating a charge', async () => {
   const store = memory(); ready(store); const current = contractFor(approved['week-b']); current.revisionId = '2'; let billed = 0;
   const worker = new Worker(store, { contract: async () => current, attempt: async () => { billed++; } }, { gates, identityKey: key });
@@ -193,6 +235,26 @@ test('unexpected contract revisions stop a pending renewal for review without in
 });
 test('renewal queries do not request private payment instruments or add customer-data scopes', () => {
   assert.doesNotMatch(CONTRACT + SNAPSHOT, /customerPaymentMethod|instrument|billingAddress/);
+});
+test('billing requests and polls explicitly request payment status and do not skip payment', async () => {
+  const client = new Shopify({}, {}); const seen = [];
+  const data = { id: 'attempt', ready: true, order: { id: 'order', displayFinancialStatus: 'PAID', test: false } };
+  client.request = async (query, vars) => {
+    seen.push(query);
+    if (query.startsWith('mutation Bill')) {
+      assert.equal(vars.input.paymentProcessingPolicy, 'FAIL_UNLESS_VALID_PAYMENT_METHOD');
+      return { subscriptionBillingAttemptCreate: { subscriptionBillingAttempt: data, userErrors: [] } };
+    }
+    assert.equal(vars.id, data.id);
+    return { subscriptionBillingAttempt: data };
+  };
+  assert.deepEqual(await client.attempt('contract', 'key', '2026-11-18T16:00:00Z'), data);
+  assert.deepEqual(await client.pollAttempt('attempt'), data);
+  for (const query of seen) {
+    assert.match(query, /order\{id displayFinancialStatus test\}/);
+    assert.doesNotMatch(query, /customerPaymentMethod|instrument|billingAddress/);
+  }
+  assert.match(CONTRACT, /originOrder \{ id createdAt displayFinancialStatus test \}/);
 });
 
 async function withServer(callback, apiOverrides = {}) {
@@ -253,6 +315,22 @@ test('cancellation is durably stopped before a remote timeout and can be safely 
     response = await fetch(base + '/api/manage/' + id, options); assert.equal(response.status, 200); assert.equal(store.get(id).data.cancellationConfirmed, true);
     response = await fetch(base + '/api/manage/' + id, options); assert.equal(response.status, 200); assert.equal(remoteCalls, 2);
   }, { cancel: async () => { remoteCalls++; if (failures-- > 0) throw new Error('Uncertain Shopify response'); } });
+});
+test('a lost Shopify cancellation response is confirmed on read-back without repeating the mutation', async () => {
+  const id = 'gid://shopify/SubscriptionContract/123';
+  const api = new Shopify(null, {});
+  let status = 'ACTIVE'; let mutations = 0;
+  api.request = async (query, variables) => {
+    assert.equal(variables.id, id);
+    if (query.startsWith('query Contract')) return { subscriptionContract: { id, status } };
+    assert.match(query, /subscriptionContractCancel\(subscriptionContractId:\$id,actor:CUSTOMER\)/);
+    mutations++;
+    status = 'CANCELLED';
+    throw new Error('Connection lost after Shopify applied the cancellation');
+  };
+  await assert.rejects(api.cancel(id), /Connection lost/);
+  await api.cancel(id);
+  assert.equal(mutations, 1);
 });
 test('admin actions require authenticated Shopify access and same-origin CSRF protection', async () => withServer(async ({ base, store, config }) => {
   let response = await fetch(base + '/admin/status'); assert.equal(response.status, 403);

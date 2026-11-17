@@ -24,12 +24,12 @@ function contractFor(mode, id, now = initialNow) {
   return { id: 'gid://shopify/SubscriptionContract/100', status: 'ACTIVE', currencyCode: 'USD', revisionId: '1', nextBillingDate: next,
     billingPolicy: { interval: 'WEEK', intervalCount: mode === 'prepaid' ? 4 : 1 }, deliveryPolicy: { interval: 'WEEK', intervalCount: 1 },
     deliveryMethod: { __typename: 'SubscriptionDeliveryMethodPickup', pickupOption: { code: 'pickup', location: { id: PICKUP_LOCATION_ID } } }, deliveryPrice: { amount: '0.00', currencyCode: 'USD' },
-    customerPaymentMethod: { id: 'gid://shopify/CustomerPaymentMethod/1' }, discounts: { nodes: [] }, originOrder: { id: 'gid://shopify/Order/1', displayFinancialStatus: 'PAID' },
+    customerPaymentMethod: { id: 'gid://shopify/CustomerPaymentMethod/1' }, discounts: { nodes: [] }, originOrder: { id: 'gid://shopify/Order/1', createdAt: new Date(initialNow).toISOString(), displayFinancialStatus: 'PAID', test: false },
     lines: { pageInfo: { hasNextPage: false }, nodes: mix.lines.map(line => ({ variantId: line.variantId, quantity: line.quantity, currentPrice: { amount: amount(line.priceCents), currencyCode: 'USD' }, sellingPlanId: plans[mode], customAttributes: [{ key: '_pit_juice_id', value: id }] })) } };
 }
 function fixture(mode = 'weekly') {
   const store = new Store(':memory:', key); ready(store, initialNow); const mix = mixFor(mode);
-  const id = store.create({ kind: 'juice', mix, firstServiceDate: firstService, checkoutFulfillment: { method: 'pickup', window: 'monday-after-9am' }, expiresAt: initialNow + 1800000, paidWeeks: 0 }, 'b'.repeat(64));
+  const id = store.create({ kind: 'juice', mix, firstServiceDate: firstService, checkoutPreparedAt: initialNow, checkoutFulfillment: { method: 'pickup', window: 'monday-after-9am' }, expiresAt: initialNow + 1800000, paidWeeks: 0 }, 'b'.repeat(64));
   const contract = contractFor(mode, id); return { store, id, mix, contract };
 }
 test('juice weekly and four-week-prepaid quotes use the same mix and exactly one first-order tea add-on', () => {
@@ -114,7 +114,7 @@ for (const gate of Object.keys(gates)) test('juice billing stays off without acc
 test('weekly juice cancellation is queued, funds exactly four weeks and cancels before payment five', async () => {
   const { store, id, contract } = fixture(); let now = initialNow; const billed = []; let cancelled = 0;
   const api = { contract: async () => contract, juiceCatalog: async () => catalog,
-    attempt: async (_id, savedKey) => { billed.push(savedKey); return { id: 'attempt-' + billed.length, ready: true, order: { id: 'order-' + billed.length } }; },
+    attempt: async (_id, savedKey) => { billed.push(savedKey); return { id: 'attempt-' + billed.length, ready: true, order: { id: 'order-' + billed.length, displayFinancialStatus: 'PAID', test: false } }; },
     nextDate: async (_id, value) => { contract.nextBillingDate = value; }, cancel: async () => { cancelled++; contract.status = 'CANCELLED'; } };
   const worker = new JuiceWorker(store, api, { gates, now: () => now, identityKey: key });
   try {
@@ -152,10 +152,45 @@ test('juice payment failure never advances the four-week commitment or claims ca
     store.unlock(id, lease);
   } finally { store.close(); }
 });
+test('an unpaid, test or unknown-mode juice renewal does not count toward the four-week cancellation boundary', async () => {
+  for (const [status, testMode] of [['VOIDED', false], ['PARTIALLY_PAID', false], [undefined, false], ['PAID', true], ['PAID', undefined]]) {
+    const { store, id, contract } = fixture(); let now = initialNow; const calls = [];
+    const order = (displayFinancialStatus, test) => ({ id: 'attempt', ready: true, order: { id: 'order', displayFinancialStatus, test } });
+    const api = { contract: async () => contract, juiceCatalog: async () => catalog,
+      attempt: async () => { calls.push('create'); return order('PENDING', false); },
+      pollAttempt: async id => { calls.push(id); return order(status, testMode); },
+    };
+    const worker = new JuiceWorker(store, api, { gates, now: () => now, identityKey: key });
+    try {
+      await worker.bind(contract.id, contract); const lease = store.claim(id); await worker.requestCancellation(id, lease);
+      now = Date.parse(contract.nextBillingDate); store.setSetting('heartbeat', now);
+      await worker.step(id, lease); await worker.step(id, lease);
+      assert.equal(store.get(id).state, 'billing'); assert.equal(store.get(id).data.paidWeeks, 1);
+      await worker.step(id, lease);
+      const row = store.get(id);
+      assert.equal(row.state, 'review'); assert.equal(row.data.paidWeeks, 1); assert.equal(row.data.billingCycle, 1);
+      assert.equal(row.data.cancellationConfirmed, false); assert.deepEqual(calls, ['create', 'attempt']);
+      store.unlock(id, lease);
+    } finally { store.close(); }
+  }
+});
+test('the live juice worker refuses to bill any saved row with a test origin', async () => {
+  const { store, id, contract } = fixture(); let now = initialNow; let attempts = 0;
+  const api = { contract: async () => contract, attempt: async () => { attempts++; throw new Error('Unexpected billing'); } };
+  const worker = new JuiceWorker(store, api, { gates, now: () => now, identityKey: key });
+  try {
+    await worker.bind(contract.id, contract);
+    contract.originOrder.test = true; now = Date.parse(contract.nextBillingDate); store.setSetting('heartbeat', now);
+    const { data } = store.get(id);
+    store.update(id, { state: 'billing', data: { ...data, billingOrigin: contract.nextBillingDate, idempotencyKey: 'test-case' }, due_at: now - 1 });
+    await worker.stepDue();
+    assert.equal(attempts, 0); assert.equal(store.get(id).state, 'review'); assert.equal(store.get(id).data.paidWeeks, 1);
+  } finally { store.close(); }
+});
 test('ambiguous juice billing and finalization retries retain one key and record paid weeks only once', async () => {
   const { store, id, contract } = fixture('prepaid'); let now = initialNow; let uncertain = true; let nextUncertain = true; const keys = [];
   const api = { contract: async () => contract, juiceCatalog: async () => catalog,
-    attempt: async (_id, savedKey) => { keys.push(savedKey); if (uncertain) { uncertain = false; throw Error('TEST-ONLY-timeout'); } return { id: 'TEST-ONLY-attempt', ready: true, order: { id: 'TEST-ONLY-order' } }; },
+    attempt: async (_id, savedKey) => { keys.push(savedKey); if (uncertain) { uncertain = false; throw Error('TEST-ONLY-timeout'); } return { id: 'TEST-ONLY-attempt', ready: true, order: { id: 'TEST-ONLY-order', displayFinancialStatus: 'PAID', test: false } }; },
     nextDate: async (_id, date) => { if (nextUncertain) { nextUncertain = false; throw Error('TEST-ONLY-next-date-timeout'); } contract.nextBillingDate = date; } };
   const worker = new JuiceWorker(store, api, { gates, now: () => now, identityKey: key });
   try {
@@ -182,7 +217,9 @@ test('an unexpected juice contract revision stops safely without requiring priva
 });
 test('coordinator routes signed juice events without meal rotation mutating juice lines', async () => {
   const { store, id, contract } = fixture(); store.enqueue('TEST-ONLY-event-1234567890', contract.id); let reads = 0;
-  const worker = new Worker(store, { contract: async () => { reads++; return contract; } }, { gates: {}, now: () => initialNow, identityKey: key });
+  const worker = new Worker(store, { contract: async () => { reads++; return contract; },
+    juiceCatalog: async () => ({ items: Object.fromEntries(store.get(id).data.mix.lines.map(line => [line.variantId, { price: amount(line.retailPriceCents) }])) }),
+  }, { gates: {}, now: () => initialNow, identityKey: key });
   try { await worker.tick(); assert.equal(reads, 1); assert.equal(store.get(id).contract_id, contract.id); assert.equal(store.db.prepare('SELECT state FROM events').get().state, 'processed'); }
   finally { store.close(); }
 });
@@ -236,7 +273,7 @@ test('four committed weekly juice deliveries retain a separate $15 fee each week
   contract.deliveryPrice = { amount: '15.00', currencyCode: 'USD' };
   store.update(id, { data: { ...store.get(id).data, checkoutFulfillment: { method: 'delivery', window: 'monday' } } });
   const api = { contract: async () => contract, juiceCatalog: async () => catalog,
-    attempt: async () => { assert.equal(contract.billingPolicy.intervalCount, 1); assert.equal(contract.deliveryPrice.amount, '15.00'); deliveryFees.push(1500); return { id: 'attempt-' + deliveryFees.length, ready: true, order: { id: 'order-' + deliveryFees.length } }; },
+    attempt: async () => { assert.equal(contract.billingPolicy.intervalCount, 1); assert.equal(contract.deliveryPrice.amount, '15.00'); deliveryFees.push(1500); return { id: 'attempt-' + deliveryFees.length, ready: true, order: { id: 'order-' + deliveryFees.length, displayFinancialStatus: 'PAID', test: false } }; },
     nextDate: async (_id, value) => { contract.nextBillingDate = value; }, cancel: async () => { contract.status = 'CANCELLED'; } };
   const worker = new JuiceWorker(store, api, { gates, now: () => now, identityKey: key });
   try {

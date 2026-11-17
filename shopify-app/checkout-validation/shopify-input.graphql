@@ -1,0 +1,28 @@
+query CartValidationsGenerateRunInput {
+  buyerJourney { step }
+  shop { localTime { date } }
+  validation { metafield(namespace: "$app:pit-checkout", key: "rules-v1") { jsonValue } }
+  cart {
+    serviceWeek: attribute(key: "_pit_first_service") { value }
+    serviceApproval: attribute(key: "_pit_service_approval_v1") { value }
+    countyApproval: attribute(key: "_pit_county_approval_v1") { value }
+    deliveryGroups {
+      id
+      deliveryAddress { address1 address2 city provinceCode countryCode zip }
+      selectedDeliveryOption { deliveryMethodType }
+    }
+    lines {
+      quantity
+      mealReference: attribute(key: "_pit_rotation_id") { value }
+      juiceReference: attribute(key: "_pit_juice_id") { value }
+      deliveryGroups { id }
+      cost {
+        amountPerQuantity { amount currencyCode }
+        totalAmount { amount currencyCode }
+        discountAllocations { discountApplication { targetType } }
+      }
+      merchandise { ... on ProductVariant { id } }
+      sellingPlanAllocation { sellingPlan { id } }
+    }
+  }
+}

@@ -2,6 +2,7 @@ import { SHOP, CLIENT_ID, SCOPES, ZONE, assert, amount } from './domain.mjs';
 import { JUICE_MERCHANT_CODE, JUICE_MINIMUM_CENTS, JUICE_TEA_TITLE, normalizeTitle, isJuiceTea, juicePlanInput, validateJuicePlans } from './juice-domain.mjs';
 
 export const API_VERSION = '2026-10';
+const RENEWAL_ATTEMPT = 'id ready errorCode nextActionUrl order{id displayFinancialStatus test}';
 export class ShopifyRequestError extends Error {
   constructor(code = 'SHOPIFY_REQUEST_REJECTED') {
     super('Shopify rejected the app request.');
@@ -14,7 +15,7 @@ export const SNAPSHOT = `currencyCode billingPolicy { interval intervalCount } d
   deliveryMethod { ${DELIVERY} } deliveryPrice { amount currencyCode }
   lines(first:100) { nodes { id variantId quantity sellingPlanId currentPrice { amount currencyCode } customAttributes { key value } } pageInfo { hasNextPage } }
   discounts(first:1) { nodes { id } }`;
-export const CONTRACT = `id status nextBillingDate revisionId ${SNAPSHOT} originOrder { id displayFinancialStatus }`;
+export const CONTRACT = `id status nextBillingDate revisionId ${SNAPSHOT} originOrder { id createdAt displayFinancialStatus test }`;
 
 export class Shopify {
   constructor(store, { clientSecret, baseUrl, fetchImpl = fetch }) { this.store = store; this.secret = clientSecret; this.baseUrl = baseUrl; this.fetch = fetchImpl; }
@@ -197,8 +198,8 @@ export class Shopify {
   }
   async calculation(id) { return (await this.request(`query Calculation($id:ID!){subscriptionContractCalculation(id:$id){__typename ... on SubscriptionContractCalculationPending{id} ... on SubscriptionContractCalculationFailure{id} ... on SubscriptionContractCalculationSuccess{id warnings{code message} calculatedContract{${SNAPSHOT}} projectedOrderTotals{subtotal{amount currencyCode} totalDelivery{amount currencyCode} totalMerchandiseDiscounts{amount currencyCode}}}}}`, { id })).subscriptionContractCalculation; }
   async commit(id) { return (await this.mutation(`mutation Commit($id:ID!){subscriptionContractCalculationCommit(id:$id){contract{... on SubscriptionContract{id status revisionId ${SNAPSHOT}}} userErrors{field message code}}}`, { id }, 'subscriptionContractCalculationCommit')).contract; }
-  async attempt(id, key, origin) { return (await this.mutation('mutation Bill($id:ID!,$input:SubscriptionBillingAttemptInput!){subscriptionBillingAttemptCreate(subscriptionContractId:$id,subscriptionBillingAttemptInput:$input){subscriptionBillingAttempt{id ready errorCode nextActionUrl order{id}} userErrors{field message code}}}', { id, input: { idempotencyKey: key, originTime: origin, paymentProcessingPolicy: 'FAIL_UNLESS_VALID_PAYMENT_METHOD' } }, 'subscriptionBillingAttemptCreate')).subscriptionBillingAttempt; }
-  async pollAttempt(id) { return (await this.request('query Attempt($id:ID!){subscriptionBillingAttempt(id:$id){id ready errorCode nextActionUrl order{id}}}', { id })).subscriptionBillingAttempt; }
+  async attempt(id, key, origin) { return (await this.mutation(`mutation Bill($id:ID!,$input:SubscriptionBillingAttemptInput!){subscriptionBillingAttemptCreate(subscriptionContractId:$id,subscriptionBillingAttemptInput:$input){subscriptionBillingAttempt{${RENEWAL_ATTEMPT}} userErrors{field message code}}}`, { id, input: { idempotencyKey: key, originTime: origin, paymentProcessingPolicy: 'FAIL_UNLESS_VALID_PAYMENT_METHOD' } }, 'subscriptionBillingAttemptCreate')).subscriptionBillingAttempt; }
+  async pollAttempt(id) { return (await this.request(`query Attempt($id:ID!){subscriptionBillingAttempt(id:$id){${RENEWAL_ATTEMPT}}}`, { id })).subscriptionBillingAttempt; }
   async nextDate(id, date) { return (await this.mutation('mutation Next($id:ID!,$date:DateTime!){subscriptionContractSetNextBillingDate(contractId:$id,date:$date){contract{id nextBillingDate revisionId} userErrors{field message}}}', { id, date }, 'subscriptionContractSetNextBillingDate')).contract; }
   async cancel(id) {
     if ((await this.contract(id)).status === 'CANCELLED') return;

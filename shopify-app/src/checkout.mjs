@@ -1,4 +1,4 @@
-import { SHOP, assert, cents, ORIGIN, validateUnchanged, firstServiceDate } from './domain.mjs';
+import { SHOP, assert, cents, ORIGIN, validateUnchanged, firstServiceDate, MEAL_MINIMUM_CENTS, MEAL_MINIMUM_DOLLARS } from './domain.mjs';
 import { validateJuiceSelection, deliveryWeeksPerPayment } from './juice-domain.mjs';
 import { assertWeeklyJuiceEnrollment } from './enrollment-policy.mjs';
 
@@ -20,7 +20,7 @@ export function fulfillmentSelection(value) {
 
 export function mealCheckoutInput(row, planId, fulfillment) {
   assert(row?.state === 'quoted' && row.data.kind !== 'juice' && /^gid:\/\/shopify\/SellingPlan\/\d+$/.test(planId || ''), 'This meal plan cannot enter checkout.');
-  const week = row.data.weeks[row.data.firstWeek]; assert(week?.subtotalCents >= 12000, 'The active menu must reach $120.');
+  const week = row.data.weeks[row.data.firstWeek]; assert(week?.subtotalCents >= MEAL_MINIMUM_CENTS, `The active menu must reach ${MEAL_MINIMUM_DOLLARS}.`);
   const choice = fulfillmentSelection(fulfillment);
   return {
     lines: week.lines.map(line => ({ merchandiseId: line.variantId, quantity: line.quantity, sellingPlanId: planId,
@@ -130,20 +130,29 @@ export class SubscriptionCheckout {
     assert(result && !result.userErrors?.length && !result.warnings?.length, 'Shopify could not prepare the exact approved checkout.');
     return result.cart;
   }
+  assertCurrentServiceWeek(row, serviceDate) {
+    const now = this.now();
+    assert(row.data.expiresAt > now, 'The unenrolled plan expired or is already enrolled.');
+    assert(serviceDate.slice(0, 10) === firstServiceDate(now).slice(0, 10), 'The service cutoff changed. Review your plan again.');
+    return now;
+  }
   async startMeal(id, fulfillment) {
     const lease = this.store.claim(id); assert(lease, 'Checkout preparation is already running.');
     try {
       const row = this.store.get(id); const choice = fulfillmentSelection(fulfillment);
       assert(row?.state === 'quoted' && row.data.expiresAt > this.now(), 'The unenrolled plan expired or is already enrolled.');
-      assert(row.data.serviceDate.slice(0, 10) === firstServiceDate(this.now()).slice(0, 10), 'The service cutoff changed. Review your rotation again.');
+      this.assertCurrentServiceWeek(row, row.data.serviceDate);
       await validateUnchanged(row.data.weeks, await this.api.catalog());
       const planId = this.store.getSetting('planId'); const input = mealCheckoutInput(row, planId, choice);
       // This creates a separate cart. It never reads, clears, replaces or appends to the customer's ordinary basket.
+      const requestedAt = this.assertCurrentServiceWeek(row, row.data.serviceDate);
+      const checkoutPreparedAt = row.data.checkoutPreparedAt ?? requestedAt;
       const cart = await this.cartFor(row, input, choice);
       const destination = verifyMealCart(cart, row, planId, input);
+      this.assertCurrentServiceWeek(row, row.data.serviceDate);
       // Cart IDs contain private access keys. Keep them encrypted, never in public plan data or logs.
       this.store.saveSecret(`checkout_${id}`, JSON.stringify({ id: cart.id }));
-      this.store.update(id, { data: { ...row.data, checkoutFulfillment: choice, checkoutPreparedAt: this.now() } }, lease);
+      this.store.update(id, { data: { ...row.data, checkoutFulfillment: choice, checkoutPreparedAt } }, lease);
       return { checkoutUrl: destination, expiresAt: new Date(row.data.expiresAt).toISOString(), firstWeek: row.data.firstWeek,
         firstServiceDate: row.data.serviceDate.slice(0, 10), firstSubtotalCents: row.data.weeks[row.data.firstWeek].subtotalCents,
         fulfillment: choice, managementPath: `${ORIGIN}/meal-plan/${id}` };
@@ -155,14 +164,18 @@ export class SubscriptionCheckout {
       const row = this.store.get(id); const choice = fulfillmentSelection(fulfillment);
       assert(row?.state === 'quoted' && row.data.kind === 'juice' && row.data.expiresAt > this.now(), 'The unenrolled juice plan expired or is already enrolled.');
       assertWeeklyJuiceEnrollment(row.data.mix);
-      assert(row.data.firstServiceDate.slice(0, 10) === firstServiceDate(this.now()).slice(0, 10), 'The service cutoff changed. Review your juice mix again.');
+      this.assertCurrentServiceWeek(row, row.data.firstServiceDate);
       const mix = validateJuiceSelection({ selections: Object.fromEntries(row.data.mix.lines.map(line => [line.variantId, line.quantity])), billingPreference: row.data.mix.billingPreference, teaQuantity: row.data.mix.oneTimeAddOn?.quantity || 0 }, await this.api.juiceCatalog());
       assert(JSON.stringify(mix) === JSON.stringify(row.data.mix), 'Juice prices changed; review is required before checkout.');
       const plans = await this.api.verifyJuicePlans({ required: true }); const planId = plans[mix.billingPreference];
-      const input = juiceCheckoutInput(row, planId, choice); const cart = await this.cartFor(row, input, choice);
+      const input = juiceCheckoutInput(row, planId, choice);
+      const requestedAt = this.assertCurrentServiceWeek(row, row.data.firstServiceDate);
+      const checkoutPreparedAt = row.data.checkoutPreparedAt ?? requestedAt;
+      const cart = await this.cartFor(row, input, choice);
       const destination = verifyJuiceCart(cart, row, planId, input);
+      this.assertCurrentServiceWeek(row, row.data.firstServiceDate);
       this.store.saveSecret(`checkout_${id}`, JSON.stringify({ id: cart.id }));
-      this.store.update(id, { data: { ...row.data, checkoutFulfillment: choice, checkoutPreparedAt: this.now() } }, lease);
+      this.store.update(id, { data: { ...row.data, checkoutFulfillment: choice, checkoutPreparedAt } }, lease);
       return { checkoutUrl: destination, expiresAt: new Date(row.data.expiresAt).toISOString(), billingPreference: mix.billingPreference,
         firstServiceDate: row.data.firstServiceDate.slice(0, 10), firstSubtotalCents: mix.firstSubtotalCents, fulfillment: choice, managementPath: `${ORIGIN}/juice-plan/${id}` };
     } finally { this.store.unlock(id, lease); }
