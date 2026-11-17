@@ -4,6 +4,7 @@ import { Layout } from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { cancelManagedRotation, consumeRotationAccess, getManagedRotation, RotationServiceError, ROTATION_WEEKS, rotationDateLabel, rotationWeekLabel, type ManagedRotation, type RotationAccess } from '@/lib/rotationService';
 import { formatPrice } from '@/lib/shopify';
+import { useCancellationFocus } from '@/components/subscriptions/useCancellationFocus';
 
 export default function ManageMealRotation() {
   const { id = '' } = useParams();
@@ -71,9 +72,10 @@ export function MealRotationDetails({ plan, cancelled, busy, confirm, onAsk, onK
   const stopped = cancelled || plan.cancellationConfirmed;
   const pending = !stopped && plan.cancellationPending;
   const renewalActive = ['active', 'calculating', 'committing', 'billing', 'finalizing'].includes(plan.state) && !pending && !stopped;
+  const { keepRef, triggerRef, resultRef } = useCancellationFocus(confirm, busy);
   return <>
       <div role="status" className="mt-8 rounded-xl border border-primary/20 bg-primary/5 p-5">
-        <h2 className="font-serif text-xl font-bold">{stopped ? 'Cancellation Confirmed' : pending ? 'Cancellation Awaiting Shopify Confirmation' : plan.state === 'quoted' ? 'Plan Not Enrolled' : renewalActive ? 'Rotation Active' : 'Renewals Stopped — Review Needed'}</h2>
+        <h2 ref={resultRef} tabIndex={-1} className="font-serif text-xl font-bold">{stopped ? 'Cancellation Confirmed' : pending ? 'Cancellation Awaiting Shopify Confirmation' : plan.state === 'quoted' ? 'Plan Not Enrolled' : renewalActive ? 'Rotation Active' : 'Renewals Stopped — Review Needed'}</h2>
         <p className="mt-2 text-sm">{stopped ? 'No future meal-rotation renewals will be initiated. Cancellation does not refund an order already paid or cancel a delivery already being prepared.'
           : pending ? 'Renewals are stopped locally. Retry the Shopify confirmation below or contact us.'
             : plan.state === 'quoted' ? 'These are saved selections only. No subscription or recurring payment has started.'
@@ -92,8 +94,8 @@ export function MealRotationDetails({ plan, cancelled, busy, confirm, onAsk, onK
         <p className="mt-2 text-sm text-muted-foreground">Stop future renewals. An order already paid or being prepared is not automatically refunded or cancelled.</p>
         {confirm ? <div className="mt-4">
           <p className="text-sm font-semibold">Cancel future meal-rotation renewals?</p>
-          <div className="mt-3 flex flex-wrap gap-3"><Button variant="destructive" disabled={busy} onClick={onCancel}>{busy ? 'Confirming cancellation…' : 'Yes, Cancel Future Renewals'}</Button><Button variant="outline" disabled={busy} onClick={onKeep}>Keep My Rotation</Button></div>
-        </div> : <Button className="mt-4 h-auto min-h-11 whitespace-normal" variant="outline" disabled={busy} onClick={pending ? onCancel : onAsk}>{busy ? 'Confirming cancellation…' : pending ? 'Retry Shopify Cancellation Confirmation' : 'Cancel Meal Rotation'}</Button>}
+          <div className="mt-3 flex flex-wrap gap-3"><Button ref={keepRef} variant="outline" disabled={busy} onClick={onKeep}>Keep My Rotation</Button><Button variant="destructive" disabled={busy} onClick={onCancel}>{busy ? 'Confirming cancellation…' : 'Yes, Cancel Future Renewals'}</Button></div>
+        </div> : <Button ref={triggerRef} className="mt-4 h-auto min-h-11 whitespace-normal" variant="outline" disabled={busy} onClick={pending ? onCancel : onAsk}>{busy ? 'Confirming cancellation…' : pending ? 'Retry Shopify Cancellation Confirmation' : 'Cancel Meal Rotation'}</Button>}
       </div>}
     </>;
 }
