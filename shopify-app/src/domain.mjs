@@ -6,10 +6,26 @@ export const ORIGIN = 'https://shop.placeinthyme.com';
 export const PICKUP_LOCATION_ID = 'gid://shopify/Location/111856681258';
 export const WEEKS = ['week-a', 'week-b', 'week-c'];
 export const MAX_MEAL_QUANTITY = 2_147_483_647;
+export const MEAL_MINIMUM_CENTS = 9_900;
+export const MEAL_MINIMUM_DOLLARS = `$${MEAL_MINIMUM_CENTS / 100}`;
 export const ZONE = 'America/Los_Angeles';
 export const SCOPES = ['write_products', 'write_purchase_options', 'write_own_subscription_contracts'];
 export class ReviewRequiredError extends Error {}
 export function assert(condition, message) { if (!condition) throw new ReviewRequiredError(message); }
+export function assertNonTestOrigin(contract) {
+  assert(contract?.originOrder?.test === false, 'Only a confirmed non-test Shopify order may enroll or renew a live plan.');
+}
+export function renewalPaymentState(attempt) {
+  if (attempt.nextActionUrl || attempt.errorCode) return 'review';
+  if (attempt.ready !== true || !attempt.order?.id) return 'pending';
+  if (attempt.order.test !== false) return 'review';
+  switch (attempt.order.displayFinancialStatus) {
+    case 'PAID': return 'paid';
+    case 'AUTHORIZED':
+    case 'PENDING': return 'pending';
+    default: return 'review';
+  }
+}
 export function cents(value) {
   assert(typeof value === 'string' && /^(0|[1-9][0-9]{0,6})(?:\.[0-9]{1,2})?$/.test(value), 'Invalid USD price.');
   const [whole, fraction = ''] = value.split('.');
@@ -37,6 +53,16 @@ export function nextBillingDate(value) {
   return pacificTime(addDays(localDay(value), 7), Number(parts.hour)).replace(':00:00-', `:${parts.minute}:${parts.second}-`);
 }
 export const serviceCutoff = date => Date.parse(pacificTime(addDays(localDay(date), -2), 0));
+export function initialOrderWindowReview({ createdAt, checkoutPreparedAt, expiresAt, serviceDate }) {
+  const created = typeof createdAt === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(createdAt) ? Date.parse(createdAt) : NaN;
+  if (!Number.isFinite(created) || !Number.isSafeInteger(checkoutPreparedAt) || !Number.isSafeInteger(expiresAt)
+    || typeof serviceDate !== 'string' || !Number.isFinite(Date.parse(serviceDate))) return 'service-week-unverified';
+  // Shopify timestamps can be rounded to seconds, unlike our clock.
+  if (created < Math.floor(checkoutPreparedAt / 1000) * 1000) return 'service-week-unverified';
+  if (firstServiceDate(created).slice(0, 10) !== serviceDate.slice(0, 10)) return 'service-week-changed';
+  if (created >= expiresAt) return 'checkout-expired';
+  return null;
+}
 export function validateSelections(selections, catalog) {
   assert(selections && typeof selections === 'object' && !Array.isArray(selections)
     && Object.keys(selections).length === 3 && WEEKS.every(week => Object.hasOwn(selections, week)), 'Choose all three menus.');
@@ -54,7 +80,7 @@ export function validateSelections(selections, catalog) {
       subtotalCents += quantity * priceCents;
       return { variantId, quantity, priceCents, title: meal.title };
     });
-    assert(subtotalCents >= 12000 && subtotalCents <= 1000000, 'Each menu must be $120–$10,000.');
+    assert(subtotalCents >= MEAL_MINIMUM_CENTS && subtotalCents <= 1000000, `Each menu must be ${MEAL_MINIMUM_DOLLARS}–$10,000.`);
     return [week, { subtotalCents, lines }];
   }));
 }

@@ -18,14 +18,18 @@ describe('private juice-plan management', () => {
   it('consumes the private token from a fragment and displays a funded-week count, not a fulfillment claim', async () => {
     render(<ManageJuicePlan />); await screen.findByText('Juice Plan Active'); expect(location.hash).toBe(''); expect(mocks.get).toHaveBeenCalledWith({ id, token }, expect.any(AbortSignal));
     expect(screen.getByText(/This is a payment count, not a claim/)).toBeInTheDocument(); expect(localStorage.length).toBe(0);
+    expect(screen.getByText(/Weekly payments continue through the current four-paid-week commitment/)).toBeInTheDocument();
+    expect(screen.queryByText(/prepaid deliveries/i)).not.toBeInTheDocument();
   });
   it('requires a separate confirmation and then shows scheduled, not already cancelled', async () => {
     mocks.cancel.mockResolvedValue({ state: 'scheduled', effectiveDate: '2026-11-30T09:00:00-08:00', afterPaidWeeks: 4 }); render(<ManageJuicePlan />); await screen.findByText('Juice Plan Active');
     fireEvent.click(screen.getByRole('button', { name: 'Cancel at the Four-Week Boundary' })); expect(mocks.cancel).not.toHaveBeenCalled(); fireEvent.click(screen.getByRole('button', { name: 'Yes, Stop the Next Period' }));
-    await screen.findByText('Cancellation Scheduled'); expect(screen.queryByText('Future Juice Renewals Cancelled')).not.toBeInTheDocument(); expect(screen.getByText(/The saved cancellation applies after 4 paid weeks/)).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Cancellation Scheduled' })).toHaveFocus(); expect(screen.queryByText('Future Juice Renewals Cancelled')).not.toBeInTheDocument(); expect(screen.getByText(/The saved cancellation applies after 4 paid weeks/)).toBeInTheDocument();
   });
   it('allows keeping the plan without submitting a cancellation', async () => {
-    render(<ManageJuicePlan />); await screen.findByText('Juice Plan Active'); fireEvent.click(screen.getByRole('button', { name: 'Cancel at the Four-Week Boundary' })); fireEvent.click(screen.getByRole('button', { name: 'Keep My Juice Plan' })); expect(mocks.cancel).not.toHaveBeenCalled();
+    render(<ManageJuicePlan />); await screen.findByText('Juice Plan Active'); fireEvent.click(screen.getByRole('button', { name: 'Cancel at the Four-Week Boundary' }));
+    const keep = screen.getByRole('button', { name: 'Keep My Juice Plan' }); expect(keep).toHaveFocus(); fireEvent.click(keep);
+    expect(screen.getByRole('button', { name: 'Cancel at the Four-Week Boundary' })).toHaveFocus(); expect(mocks.cancel).not.toHaveBeenCalled();
   });
   it('retains an uncertain remote cancellation as pending and offers a retry', async () => {
     const pending = { ...plan, state: 'cancelling', paidWeeks: 4, cancellationRequested: true, cancellationPending: true, cancelAfterPaidWeeks: 4, cancellationEffectiveDate: '2026-11-30T09:00:00-08:00' };

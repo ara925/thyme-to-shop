@@ -27,11 +27,13 @@ describe('private meal plan management', () => {
   it('requires a second explicit confirmation before canceling', async () => {
     show(); fireEvent.click(await screen.findByRole('button', { name: 'Cancel Meal Rotation' }));
     expect(mocks.cancel).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Keep My Rotation' }));
+    const keep = screen.getByRole('button', { name: 'Keep My Rotation' });
+    expect(keep).toHaveFocus(); fireEvent.click(keep);
     expect(mocks.cancel).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Cancel Meal Rotation' })).toHaveFocus();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Meal Rotation' }));
     fireEvent.click(screen.getByRole('button', { name: 'Yes, Cancel Future Renewals' }));
-    expect(await screen.findByText('Cancellation Confirmed')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Cancellation Confirmed' })).toHaveFocus();
     expect(screen.queryByRole('button', { name: 'Cancel Meal Rotation' })).not.toBeInTheDocument();
   });
   it('keeps remote confirmation retryable and never claims an uncertain cancellation succeeded', async () => {
@@ -40,8 +42,9 @@ describe('private meal plan management', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Yes, Cancel Future Renewals' }));
     expect(await screen.findByText('Cancellation Awaiting Shopify Confirmation')).toBeInTheDocument();
     expect(screen.queryByText('Cancellation Confirmed')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Retry Shopify Cancellation Confirmation' }));
-    expect(await screen.findByText('Cancellation Confirmed')).toBeInTheDocument();
+    const retry = screen.getByRole('button', { name: 'Retry Shopify Cancellation Confirmation' });
+    expect(retry).toHaveFocus(); fireEvent.click(retry);
+    expect(await screen.findByRole('heading', { name: 'Cancellation Confirmed' })).toHaveFocus();
     expect(mocks.cancel).toHaveBeenCalledTimes(2);
   });
   it('does not label an unenrolled quote an active subscription', async () => {

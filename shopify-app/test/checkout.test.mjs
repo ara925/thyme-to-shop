@@ -65,21 +65,22 @@ for (const [name, mutate] of Object.entries(mutations)) test(`Shopify read-back 
   try { const input = mealCheckoutInput(row, planId, pickup); const cart = returnedCart(input, row); mutate(cart); assert.throws(() => verifyMealCart(cart, row, planId, input)); }
   finally { store.close(); }
 });
-test('checkout retry reuses its encrypted isolated cart and never alters the ordinary basket', async () => {
-  const { store, row, now } = fixture(); const calls = []; let cart;
-  const service = new SubscriptionCheckout(store, { catalog: async () => catalog }, { storefrontToken: 'TEST-ONLY-public-token', now: () => now,
+test('checkout retry preserves original preparation time and reuses the isolated cart without changing the ordinary basket', async () => {
+  const { store, row, now } = fixture(); const calls = []; let cart; let clock = now;
+  const service = new SubscriptionCheckout(store, { catalog: async () => catalog }, { storefrontToken: 'TEST-ONLY-public-token', now: () => clock,
     fetchImpl: async (_url, options) => {
       const body = JSON.parse(options.body); calls.push(body.query);
       if (body.query.startsWith('mutation')) { cart = returnedCart(body.variables.input, row); return { ok: true, text: async () => JSON.stringify({ data: { cartCreate: { cart, userErrors: [], warnings: [] } } }) }; }
       return { ok: true, text: async () => JSON.stringify({ data: { cart } }) };
     } });
   try {
-    const first = await service.startMeal(row.id, pickup); const second = await service.startMeal(row.id, pickup);
+    const first = await service.startMeal(row.id, pickup); clock += 60_000; const second = await service.startMeal(row.id, pickup);
     assert.equal(first.checkoutUrl, second.checkoutUrl); assert.equal(calls.length, 2);
     assert.match(calls[0], /cartCreate/); assert.match(calls[1], /cart\(id:/); assert.doesNotMatch(calls.join(''), /cartLinesAdd|cartLinesUpdate|cartLinesRemove/);
     const publicData = JSON.stringify(store.get(row.id).data); assert.equal(publicData.includes('private-cart-key'), false);
     assert.equal(store.getSetting(`secret_checkout_${row.id}`).includes('private-cart-key'), false);
     assert.equal(store.get(row.id).state, 'quoted'); assert.equal(first.firstSubtotalCents, weeks[row.data.firstWeek].subtotalCents);
+    assert.equal(store.get(row.id).data.checkoutPreparedAt, now);
     await assert.rejects(service.startMeal(row.id, { method: 'delivery', window: 'monday' }));
   } finally { store.close(); }
 });
@@ -92,6 +93,23 @@ test('expired quotes, changed prices and changed service cutoff never create car
     try { await assert.rejects(service.startMeal(row.id, pickup)); assert.equal(calls, 0); }
     finally { store.close(); }
   }
+});
+test('a Shopify cart response arriving after Friday midnight cannot return a stale checkout link', async () => {
+  const cutoff = Date.parse('2026-11-14T08:00:00Z');
+  const { store, row } = fixture(cutoff - 1000);
+  let clock = cutoff - 1000;
+  const service = new SubscriptionCheckout(store, { catalog: async () => catalog }, { storefrontToken: 'TEST-ONLY-public-token', now: () => clock,
+    fetchImpl: async (_url, options) => {
+      const { input } = JSON.parse(options.body).variables;
+      const cart = returnedCart(input, row);
+      clock = cutoff;
+      return { ok: true, text: async () => JSON.stringify({ data: { cartCreate: { cart, userErrors: [], warnings: [] } } }) };
+    } });
+  try {
+    await assert.rejects(service.startMeal(row.id, pickup), /service cutoff changed/);
+    assert.equal(store.secret(`checkout_${row.id}`), '');
+    assert.equal(store.get(row.id).data.checkoutPreparedAt, undefined);
+  } finally { store.close(); }
 });
 test('simulated HTTP enrollment requires all gates and private plan access before isolated checkout', async () => {
   const { store, now } = fixture(Date.now());

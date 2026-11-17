@@ -1,13 +1,13 @@
-import { assert, assertLocal, assertReviewedFulfillment, fingerprint, matchLines, serviceCutoff, ReviewRequiredError } from './domain.mjs';
+import { assert, assertLocal, assertNonTestOrigin, assertReviewedFulfillment, fingerprint, matchLines, serviceCutoff, initialOrderWindowReview, renewalPaymentState, ReviewRequiredError } from './domain.mjs';
 import { deliveryWeeksPerPayment, advanceService, advanceJuiceBilling, unchangedJuiceMix, cancellationTarget } from './juice-domain.mjs';
 
 const LIVE = ['active', 'billing', 'finalizing', 'cancelling'];
 export class JuiceWorker {
-  constructor(store, api, { gates = {}, now = () => Date.now(), identityKey = '', recoveryHold = false } = {}) { this.store = store; this.api = api; this.gates = gates; this.now = now; this.key = identityKey; this.recoveryHold = recoveryHold === true; }
+  constructor(store, api, { gates = {}, now = () => Date.now(), identityKey = '', recoveryHold = false, schedulerReady } = {}) { this.store = store; this.api = api; this.gates = gates; this.now = now; this.key = identityKey; this.recoveryHold = recoveryHold === true; this.schedulerReady = schedulerReady ?? (() => this.store.getSetting('heartbeat', 0) >= this.now() - 120000); }
   enabled() {
     const plans = this.store.getSetting('juicePlanIds');
     return !this.recoveryHold && ['billing', 'checkout', 'fulfillment', 'storefront', 'launch', 'persistentStorage', 'juice'].every(gate => this.gates[gate] === true)
-      && this.store.getSetting('heartbeat', 0) >= this.now() - 120000 && this.store.getSetting('verifiedAt', 0) > 0 && this.store.getSetting('juiceVerifiedAt', 0) > 0
+      && this.schedulerReady() && this.store.getSetting('verifiedAt', 0) > 0 && this.store.getSetting('juiceVerifiedAt', 0) > 0
       && ['weekly', 'prepaid'].every(mode => /^gid:\/\/shopify\/SellingPlan\/\d+$/.test(plans?.[mode] || ''))
       && plans.weekly !== plans.prepaid && this.store.getSetting('webhooks', []).length === 3 && Boolean(this.key);
   }
@@ -32,7 +32,9 @@ export class JuiceWorker {
         if (contract.status !== 'ACTIVE') this.store.update(row.id, { state: 'stopped', data: { ...data, ...(contract.status === 'CANCELLED' ? { cancellationConfirmed: true, cancellationPending: false } : {}) } }, lease);
         return true;
       }
-      assert(current.state === 'quoted' && data.expiresAt > this.now(), 'Initial juice enrollment expired; review is required.');
+      assertNonTestOrigin(contract);
+      assert(current.state === 'quoted' && !initialOrderWindowReview({ createdAt: contract.originOrder?.createdAt,
+        checkoutPreparedAt: data.checkoutPreparedAt, expiresAt: data.expiresAt, serviceDate: data.firstServiceDate || data.serviceDate }), 'Initial juice order timing needs review.');
       this.verifyContract(contract, data);
       assertReviewedFulfillment(contract, data.checkoutFulfillment);
       assert(contract.status === 'ACTIVE' && contract.originOrder?.displayFinancialStatus === 'PAID'
@@ -87,6 +89,7 @@ export class JuiceWorker {
     if (!this.enabled()) return;
     const contract = await this.api.contract(row.contract_id);
     if (contract.status !== 'ACTIVE') { this.store.update(id, { state: 'stopped', data: { ...data, ...(contract.status === 'CANCELLED' ? { cancellationConfirmed: true, cancellationPending: false } : {}) } }, lease); return; }
+    assertNonTestOrigin(contract);
     this.verifyContract(contract, data);
     assert(fingerprint(contract.deliveryMethod, this.key) === data.approvedDeliveryFingerprint, 'Juice delivery changed.');
     if (row.state !== 'finalizing') assert(data.approvedRevisionId && String(contract.revisionId) === data.approvedRevisionId, 'The juice contract was edited outside the app; review is required.');
@@ -103,8 +106,9 @@ export class JuiceWorker {
       assert(this.now() < serviceCutoff(data.nextServiceDate) || data.attemptId, 'The Friday cutoff passed; no new late billing attempt was initiated.');
       const attempt = data.attemptId ? await this.api.pollAttempt(data.attemptId) : await this.api.attempt(row.contract_id, data.idempotencyKey, data.billingOrigin);
       assert(attempt?.id, 'Uncertain juice billing result.'); data.attemptId = attempt.id;
-      if (attempt.nextActionUrl || attempt.errorCode) { this.store.update(id, { state: 'review', data }, lease); return; }
-      if (!attempt.ready || !attempt.order?.id) { this.store.update(id, { due_at: this.now() + 60000, data }, lease); return; }
+      const payment = renewalPaymentState(attempt);
+      if (payment === 'review') { this.store.update(id, { state: 'review', data }, lease); return; }
+      if (payment === 'pending') { this.store.update(id, { due_at: this.now() + 60000, data }, lease); return; }
       data.paidOrderId = attempt.order.id; this.store.update(id, { state: 'finalizing', data }, lease); return;
     }
     if (row.state === 'finalizing') {
