@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(fileURLToPath(new URL('../dist/', import.meta.url)));
 const forbidden = ['LOCAL ONLY — Shopify delivery inspection', 'Synthetic minimum-message check',
-  'NO-CHARGE delivery inspection; do not fulfill', 'checkoutDeliveryProbe', 'createDeliveryInspection'];
+  'NO-CHARGE delivery inspection; do not fulfill', 'checkoutDeliveryProbe', 'createDeliveryInspection',
+  'LOCAL VISUAL TEST — Fixture data only'];
 readFileSync(join(root, 'index.html'));
 let inspected = 0;
 function inspect(directory) {
