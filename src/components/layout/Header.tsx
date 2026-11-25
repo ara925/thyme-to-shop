@@ -4,7 +4,7 @@ import { Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { CartDrawer } from '@/components/cart/CartDrawer';
 import { cn } from '@/lib/utils';
-import logo from '@/assets/logo-96.webp';
+import { BrandLogo } from './BrandLogo';
 
 const navLinks = [
   { href: '/', label: 'Home' },
@@ -52,17 +52,8 @@ export function Header() {
     >
       <div className="container flex h-18 items-center justify-between md:h-20">
         {/* Logo */}
-        <Link to="/" className="flex items-center gap-2 group">
-          <img
-            src={logo}
-            alt="Place in Thyme logo"
-            width={96}
-            height={96}
-            className="h-11 w-11 rounded-full object-cover transition-transform group-hover:scale-110"
-          />
-          <span className="font-serif text-xl font-bold text-foreground md:text-2xl tracking-tight">
-            Place in Thyme
-          </span>
+        <Link to="/" aria-label="Place in Thyme home" className="inline-flex shrink-0 items-center rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary">
+          <BrandLogo />
         </Link>
 
         {/* Desktop Navigation */}
