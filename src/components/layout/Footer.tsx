@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Instagram, Mail, MapPin } from 'lucide-react';
-import logo from '@/assets/logo-96.webp';
+import { BrandLogo } from './BrandLogo';
 
 const subscriptionManagementUrl =
   import.meta.env.VITE_SHOPIFY_SUBSCRIPTION_MANAGEMENT_URL
@@ -15,14 +15,8 @@ export function Footer() {
         <div className="grid gap-10 md:grid-cols-12">
           {/* Brand */}
           <div className="md:col-span-5">
-            <Link to="/" className="inline-flex items-center gap-2 group">
-              <img
-                src={logo}
-                alt="Place in Thyme logo"
-                width={96}
-                height={96}
-                className="h-11 w-11 rounded-full object-cover"
-              />
+            <Link to="/" aria-label="Place in Thyme home" className="inline-flex items-center gap-4 rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white">
+              <BrandLogo variant="round" />
               <span className="font-serif text-2xl font-bold text-white tracking-tight">
                 Place in Thyme
               </span>
